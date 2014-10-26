@@ -1,0 +1,7 @@
+base:
+  css:
+    theme:
+      assets/stylesheets/app.css: {}
+  js:
+    assets/js/app.js: {}
+    assets/js/moment.min.js: {}

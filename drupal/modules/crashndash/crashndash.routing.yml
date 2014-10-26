@@ -1,0 +1,30 @@
+crashndash.admin_settings:
+  path: '/admin/config/services/crashndash'
+  defaults:
+    _form: '\Drupal\crashndash\Form\SettingsForm'
+  requirements:
+    _permission: 'administer site configuration'
+
+crashndash.frontpage:
+  path: '/frontpage'
+  defaults:
+    _content: '\Drupal\crashndash\Controller\CrashnDashController::frontpage'
+    _title: Crash n Dash
+  requirements:
+    _permission: 'access content'
+
+crashndash.high_scores:
+  path: '/world-high-scores'
+  defaults:
+    _content: '\Drupal\crashndash\Controller\CrashnDashController::high_scores'
+    _title: World High Scores
+  requirements:
+    _permission: 'access content'
+
+crashndash.play:
+  path: '/play'
+  defaults:
+    _content: '\Drupal\crashndash\Controller\CrashnDashController::play'
+    _title: Play
+  requirements:
+    _permission: 'access content'

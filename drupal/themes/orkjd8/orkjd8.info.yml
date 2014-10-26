@@ -1,0 +1,24 @@
+name: Orkjd8
+type: theme
+description: orkjern goes drupal 8
+core: 8.x
+
+libraries:
+  - orkjd8/base
+
+stylesheets:
+  all:
+    - assets/stylesheets/app.css
+
+scripts:
+  - assets/js/app.js
+  - assets/js/moment.min.js
+
+regions:
+  header: Header
+  navigation: Navigation
+  messages: Messages
+  content: Content
+  footer: Footer
+  sidebar: Sidebar
+

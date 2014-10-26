@@ -1,0 +1,102 @@
+<div class="slide slide1 ss-active">
+  <div class="top-wrapper-bg"></div>
+  <div class="top-wrapper">
+    <h1>Crash n Dash</h1>
+    <h3 class="subheader">A retro car crasher game. Available in Google play and Apple app store.</h3>
+    <a id="android-store" class="button large" href="https://play.google.com/store/apps/details?id=no.morland.roadrage"><i class="hide-for-small icon-android"></i> Google play store</a>
+    <a id="ios-store" class="button large" href="https://itunes.apple.com/us/app/crash-n-dash/id648963007?l=nb&ls=1&mt=8"><i class="hide-for-small icon-apple"></i> Apple app store</a>
+  </div>
+</div>
+<div class="slide slide2">
+  <div class="row-1 row">
+    <div class="column large-3">
+      <div class="inner illu"><div class="illu1"></div></div>
+      <h1><small>Up for it?</small></h1>
+      <p>With a lot of levels - ranging from extremely easy to annoyingly hard - you will find hours of entertainment. Not to mention all the secrets and achievements...</p>
+    </div>
+    <div class="column large-6">
+      <div class="bigillu"></div>
+      <h1><small>Can I see?</small></h1>
+      <p><a class="button large" data-reveal-id="videomodal"><i class="icon-play-circle icon-large"></i> Watch game teaser!</a></p>
+    </div>
+    <div class="column large-3">
+      <div class="inner illu i2"><div class="illu2"></div></div>
+      <h1><small>Online!!</small></h1>
+      <p>You can play against your friends (or enemies) online in the multiplayer mode. Or you can try to beat the world record, stored online!</p>
+    </div>
+  </div>
+</div>
+<div class="slide slide3">
+  <div class="row quotes">
+    <div class="column large-12">
+      <h1><i class="icon-comments-alt"> </i> Quotes</h1>
+    </div>
+      <div class="column large-4">
+      <blockquote>
+        <p>What a game! I can't stop playing this... level 18 is a killer!          <cite>Itunes reviewer.</cite>
+        </p>
+      </blockquote>
+    </div>
+      <div class="column large-4">
+      <blockquote>
+        <p>One of those levels were really hard. I think I wasted a couple of hours on it.          <cite>One of the game developers..</cite>
+        </p>
+      </blockquote>
+    </div>
+      <div class="column large-4">
+      <blockquote>
+        <p>At one point I thought I was going to beat the world record, but then I crashed.          <cite>Anonymous.</cite>
+        </p>
+      </blockquote>
+    </div>
+  </div>
+</div>
+<div class="slide slide4">
+  <div class="room-outer">
+    <div class="row room-data">
+      <div class="column large-12">
+        <h1><i class="icon-time"> </i> Playing right now</h1>
+      </div>
+      <div class="column large-2">
+        <div class="panel online-box">
+          <p>
+            Online users:
+          </p>
+          <h3>{{ users }}</h3>
+        </div>
+      </div>
+
+      <div class="column large-10">
+        <h4 class="subheader">
+          Some of the active rooms:
+        </h4>
+        <div class="row">
+          {% set roomlength = 0 %}
+          {% for room, member in rooms %}
+            <div class="room-wrapper column large-2">
+              <div class="inner">
+                <h6 class="subheader">
+                  Room {{ room }}
+                </h6>
+                {% for i in 1..member %}
+                  <i class="icon-user"> </i>
+                {% endfor %}
+              </div>
+
+            </div>
+            {% set roomlength = loop.index %}
+          {% endfor %}
+          {% if roomlength < 6 %}
+            {% for i in roomlength..6 %}
+              <div class="room-wrapper empty column large-2">
+              </div>
+            {% endfor %}
+          {% endif %}
+        </div>
+        <h6 class="subheader lastupdated" data-time="{{ updated_raw }}">
+          Last updated at {{ room_updated }}
+        </h6>
+      </div>
+    </div>
+  </div>
+</div>
