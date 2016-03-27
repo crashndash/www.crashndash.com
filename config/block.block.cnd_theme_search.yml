@@ -1,0 +1,22 @@
+uuid: d1e8655b-9d81-4555-b054-84d1c0f0cd38
+langcode: en
+status: true
+dependencies:
+  module:
+    - search
+  theme:
+    - cnd_theme
+_core:
+  default_config_hash: za-39d5WDUg6XvbyqSnuVYEeq6QM4qKJxW8MnoAha5A
+id: cnd_theme_search
+theme: cnd_theme
+region: header
+weight: -1
+provider: null
+plugin: search_form_block
+settings:
+  id: search_form_block
+  label: Search
+  provider: search
+  label_display: visible
+visibility: {  }

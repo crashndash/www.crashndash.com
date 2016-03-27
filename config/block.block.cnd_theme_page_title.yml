@@ -1,0 +1,20 @@
+uuid: 839cb68a-35bb-46be-9512-1800a3fdf5c0
+langcode: en
+status: true
+dependencies:
+  theme:
+    - cnd_theme
+_core:
+  default_config_hash: 7rR9chwXvdM2H8OYMAYx9Zj3GGlPMrZp_M3ZA4thYTk
+id: cnd_theme_page_title
+theme: cnd_theme
+region: content
+weight: -50
+provider: null
+plugin: page_title_block
+settings:
+  id: page_title_block
+  label: 'Page title'
+  provider: core
+  label_display: '0'
+visibility: {  }
