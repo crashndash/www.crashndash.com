@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\system\Tests\Module\InstallTest.
+ * Contains \Drupal\system\Tests\Module\InstallTest.
  */
 
 namespace Drupal\system\Tests\Module;
@@ -41,8 +41,8 @@ class InstallTest extends WebTestBase {
    * be an array.
    */
   public function testEnableUserTwice() {
-    \Drupal::moduleHandler()->install(array('user'), FALSE);
-    $this->assertIdentical(\Drupal::config('core.extension')->get('module.user'), 0);
+    \Drupal::service('module_installer')->install(array('user'), FALSE);
+    $this->assertIdentical($this->config('core.extension')->get('module.user'), 0);
   }
 
   /**
@@ -53,6 +53,21 @@ class InstallTest extends WebTestBase {
     $this->assertTrue($version > 0, 'System module version is > 0.');
     $version = drupal_get_installed_schema_version('user', TRUE);
     $this->assertTrue($version > 0, 'User module version is > 0.');
+
+    $post_update_key_value = \Drupal::keyValue('post_update');
+    $existing_updates = $post_update_key_value->get('existing_updates', []);
+    $this->assertTrue(in_array('module_test_post_update_test', $existing_updates));
+  }
+
+  /**
+   * Ensures that post update functions are removed on uninstall.
+   */
+  public function testUninstallPostUpdateFunctions() {
+    \Drupal::service('module_installer')->uninstall(['module_test']);
+
+    $post_update_key_value = \Drupal::keyValue('post_update');
+    $existing_updates = $post_update_key_value->get('existing_updates', []);
+    $this->assertFalse(in_array('module_test_post_update_test', $existing_updates));
   }
 
   /**
@@ -62,7 +77,7 @@ class InstallTest extends WebTestBase {
     $module_name = 'invalid_module_name_over_the_maximum_allowed_character_length';
     $message = format_string('Exception thrown when enabling module %name with a name length over the allowed maximum', array('%name' => $module_name));
     try {
-      $this->container->get('module_handler')->install(array($module_name));
+      $this->container->get('module_installer')->install(array($module_name));
       $this->fail($message);
     }
     catch (ExtensionNameLengthException $e) {
@@ -72,7 +87,7 @@ class InstallTest extends WebTestBase {
     // Since for the UI, the submit callback uses FALSE, test that too.
     $message = format_string('Exception thrown when enabling as if via the UI the module %name with a name length over the allowed maximum', array('%name' => $module_name));
     try {
-      $this->container->get('module_handler')->install(array($module_name), FALSE);
+      $this->container->get('module_installer')->install(array($module_name), FALSE);
       $this->fail($message);
     }
     catch (ExtensionNameLengthException $e) {

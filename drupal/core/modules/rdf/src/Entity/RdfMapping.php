@@ -20,6 +20,13 @@ use Drupal\rdf\RdfMappingInterface;
  *   config_prefix = "mapping",
  *   entity_keys = {
  *     "id" = "id"
+ *   },
+ *   config_export = {
+ *     "id",
+ *     "targetEntityType",
+ *     "bundle",
+ *     "types",
+ *     "fieldMappings",
  *   }
  * )
  */
@@ -30,52 +37,48 @@ class RdfMapping extends ConfigEntityBase implements RdfMappingInterface {
    *
    * @var string
    */
-  public $id;
+  protected $id;
 
   /**
    * Entity type to be mapped.
    *
    * @var string
    */
-  public $targetEntityType;
+  protected $targetEntityType;
 
   /**
    * Bundle to be mapped.
    *
    * @var string
    */
-  public $bundle;
+  protected $bundle;
 
   /**
    * The RDF type mapping for this bundle.
    *
    * @var array
    */
-  protected $types;
+  protected $types = array();
 
   /**
    * The mappings for fields on this bundle.
    *
    * @var array
    */
-  protected $fieldMappings;
+  protected $fieldMappings = array();
 
   /**
    * {@inheritdoc}
    */
   public function getPreparedBundleMapping() {
-    $types = array();
-    if (isset($this->types)) {
-      $types = $this->types;
-    }
-    return array('types' => $types);
+    return array('types' => $this->types);
   }
 
   /**
    * {@inheritdoc}
    */
   public function getBundleMapping() {
-    if (isset($this->types)) {
+    if (!empty($this->types)) {
       return array('types' => $this->types);
     }
     return array();
@@ -138,16 +141,14 @@ class RdfMapping extends ConfigEntityBase implements RdfMappingInterface {
    */
   public function calculateDependencies() {
     parent::calculateDependencies();
+
+    // Create dependency on the bundle.
     $entity_type = \Drupal::entityManager()->getDefinition($this->targetEntityType);
     $this->addDependency('module', $entity_type->getProvider());
-    $bundle_entity_type_id = $entity_type->getBundleEntityType();
-    if ($bundle_entity_type_id != 'bundle') {
-      // If the target entity type uses entities to manage its bundles then
-      // depend on the bundle entity.
-      $bundle_entity = \Drupal::entityManager()->getStorage($bundle_entity_type_id)->load($this->bundle);
-      $this->addDependency('entity', $bundle_entity->getConfigDependencyName());
-    }
-    return $this->dependencies;
+    $bundle_config_dependency = $entity_type->getBundleConfigDependency($this->bundle);
+    $this->addDependency($bundle_config_dependency['type'], $bundle_config_dependency['name']);
+
+    return $this;
   }
 
   /**

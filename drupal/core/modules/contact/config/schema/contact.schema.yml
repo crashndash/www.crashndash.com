@@ -14,22 +14,17 @@ contact.form.*:
       type: sequence
       label: 'Recipients'
       sequence:
-        - type: email
-          label: 'Email address'
+        type: email
+        label: 'Email address'
     reply:
       type: text
       label: 'Auto-reply'
     weight:
       type: integer
       label: 'Weight'
-    third_party_settings:
-      type: sequence
-      label: 'Third party settings'
-      sequence:
-        - type: contact_form.third_party.[%key]
 
 contact.settings:
-  type: mapping
+  type: config_object
   label: 'Contact settings'
   mapping:
     default_form:

@@ -76,7 +76,7 @@ class AnnotatedClassDiscovery extends ComponentAnnotatedClassDiscovery {
       $reader = parent::getAnnotationReader();
 
       // Add the Core annotation classes like @Translation.
-      $reader->addNamespace('Drupal\Core\Annotation', array(dirname(dirname(__DIR__)) . '/Annotation'));
+      $reader->addNamespace('Drupal\Core\Annotation');
       $this->annotationReader = $reader;
     }
     return $this->annotationReader;
@@ -120,13 +120,13 @@ class AnnotatedClassDiscovery extends ComponentAnnotatedClassDiscovery {
     if ($this->namespaceSuffix) {
       foreach ($this->rootNamespacesIterator as $namespace => $dirs) {
         // Append the namespace suffix to the base namespace, to obtain the
-        // plugin namespace. E.g. 'Drupal\Views' may become
+        // plugin namespace; for example, 'Drupal\Views' may become
         // 'Drupal\Views\Plugin\Block'.
         $namespace .= $this->namespaceSuffix;
         foreach ((array) $dirs as $dir) {
           // Append the directory suffix to the PSR-4 base directory, to obtain
-          // the directory where plugins are found.
-          // E.g. DRUPAL_ROOT . '/core/modules/views/src' may become
+          // the directory where plugins are found. For example,
+          // DRUPAL_ROOT . '/core/modules/views/src' may become
           // DRUPAL_ROOT . '/core/modules/views/src/Plugin/Block'.
           $plugin_namespaces[$namespace][] = $dir . $this->directorySuffix;
         }

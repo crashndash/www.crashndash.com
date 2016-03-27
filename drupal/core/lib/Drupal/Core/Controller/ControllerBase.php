@@ -9,6 +9,7 @@ namespace Drupal\Core\Controller;
 
 use Drupal\Core\DependencyInjection\ContainerInjectionInterface;
 use Drupal\Core\Routing\LinkGeneratorTrait;
+use Drupal\Core\Routing\RedirectDestinationTrait;
 use Drupal\Core\Routing\UrlGeneratorTrait;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -26,17 +27,19 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * refactored to be trivial glue code.
  *
  * The services exposed here are those that it is reasonable for a well-behaved
- * controller to leverage. A controller that needs other other services may
+ * controller to leverage. A controller that needs other services may
  * need to be refactored into a thin controller and a dependent unit-testable
  * service.
  *
  * @see \Drupal\Core\DependencyInjection\ContainerInjectionInterface
  *
- * @ingroup menu
+ * @ingroup routing
  */
 abstract class ControllerBase implements ContainerInjectionInterface {
-  use StringTranslationTrait;
+
   use LinkGeneratorTrait;
+  use RedirectDestinationTrait;
+  use StringTranslationTrait;
   use UrlGeneratorTrait;
 
   /**
@@ -45,6 +48,13 @@ abstract class ControllerBase implements ContainerInjectionInterface {
    * @var \Drupal\Core\Entity\EntityManagerInterface
    */
   protected $entityManager;
+
+  /**
+   * The entity type manager.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   */
+  protected $entityTypeManager;
 
   /**
    * The entity form builder.
@@ -114,12 +124,29 @@ abstract class ControllerBase implements ContainerInjectionInterface {
    *
    * @return \Drupal\Core\Entity\EntityManagerInterface
    *   The entity manager service.
+   *
+   * @deprecated in Drupal 8.0.0, will be removed before Drupal 9.0.0.
+   *   Most of the time static::entityTypeManager() is supposed to be used
+   *   instead.
    */
   protected function entityManager() {
     if (!$this->entityManager) {
       $this->entityManager = $this->container()->get('entity.manager');
     }
     return $this->entityManager;
+  }
+
+  /**
+   * Retrieves the entity type manager.
+   *
+   * @return \Drupal\Core\Entity\EntityTypeManagerInterface
+   *   The entity type manager.
+   */
+  protected function entityTypeManager() {
+    if (!isset($this->entityTypeManager)) {
+      $this->entityTypeManager = $this->container()->get('entity_type.manager');
+    }
+    return $this->entityTypeManager;
   }
 
   /**

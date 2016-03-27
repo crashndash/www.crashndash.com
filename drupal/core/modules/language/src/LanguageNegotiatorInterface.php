@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\language\LanguageNegotiatorInterface
+ * Contains \Drupal\language\LanguageNegotiatorInterface.
  */
 
 namespace Drupal\language;
@@ -25,7 +25,7 @@ use Drupal\Core\Session\AccountInterface;
  * - Content language: The language used to present content that is available
  *   in more than one language.
  * - URL language: The language associated with URLs. When generating a URL,
- *   this value will be used by _url() as a default if no explicit preference is
+ *   this value will be used for URL's as a default if no explicit preference is
  *   provided.
  * Modules can define additional language types through
  * hook_language_types_info(), and alter existing language type definitions
@@ -59,14 +59,14 @@ use Drupal\Core\Session\AccountInterface;
  * - URL: Determine the language from the URL (path prefix or domain).
  * - Session: Determine the language from a request/session parameter.
  * - User: Follow the user's language preference.
- * - User admin language: Identifie admin language from the user preferences.
+ * - User admin language: Identify admin language from the user preferences.
  * - Browser: Determine the language from the browser's language settings.
  * - Selected language: Use the default site language.
  * Language negotiation methods are simple plugin classes that implement a
  * particular logic to return a language code. For instance, the URL method
  * searches for a valid path prefix or domain name in the current request URL.
  * If a language negotiation method does not return a valid language code, the
- * next method associated to the language type (based on method weight) is
+ * next method associated with the language type (based on method weight) is
  * invoked.
  *
  * Modules can define additional language negotiation methods by simply provide
@@ -100,7 +100,7 @@ use Drupal\Core\Session\AccountInterface;
  * @endcode
  *
  * For more information, see
- * @link http://drupal.org/node/1497272 Language Negotiation API @endlink
+ * @link https://www.drupal.org/node/1497272 Language Negotiation API @endlink
  */
 interface LanguageNegotiatorInterface {
 
@@ -142,7 +142,7 @@ interface LanguageNegotiatorInterface {
    *   (optional) The language type. If no type is specified all the method
    *   definitions are returned.
    *
-   * @return array
+   * @return array[]
    *   An array of language negotiation method definitions keyed by method id.
    */
   public function getNegotiationMethods($type = NULL);
@@ -160,10 +160,10 @@ interface LanguageNegotiatorInterface {
   /**
    * Returns the ID of the language type's primary language negotiation method.
    *
-   * @param $type
+   * @param string $type
    *   The language type.
    *
-   * @return
+   * @return string
    *   The identifier of the primary language negotiation method for the given
    *   language type, or the default method if none exists.
    */
@@ -172,13 +172,13 @@ interface LanguageNegotiatorInterface {
   /**
    * Checks whether a language negotiation method is enabled for a language type.
    *
-   * @param $method_id
+   * @param string $method_id
    *   The language negotiation method ID.
-   * @param $type
+   * @param string $type
    *   (optional) The language type. If none is passed, all the configurable
    *   language types will be inspected.
    *
-   * @return
+   * @return bool
    *   TRUE if the method is enabled for at least one of the given language
    *   types, or FALSE otherwise.
    */
@@ -189,7 +189,7 @@ interface LanguageNegotiatorInterface {
    *
    * @param string $type
    *   The language type.
-   * @param array $enabled_methods
+   * @param int[] $enabled_methods
    *   An array of language negotiation method weights keyed by method ID.
    */
   function saveConfiguration($type, $enabled_methods);
@@ -202,7 +202,11 @@ interface LanguageNegotiatorInterface {
   /**
    * Updates the configuration based on the given language types.
    *
-   * @param array $types
+   * Stores the list of the language types along with information about their
+   * configurable state. Stores the default settings if the language type is
+   * not configurable.
+   *
+   * @param string[] $types
    *   An array of configurable language types.
    */
   function updateConfiguration(array $types);

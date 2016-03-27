@@ -35,13 +35,14 @@ use Drupal\Core\Url;
  *   entity_keys = {
  *     "id" = "iid",
  *     "label" = "title",
+ *     "langcode" = "langcode",
  *   }
  * )
  */
 class Item extends ContentEntityBase implements ItemInterface {
 
   /**
-   * Implements Drupal\Core\Entity\EntityInterface::label().
+   * {@inheritdoc}
    */
   public function label() {
     return $this->get('title')->value;
@@ -59,6 +60,7 @@ class Item extends ContentEntityBase implements ItemInterface {
 
     $fields['fid'] = BaseFieldDefinition::create('entity_reference')
       ->setLabel(t('Source feed'))
+      ->setRequired(TRUE)
       ->setDescription(t('The aggregator feed entity associated with this item.'))
       ->setSetting('target_type', 'aggregator_feed')
       ->setDisplayOptions('view', array(
@@ -107,7 +109,8 @@ class Item extends ContentEntityBase implements ItemInterface {
       ))
       ->setDisplayConfigurable('view', TRUE);
 
-    // @todo Convert to a real UUID field in https://drupal.org/node/2149851.
+    // @todo Convert to a real UUID field in
+    //   https://www.drupal.org/node/2149851.
     $fields['guid'] = BaseFieldDefinition::create('string_long')
       ->setLabel(t('GUID'))
       ->setDescription(t('Unique identifier for the feed item.'));
@@ -146,7 +149,7 @@ class Item extends ContentEntityBase implements ItemInterface {
   /**
    * {@inheritdoc}
    */
-  public function  getLink() {
+  public function getLink() {
     return $this->get('link')->value;
   }
 
@@ -223,14 +226,16 @@ class Item extends ContentEntityBase implements ItemInterface {
     // handles the regular cases. The Item entity has one special case: a newly
     // created Item is *also* associated with a Feed, so we must invalidate the
     // associated Feed's cache tag.
-    Cache::invalidateTags($this->getCacheTag());
+    if (!$update) {
+      Cache::invalidateTags($this->getCacheTagsToInvalidate());
+    }
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getCacheTag() {
-    return Feed::load($this->getFeedId())->getCacheTag();
+  public function getCacheTagsToInvalidate() {
+    return Feed::load($this->getFeedId())->getCacheTags();
   }
 
 

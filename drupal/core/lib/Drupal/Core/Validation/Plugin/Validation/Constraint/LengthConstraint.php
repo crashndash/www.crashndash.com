@@ -16,7 +16,7 @@ use Symfony\Component\Validator\Constraints\Length;
  *
  * @todo: Move this below the TypedData core component.
  *
- * @Plugin(
+ * @Constraint(
  *   id = "Length",
  *   label = @Translation("Length", context = "Validation"),
  *   type = { "string" }
@@ -29,7 +29,7 @@ class LengthConstraint extends Length {
   public $exactMessage = 'This value should have exactly %limit character.|This value should have exactly %limit characters.';
 
   /**
-   * Overrides Range::validatedBy().
+   * {@inheritdoc}
    */
   public function validatedBy() {
     return '\Symfony\Component\Validator\Constraints\LengthValidator';

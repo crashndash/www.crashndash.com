@@ -5,7 +5,7 @@
  * Preprocessors and theme functions of Aggregator module.
  */
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\UrlHelper;
 use Drupal\Core\Render\Element;
 
 /**
@@ -25,8 +25,8 @@ function template_preprocess_aggregator_item(&$variables) {
     $variables['content'][$key] = $variables['elements'][$key];
   }
 
-  $variables['url'] = check_url($item->getLink());
-  $variables['title'] = String::checkPlain($item->label());
+  $variables['url'] = UrlHelper::stripDangerousProtocols($item->getLink());
+  $variables['title'] = $item->label();
 }
 
 /**
@@ -46,22 +46,5 @@ function template_preprocess_aggregator_feed(&$variables) {
     $variables['content'][$key] = $variables['elements'][$key];
   }
   $variables['full'] = $variables['elements']['#view_mode'] == 'full';
-  $variables['title'] = String::checkPlain($feed->label());
-}
-
-/**
- * Prepares variables for individual feed item block templates.
- *
- * Default template: aggregator-block-item.html.twig.
- *
- * @param array $variables
- *   An associative array containing:
- *   - item: The item to be displayed.
- *   - feed: Not used.
- */
-function template_preprocess_aggregator_block_item(&$variables) {
-  // Display the external link to the item.
-  $item = $variables['item'];
-  $variables['url'] = check_url($item->getLink());
-  $variables['title'] = String::checkPlain($item->label());
+  $variables['title'] = $feed->label();
 }

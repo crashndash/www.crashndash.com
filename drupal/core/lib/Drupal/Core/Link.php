@@ -7,13 +7,17 @@
 
 namespace Drupal\Core;
 
+use Drupal\Core\Render\RenderableInterface;
 use Drupal\Core\Routing\LinkGeneratorTrait;
 
 /**
  * Defines an object that holds information about a link.
  */
-class Link {
+class Link implements RenderableInterface {
 
+  /**
+   * @deprecated in Drupal 8.0.x-dev, will be removed before Drupal 9.0.0.
+   */
   use LinkGeneratorTrait;
 
   /**
@@ -44,7 +48,7 @@ class Link {
   }
 
   /**
-   * Creates a link object from a given route name and parameters.
+   * Creates a Link object from a given route name and parameters.
    *
    * @param string $text
    *   The text of the link.
@@ -67,13 +71,26 @@ class Link {
    *     current language for the language type LanguageInterface::TYPE_URL.
    *   - 'https': Whether this URL should point to a secure location. If not
    *     defined, the current scheme is used, so the user stays on HTTP or HTTPS
-   *     respectively. if mixed mode sessions are permitted, TRUE enforces HTTPS
-   *     and FALSE enforces HTTP.
+   *     respectively. TRUE enforces HTTPS and FALSE enforces HTTP.
    *
    * @return static
    */
   public static function createFromRoute($text, $route_name, $route_parameters = array(), $options = array()) {
     return new static($text, new Url($route_name, $route_parameters, $options));
+  }
+
+  /**
+   * Creates a Link object from a given Url object.
+   *
+   * @param string $text
+   *   The text of the link.
+   * @param \Drupal\Core\Url $url
+   *   The Url to create the link for.
+   *
+   * @return static
+   */
+  public static function fromTextAndUrl($text, Url $url) {
+    return new static($text, $url);
   }
 
   /**
@@ -122,9 +139,30 @@ class Link {
 
   /**
    * Generates the HTML for this Link object.
+   *
+   * Do not use this method to render a link in an HTML context. In an HTML
+   * context, self::toRenderable() should be used so that render cache
+   * information is maintained. However, there might be use cases such as tests
+   * and non-HTML contexts where calling this method directly makes sense.
+   *
+   * @return \Drupal\Core\GeneratedLink
+   *   The link HTML markup.
+   *
+   * @see \Drupal\Core\Link::toRenderable()
    */
   public function toString() {
     return $this->getLinkGenerator()->generateFromLink($this);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function toRenderable() {
+    return [
+      '#type' => 'link',
+      '#url' => $this->url,
+      '#title' => $this->text,
+    ];
   }
 
 }

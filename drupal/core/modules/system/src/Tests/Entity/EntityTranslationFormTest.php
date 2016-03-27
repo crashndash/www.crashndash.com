@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\system\Tests\Entity\EntityTranslationFormTest.
+ * Contains \Drupal\system\Tests\Entity\EntityTranslationFormTest.
  */
 
 namespace Drupal\system\Tests\Entity;
@@ -80,7 +80,7 @@ class EntityTranslationFormTest extends WebTestBase {
 
     // Enable language selector.
     $this->drupalGet('admin/structure/types/manage/page');
-    $edit = array('language_configuration[language_show]' => TRUE, 'language_configuration[langcode]' => LanguageInterface::LANGCODE_NOT_SPECIFIED);
+    $edit = array('language_configuration[language_alterable]' => TRUE, 'language_configuration[langcode]' => LanguageInterface::LANGCODE_NOT_SPECIFIED);
     $this->drupalPostForm('admin/structure/types/manage/page', $edit, t('Save content type'));
     $this->assertRaw(t('The content type %type has been updated.', array('%type' => 'Basic page')), 'Basic page content type has been updated.');
 
@@ -89,7 +89,7 @@ class EntityTranslationFormTest extends WebTestBase {
     $langcode = $this->langcodes[0];
     $edit['title[0][value]'] = $this->randomMachineName(8);
     $edit['body[0][value]'] = $this->randomMachineName(16);
-    $edit['langcode'] = $langcode;
+    $edit['langcode[0][value]'] = $langcode;
     $this->drupalPostForm('node/add/page', $edit, t('Save'));
     $this->assertRaw(t('Basic page %title has been created.', array('%title' => $edit['title[0][value]'])), 'Basic page created.');
 
@@ -99,15 +99,17 @@ class EntityTranslationFormTest extends WebTestBase {
 
     // Make body translatable.
     $field_storage = FieldStorageConfig::loadByName('node', 'body');
-    $field_storage->translatable = TRUE;
+    $field_storage->setTranslatable(TRUE);
     $field_storage->save();
     $field_storage = FieldStorageConfig::loadByName('node', 'body');
     $this->assertTrue($field_storage->isTranslatable(), 'Field body is translatable.');
 
     // Create a body translation and check the form language.
     $langcode2 = $this->langcodes[1];
-    $node->getTranslation($langcode2)->body->value = $this->randomMachineName(16);
-    $node->getTranslation($langcode2)->setOwnerId($web_user->id());
+    $translation = $node->addTranslation($langcode2);
+    $translation->title->value = $this->randomString();
+    $translation->body->value = $this->randomMachineName(16);
+    $translation->setOwnerId($web_user->id());
     $node->save();
     $this->drupalGet($langcode2 . '/node/' . $node->id() . '/edit');
     $form_langcode = \Drupal::state()->get('entity_test.form_langcode');

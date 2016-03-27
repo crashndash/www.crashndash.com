@@ -26,7 +26,7 @@ class NodeRevisionWizardTest extends WizardTestBase {
     // Create two nodes with two revision.
     $node_storage = \Drupal::entityManager()->getStorage('node');
     /** @var \Drupal\node\NodeInterface $node */
-    $node = $node_storage->create(array('type' => 'article', 'created' => REQUEST_TIME + 40));
+    $node = $node_storage->create(array('title' => $this->randomString(), 'type' => 'article', 'created' => REQUEST_TIME + 40));
     $node->save();
 
     $node = $node->createDuplicate();
@@ -34,7 +34,7 @@ class NodeRevisionWizardTest extends WizardTestBase {
     $node->created->value = REQUEST_TIME + 20;
     $node->save();
 
-    $node = $node_storage->create(array('type' => 'article', 'created' => REQUEST_TIME + 30));
+    $node = $node_storage->create(array('title' => $this->randomString(), 'type' => 'article', 'created' => REQUEST_TIME + 30));
     $node->save();
 
     $node = $node->createDuplicate();
@@ -54,13 +54,13 @@ class NodeRevisionWizardTest extends WizardTestBase {
     /** @var \Drupal\views\Entity\View $view */
     $view = $view_storage_controller->load($view['id']);
 
-    $this->assertEqual($view->get('base_table'), 'node_revision');
+    $this->assertEqual($view->get('base_table'), 'node_field_revision');
 
     $executable = Views::executableFactory()->get($view);
     $this->executeView($executable);
 
     $this->assertIdenticalResultset($executable, array(array('vid' => 1), array('vid' => 3), array('vid' => 2), array('vid' => 4)),
-      array('node_field_revision_vid' => 'vid'));
+      array('vid' => 'vid'));
   }
 
 }

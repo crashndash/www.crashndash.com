@@ -8,8 +8,8 @@
 namespace Drupal\Core\Entity;
 
 use Drupal\Core\Cache\Cache;
+use Drupal\Core\Cache\RefinableCacheableDependencyTrait;
 use Drupal\Core\DependencyInjection\DependencySerializationTrait;
-use Drupal\Component\Utility\String;
 use Drupal\Component\Utility\Unicode;
 use Drupal\Core\Config\Entity\Exception\ConfigEntityIdLengthException;
 use Drupal\Core\Entity\Exception\UndefinedLinkTemplateException;
@@ -23,6 +23,8 @@ use Drupal\Core\Url;
  * Defines a base entity class.
  */
 abstract class Entity implements EntityInterface {
+
+  use RefinableCacheableDependencyTrait;
 
   use DependencySerializationTrait {
     __sleep as traitSleep;
@@ -67,16 +69,31 @@ abstract class Entity implements EntityInterface {
   }
 
   /**
-   * Returns the entity manager.
+   * Gets the entity manager.
    *
    * @return \Drupal\Core\Entity\EntityManagerInterface
+   *
+   * @deprecated in Drupal 8.0.0 and will be removed before Drupal 9.0.0.
+   *   Use \Drupal::entityTypeManager() instead in most cases. If the needed
+   *   method is not on \Drupal\Core\Entity\EntityTypeManagerInterface, see the
+   *   deprecated \Drupal\Core\Entity\EntityManager to find the
+   *   correct interface or service.
    */
   protected function entityManager() {
     return \Drupal::entityManager();
   }
 
   /**
-   * Returns the language manager.
+   * Gets the entity type manager.
+   *
+   * @return \Drupal\Core\Entity\EntityTypeManagerInterface
+   */
+  protected function entityTypeManager() {
+    return \Drupal::entityTypeManager();
+  }
+
+  /**
+   * Gets the language manager.
    *
    * @return \Drupal\Core\Language\LanguageManagerInterface
    */
@@ -85,7 +102,7 @@ abstract class Entity implements EntityInterface {
   }
 
   /**
-   * Returns the UUID generator.
+   * Gets the UUID generator.
    *
    * @return \Drupal\Component\Uuid\UuidInterface
    */
@@ -156,16 +173,30 @@ abstract class Entity implements EntityInterface {
    * {@inheritdoc}
    */
   public function urlInfo($rel = 'canonical', array $options = []) {
-    if ($this->isNew()) {
-      throw new EntityMalformedException(sprintf('The "%s" entity type has not been saved, and cannot have a URI.', $this->getEntityTypeId()));
+    return $this->toUrl($rel, $options);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function toUrl($rel = 'canonical', array $options = []) {
+    if ($this->id() === NULL) {
+      throw new EntityMalformedException(sprintf('The "%s" entity cannot have a URI as it does not have an ID', $this->getEntityTypeId()));
     }
 
     // The links array might contain URI templates set in annotations.
     $link_templates = $this->linkTemplates();
 
+    // Links pointing to the current revision point to the actual entity. So
+    // instead of using the 'revision' link, use the 'canonical' link.
+    if ($rel === 'revision' && $this instanceof RevisionableInterface && $this->isDefaultRevision()) {
+      $rel = 'canonical';
+    }
+
     if (isset($link_templates[$rel])) {
-      // If there is a template for the given relationship type, generate the path.
-      $uri = new Url($link_templates[$rel], $this->urlRouteParameters($rel));
+      $route_parameters = $this->urlRouteParameters($rel);
+      $route_name = "entity.{$this->entityTypeId}." . str_replace(array('-', 'drupal:'), array('_', ''), $rel);
+      $uri = new Url($route_name, $route_parameters);
     }
     else {
       $bundle = $this->bundle();
@@ -185,31 +216,25 @@ abstract class Entity implements EntityInterface {
         $uri = call_user_func($uri_callback, $this);
       }
       else {
-        throw new UndefinedLinkTemplateException(String::format('No link template "@rel" found for the "@entity_type" entity type', array(
-          '@rel' => $rel,
-          '@entity_type' => $this->getEntityTypeId(),
-        )));
+        throw new UndefinedLinkTemplateException("No link template '$rel' found for the '{$this->getEntityTypeId()}' entity type");
       }
     }
 
-    // Pass the entity data to _url() so that alter functions do not need to
-    // look up this entity again.
+    // Pass the entity data through as options, so that alter functions do not
+    // need to look up this entity again.
     $uri
       ->setOption('entity_type', $this->getEntityTypeId())
       ->setOption('entity', $this);
+
+    // Display links by default based on the current language.
+    if ($rel !== 'collection') {
+      $options += ['language' => $this->language()];
+    }
+
     $uri_options = $uri->getOptions();
     $uri_options += $options;
-    return $uri->setOptions($uri_options);
-  }
 
-  /**
-   * {@inheritdoc}
-   */
-  public function getSystemPath($rel = 'canonical') {
-    if ($this->hasLinkTemplate($rel) && $uri = $this->urlInfo($rel)) {
-      return $uri->getInternalPath();
-    }
-    return '';
+    return $uri->setOptions($uri_options);
   }
 
   /**
@@ -221,10 +246,10 @@ abstract class Entity implements EntityInterface {
   }
 
   /**
-   * Returns an array link templates.
+   * Gets an array link templates.
    *
    * @return array
-   *   An array of link templates containing route names.
+   *   An array of link templates containing paths.
    */
   protected function linkTemplates() {
     return $this->getEntityType()->getLinkTemplates();
@@ -234,33 +259,40 @@ abstract class Entity implements EntityInterface {
    * {@inheritdoc}
    */
   public function link($text = NULL, $rel = 'canonical', array $options = []) {
-    if (is_null($text)) {
+    return $this->toLink($text, $rel, $options)->toString();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function toLink($text = NULL, $rel = 'canonical', array $options = []) {
+    if (!isset($text)) {
       $text = $this->label();
     }
-    $url = $this->urlInfo($rel);
+    $url = $this->toUrl($rel);
     $options += $url->getOptions();
     $url->setOptions($options);
-    return (new Link($text, $url))->toString();
+    return new Link($text, $url);
   }
 
   /**
    * {@inheritdoc}
    */
   public function url($rel = 'canonical', $options = array()) {
-    // While self::urlInfo() will throw an exception if the entity is new,
+    // While self::toUrl() will throw an exception if the entity has no id,
     // the expected result for a URL is always a string.
-    if ($this->isNew() || !$this->hasLinkTemplate($rel)) {
+    if ($this->id() === NULL || !$this->hasLinkTemplate($rel)) {
       return '';
     }
 
-    $uri = $this->urlInfo($rel);
+    $uri = $this->toUrl($rel);
     $options += $uri->getOptions();
     $uri->setOptions($options);
     return $uri->toString();
   }
 
   /**
-   * Returns an array of placeholders for this entity.
+   * Gets an array of placeholders for this entity.
    *
    * Individual entity classes may override this method to add additional
    * placeholders if desired. If so, they should be sure to replicate the
@@ -273,19 +305,21 @@ abstract class Entity implements EntityInterface {
    *   An array of URI placeholders.
    */
   protected function urlRouteParameters($rel) {
-    // The entity ID is needed as a route parameter.
-    $uri_route_parameters[$this->getEntityTypeId()] = $this->id();
+    $uri_route_parameters = [];
+
+    if ($rel != 'collection') {
+      // The entity ID is needed as a route parameter.
+      $uri_route_parameters[$this->getEntityTypeId()] = $this->id();
+    }
+    if ($rel === 'revision') {
+      $uri_route_parameters[$this->getEntityTypeId() . '_revision'] = $this->getRevisionId();
+    }
 
     return $uri_route_parameters;
   }
 
   /**
    * {@inheritdoc}
-   *
-   * Returns a list of URI relationships supported by this entity.
-   *
-   * @return array
-   *   An array of link relationships supported by this entity.
    */
   public function uriRelationships() {
     return array_keys($this->linkTemplates());
@@ -300,21 +334,25 @@ abstract class Entity implements EntityInterface {
         ->getAccessControlHandler($this->entityTypeId)
         ->createAccess($this->bundle(), $account, [], $return_as_object);
     }
-    return  $this->entityManager()
+    return $this->entityManager()
       ->getAccessControlHandler($this->entityTypeId)
-      ->access($this, $operation, LanguageInterface::LANGCODE_DEFAULT, $account, $return_as_object);
+      ->access($this, $operation, $account, $return_as_object);
   }
 
   /**
    * {@inheritdoc}
    */
   public function language() {
-    $language = $this->languageManager()->getLanguage($this->langcode);
-    if (!$language) {
-      // Make sure we return a proper language object.
-      $langcode = $this->langcode ?: LanguageInterface::LANGCODE_NOT_SPECIFIED;
-      $language = new Language(array('id' => $langcode));
+    if ($key = $this->getEntityType()->getKey('langcode')) {
+      $langcode = $this->$key;
+      $language = $this->languageManager()->getLanguage($langcode);
+      if ($language) {
+        return $language;
+      }
     }
+    // Make sure we return a proper language object.
+    $langcode = !empty($this->langcode) ? $this->langcode : LanguageInterface::LANGCODE_NOT_SPECIFIED;
+    $language = new Language(array('id' => $langcode));
     return $language;
   }
 
@@ -366,12 +404,7 @@ abstract class Entity implements EntityInterface {
     if ($this->getEntityType()->getBundleOf()) {
       // Throw an exception if the bundle ID is longer than 32 characters.
       if (Unicode::strlen($this->id()) > EntityTypeInterface::BUNDLE_MAX_LENGTH) {
-        throw new ConfigEntityIdLengthException(String::format(
-          'Attempt to create a bundle with an ID longer than @max characters: @id.', array(
-            '@max' => EntityTypeInterface::BUNDLE_MAX_LENGTH,
-            '@id' => $this->id(),
-          )
-        ));
+        throw new ConfigEntityIdLengthException("Attempt to create a bundle with an ID longer than " . EntityTypeInterface::BUNDLE_MAX_LENGTH . " characters: $this->id().");
       }
     }
   }
@@ -405,7 +438,7 @@ abstract class Entity implements EntityInterface {
    * {@inheritdoc}
    */
   public static function postDelete(EntityStorageInterface $storage, array $entities) {
-    self::invalidateTagsOnDelete($storage->getEntityType(), $entities);
+    static::invalidateTagsOnDelete($storage->getEntityType(), $entities);
   }
 
   /**
@@ -424,9 +457,37 @@ abstract class Entity implements EntityInterface {
   /**
    * {@inheritdoc}
    */
-  public function getCacheTag() {
-    // @todo Add bundle-specific listing cache tag? https://drupal.org/node/2145751
+  public function getCacheContexts() {
+    return $this->cacheContexts;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheTagsToInvalidate() {
+    // @todo Add bundle-specific listing cache tag?
+    //   https://www.drupal.org/node/2145751
+    if ($this->isNew()) {
+      return [];
+    }
     return [$this->entityTypeId . ':' . $this->id()];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheTags() {
+    if ($this->cacheTags) {
+      return Cache::mergeTags($this->getCacheTagsToInvalidate(), $this->cacheTags);
+    }
+    return $this->getCacheTagsToInvalidate();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheMaxAge() {
+    return $this->cacheMaxAge;
   }
 
   /**
@@ -465,10 +526,13 @@ abstract class Entity implements EntityInterface {
     // listing's filtering requirements. A newly created entity may start to
     // appear in listings because it did not exist before.)
     $tags = $this->getEntityType()->getListCacheTags();
+    if ($this->hasLinkTemplate('canonical')) {
+      // Creating or updating an entity may change a cached 403 or 404 response.
+      $tags = Cache::mergeTags($tags, ['4xx-response']);
+    }
     if ($update) {
       // An existing entity was updated, also invalidate its unique cache tag.
-      $tags = Cache::mergeTags($tags, $this->getCacheTag());
-      $this->onUpdateBundleEntity();
+      $tags = Cache::mergeTags($tags, $this->getCacheTagsToInvalidate());
     }
     Cache::invalidateTags($tags);
   }
@@ -489,28 +553,9 @@ abstract class Entity implements EntityInterface {
       // other pages than the one it's on. The one it's on is handled by its own
       // cache tag, but subsequent list pages would not be invalidated, hence we
       // must invalidate its list cache tags as well.)
-      $tags = Cache::mergeTags($tags, $entity->getCacheTag());
+      $tags = Cache::mergeTags($tags, $entity->getCacheTagsToInvalidate());
     }
     Cache::invalidateTags($tags);
-  }
-
-  /**
-   * Acts on entities of which this entity is a bundle entity type.
-   */
-  protected function onUpdateBundleEntity() {
-    $bundle_of = $this->getEntityType()->getBundleOf();
-    if ($bundle_of !== FALSE) {
-      // If this entity is a bundle entity type of another entity type, and we're
-      // updating an existing entity, and that other entity type has a view
-      // builder class, then invalidate the render cache of entities for which
-      // this entity is a bundle.
-      $entity_manager = $this->entityManager();
-      if ($entity_manager->hasHandler($bundle_of, 'view_builder')) {
-        $entity_manager->getViewBuilder($bundle_of)->resetCache();
-      }
-      // Entity bundle field definitions may depend on bundle settings.
-      $entity_manager->clearCachedFieldDefinitions();
-    }
   }
 
   /**
@@ -559,6 +604,29 @@ abstract class Entity implements EntityInterface {
   public function __sleep() {
     $this->typedData = NULL;
     return $this->traitSleep();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getConfigDependencyKey() {
+    return $this->getEntityType()->getConfigDependencyKey();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getConfigDependencyName() {
+    return $this->getEntityTypeId() . ':' . $this->bundle() . ':' . $this->uuid();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getConfigTarget() {
+    // For content entities, use the UUID for the config target identifier.
+    // This ensures that references to the target can be deployed reliably.
+    return $this->uuid();
   }
 
 }

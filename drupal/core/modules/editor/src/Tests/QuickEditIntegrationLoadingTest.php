@@ -8,6 +8,7 @@
 namespace Drupal\editor\Tests;
 
 use Drupal\Component\Serialization\Json;
+use Drupal\Core\EventSubscriber\MainContentViewSubscriber;
 use Drupal\simpletest\WebTestBase;
 
 /**
@@ -29,7 +30,7 @@ class QuickEditIntegrationLoadingTest extends WebTestBase {
    *
    * @var array
    */
-  protected static $basic_permissions = array('access content', 'create article content', 'use text format filtered_html', 'access contextual links');
+  protected static $basicPermissions = array('access content', 'create article content', 'use text format filtered_html', 'access contextual links');
 
   protected function setUp() {
     parent::setUp();
@@ -74,9 +75,9 @@ class QuickEditIntegrationLoadingTest extends WebTestBase {
     // - the 'access in-place editing' permission
     // - the 'edit any article content' permission (necessary to edit node 1)
     $users = array(
-      $this->drupalCreateUser(static::$basic_permissions),
-      $this->drupalCreateUser(array_merge(static::$basic_permissions, array('edit any article content'))),
-      $this->drupalCreateUser(array_merge(static::$basic_permissions, array('access in-place editing')))
+      $this->drupalCreateUser(static::$basicPermissions),
+      $this->drupalCreateUser(array_merge(static::$basicPermissions, array('edit any article content'))),
+      $this->drupalCreateUser(array_merge(static::$basicPermissions, array('access in-place editing')))
     );
 
     // Now test with each of the 3 users with insufficient permissions.
@@ -85,10 +86,10 @@ class QuickEditIntegrationLoadingTest extends WebTestBase {
       $this->drupalGet('node/1');
 
       // Ensure the text is transformed.
-      $this->assertRaw('<p>Do you also love Drupal?</p><figure class="caption caption-img"><img src="druplicon.png" /><figcaption>Druplicon</figcaption></figure>');
+      $this->assertRaw('<p>Do you also love Drupal?</p><figure role="group" class="caption caption-img"><img src="druplicon.png" /><figcaption>Druplicon</figcaption></figure>');
 
       // Retrieving the untransformed text should result in an empty 403 response.
-      $response = $this->drupalPost('editor/' . 'node/1/body/en/full', 'application/vnd.drupal-ajax', array());
+      $response = $this->drupalPost('editor/' . 'node/1/body/en/full', '', array(), array('query' => array(MainContentViewSubscriber::WRAPPER_FORMAT => 'drupal_ajax')));
       $this->assertResponse(403);
       $this->assertIdentical('{}', $response);
     }
@@ -98,12 +99,12 @@ class QuickEditIntegrationLoadingTest extends WebTestBase {
    * Test loading of untransformed text when a user does have access to it.
    */
   public function testUserWithPermission() {
-    $user = $this->drupalCreateUser(array_merge(static::$basic_permissions, array('edit any article content', 'access in-place editing')));
+    $user = $this->drupalCreateUser(array_merge(static::$basicPermissions, array('edit any article content', 'access in-place editing')));
     $this->drupalLogin($user);
     $this->drupalGet('node/1');
 
     // Ensure the text is transformed.
-    $this->assertRaw('<p>Do you also love Drupal?</p><figure class="caption caption-img"><img src="druplicon.png" /><figcaption>Druplicon</figcaption></figure>');
+    $this->assertRaw('<p>Do you also love Drupal?</p><figure role="group" class="caption caption-img"><img src="druplicon.png" /><figcaption>Druplicon</figcaption></figure>');
 
     $response = $this->drupalPost('editor/' . 'node/1/body/en/full', 'application/vnd.drupal-ajax', array());
     $this->assertResponse(200);

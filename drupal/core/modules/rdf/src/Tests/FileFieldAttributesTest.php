@@ -8,6 +8,7 @@
 namespace Drupal\rdf\Tests;
 
 use Drupal\file\Tests\FileFieldTestBase;
+use Drupal\file\Entity\File;
 
 /**
  * Tests the RDFa markup of filefields.
@@ -46,6 +47,7 @@ class FileFieldAttributesTest extends FileFieldTestBase {
 
   protected function setUp() {
     parent::setUp();
+    $node_storage = $this->container->get('entity.manager')->getStorage('node');
     $this->fieldName = strtolower($this->randomMachineName());
 
     $type_name = 'article';
@@ -65,9 +67,9 @@ class FileFieldAttributesTest extends FileFieldTestBase {
     // Create a new node with the uploaded file.
     $nid = $this->uploadNodeFile($test_file, $this->fieldName, $type_name);
 
-    $this->node = node_load($nid, TRUE);
-    $this->file = file_load($this->node->{$this->fieldName}->target_id);
-
+    $node_storage->resetCache(array($nid));
+    $this->node = $node_storage->load($nid);
+    $this->file = File::load($this->node->{$this->fieldName}->target_id);
   }
 
   /**
@@ -79,7 +81,7 @@ class FileFieldAttributesTest extends FileFieldTestBase {
   function testNodeTeaser() {
     // Render the teaser.
     $node_render_array = entity_view_multiple(array($this->node), 'teaser');
-    $html = drupal_render($node_render_array);
+    $html = \Drupal::service('renderer')->renderRoot($node_render_array);
 
     // Parses front page where the node is displayed in its teaser form.
     $parser = new \EasyRdf_Parser_Rdfa();

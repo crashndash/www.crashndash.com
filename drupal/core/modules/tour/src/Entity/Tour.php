@@ -8,8 +8,7 @@
 namespace Drupal\tour\Entity;
 
 use Drupal\Core\Config\Entity\ConfigEntityBase;
-use Drupal\Core\Entity\EntityStorageInterface;
-use Drupal\tour\TipsBag;
+use Drupal\tour\TipsPluginCollection;
 use Drupal\tour\TourInterface;
 
 /**
@@ -24,6 +23,16 @@ use Drupal\tour\TourInterface;
  *   entity_keys = {
  *     "id" = "id",
  *     "label" = "label"
+ *   },
+ *   config_export = {
+ *     "id",
+ *     "label",
+ *     "module",
+ *     "routes",
+ *     "tips",
+ *   },
+ *   lookup_keys = {
+ *     "routes.*.route_name"
  *   }
  * )
  */
@@ -34,21 +43,21 @@ class Tour extends ConfigEntityBase implements TourInterface {
    *
    * @var string
    */
-  public $id;
+  protected $id;
 
   /**
    * The module which this tour is assigned to.
    *
    * @var string
    */
-  public $module;
+  protected $module;
 
   /**
    * The label of the tour.
    *
    * @var string
    */
-  public $label;
+  protected $label;
 
   /**
    * The routes on which this tour should be displayed.
@@ -67,24 +76,24 @@ class Tour extends ConfigEntityBase implements TourInterface {
   /**
    * Holds the collection of tips that are attached to this tour.
    *
-   * @var \Drupal\tour\TipsBag
+   * @var \Drupal\tour\TipsPluginCollection
    */
-  protected $tipsBag;
+  protected $tipsCollection;
 
   /**
-   * The array of plugin config, only used for export and to populate the $tipsBag.
+   * The array of plugin config, only used for export and to populate the $tipsCollection.
    *
    * @var array
    */
   protected $tips = array();
 
   /**
-   * Overrides \Drupal\Core\Config\Entity\ConfigEntityBase::__construct();
+   * {@inheritdoc}
    */
   public function __construct(array $values, $entity_type) {
     parent::__construct($values, $entity_type);
 
-    $this->tipsBag = new TipsBag(\Drupal::service('plugin.manager.tour.tip'), $this->tips);
+    $this->tipsCollection = new TipsPluginCollection(\Drupal::service('plugin.manager.tour.tip'), $this->tips);
   }
 
   /**
@@ -98,7 +107,7 @@ class Tour extends ConfigEntityBase implements TourInterface {
    * {@inheritdoc}
    */
   public function getTip($id) {
-    return $this->tipsBag->get($id);
+    return $this->tipsCollection->get($id);
   }
 
   /**
@@ -118,6 +127,13 @@ class Tour extends ConfigEntityBase implements TourInterface {
 
     \Drupal::moduleHandler()->alter('tour_tips', $tips, $this);
     return array_values($tips);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getModule() {
+    return $this->module;
   }
 
   /**
@@ -160,13 +176,13 @@ class Tour extends ConfigEntityBase implements TourInterface {
   public function calculateDependencies() {
     parent::calculateDependencies();
 
-    foreach($this->tipsBag as $instance) {
+    foreach($this->tipsCollection as $instance) {
       $definition = $instance->getPluginDefinition();
       $this->addDependency('module', $definition['provider']);
     }
 
     $this->addDependency('module', $this->module);
-    return $this->dependencies;
+    return $this;
   }
 
 }

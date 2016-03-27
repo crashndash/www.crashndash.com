@@ -2,12 +2,12 @@
 
 /**
  * @file
- * Definition of Drupal\rest\test\RESTTestBase.
+ * Contains \Drupal\rest\Tests\RESTTestBase.
  */
 
 namespace Drupal\rest\Tests;
 
-use Drupal\Core\Session\AccountInterface;
+use Drupal\node\NodeInterface;
 use Drupal\simpletest\WebTestBase;
 
 /**
@@ -43,8 +43,16 @@ abstract class RESTTestBase extends WebTestBase {
    */
   protected $defaultAuth;
 
+
   /**
-   * Modules to enable.
+   * The raw response body from http request operations.
+   *
+   * @var array
+   */
+  protected $responseBody;
+
+  /**
+   * Modules to install.
    *
    * @var array
    */
@@ -62,14 +70,17 @@ abstract class RESTTestBase extends WebTestBase {
   /**
    * Helper function to issue a HTTP request with simpletest's cURL.
    *
-   * @param string $url
-   *   The relative URL, e.g. "entity/node/1"
+   * @param string|\Drupal\Core\Url $url
+   *   A Url object or system path.
    * @param string $method
    *   HTTP method, one of GET, POST, PUT or DELETE.
-   * @param array $body
-   *   Either the body for POST and PUT or additional URL parameters for GET.
+   * @param string $body
+   *   The body for POST and PUT.
    * @param string $mime_type
    *   The MIME type of the transmitted content.
+   *
+   * @return string
+   *   The content returned from the request.
    */
   protected function httpRequest($url, $method, $body = NULL, $mime_type = NULL) {
     if (!isset($mime_type)) {
@@ -79,14 +90,16 @@ abstract class RESTTestBase extends WebTestBase {
       // GET the CSRF token first for writing requests.
       $token = $this->drupalGet('rest/session/token');
     }
+
+    $url = $this->buildUrl($url);
+
     switch ($method) {
       case 'GET':
         // Set query if there are additional GET parameters.
-        $options = isset($body) ? array('absolute' => TRUE, 'query' => $body) : array('absolute' => TRUE);
         $curl_options = array(
           CURLOPT_HTTPGET => TRUE,
           CURLOPT_CUSTOMREQUEST => 'GET',
-          CURLOPT_URL => _url($url, $options),
+          CURLOPT_URL => $url,
           CURLOPT_NOBODY => FALSE,
           CURLOPT_HTTPHEADER => array('Accept: ' . $mime_type),
         );
@@ -97,7 +110,7 @@ abstract class RESTTestBase extends WebTestBase {
           CURLOPT_HTTPGET => FALSE,
           CURLOPT_POST => TRUE,
           CURLOPT_POSTFIELDS => $body,
-          CURLOPT_URL => _url($url, array('absolute' => TRUE)),
+          CURLOPT_URL => $url,
           CURLOPT_NOBODY => FALSE,
           CURLOPT_HTTPHEADER => array(
             'Content-Type: ' . $mime_type,
@@ -111,7 +124,7 @@ abstract class RESTTestBase extends WebTestBase {
           CURLOPT_HTTPGET => FALSE,
           CURLOPT_CUSTOMREQUEST => 'PUT',
           CURLOPT_POSTFIELDS => $body,
-          CURLOPT_URL => _url($url, array('absolute' => TRUE)),
+          CURLOPT_URL => $url,
           CURLOPT_NOBODY => FALSE,
           CURLOPT_HTTPHEADER => array(
             'Content-Type: ' . $mime_type,
@@ -125,7 +138,7 @@ abstract class RESTTestBase extends WebTestBase {
           CURLOPT_HTTPGET => FALSE,
           CURLOPT_CUSTOMREQUEST => 'PATCH',
           CURLOPT_POSTFIELDS => $body,
-          CURLOPT_URL => _url($url, array('absolute' => TRUE)),
+          CURLOPT_URL => $url,
           CURLOPT_NOBODY => FALSE,
           CURLOPT_HTTPHEADER => array(
             'Content-Type: ' . $mime_type,
@@ -138,23 +151,26 @@ abstract class RESTTestBase extends WebTestBase {
         $curl_options = array(
           CURLOPT_HTTPGET => FALSE,
           CURLOPT_CUSTOMREQUEST => 'DELETE',
-          CURLOPT_URL => _url($url, array('absolute' => TRUE)),
+          CURLOPT_URL => $url,
           CURLOPT_NOBODY => FALSE,
           CURLOPT_HTTPHEADER => array('X-CSRF-Token: ' . $token),
         );
         break;
     }
 
-    $response = $this->curlExec($curl_options);
+    $this->responseBody = $this->curlExec($curl_options);
+
+    // Ensure that any changes to variables in the other thread are picked up.
+    $this->refreshVariables();
+
     $headers = $this->drupalGetHeaders();
-    $headers = implode("\n", $headers);
 
     $this->verbose($method . ' request to: ' . $url .
       '<hr />Code: ' . curl_getinfo($this->curlHandle, CURLINFO_HTTP_CODE) .
-      '<hr />Response headers: ' . $headers .
-      '<hr />Response body: ' . $response);
+      '<hr />Response headers: ' . nl2br(print_r($headers, TRUE)) .
+      '<hr />Response body: ' . $this->responseBody);
 
-    return $response;
+    return $this->responseBody;
   }
 
   /**
@@ -202,6 +218,17 @@ abstract class RESTTestBase extends WebTestBase {
         );
       case 'user':
         return array('name' => $this->randomMachineName());
+
+      case 'comment':
+        return [
+          'subject' => $this->randomMachineName(),
+          'entity_type' => 'node',
+          'comment_type' => 'comment',
+          'comment_body' => $this->randomString(),
+          'entity_id' => 'invalid',
+          'field_name' => 'comment',
+        ];
+
       default:
         return array();
     }
@@ -222,7 +249,7 @@ abstract class RESTTestBase extends WebTestBase {
    */
   protected function enableService($resource_type, $method = 'GET', $format = NULL, $auth = NULL) {
     // Enable REST API for this entity type.
-    $config = \Drupal::config('rest.settings');
+    $config = $this->config('rest.settings');
     $settings = array();
 
     if ($resource_type) {
@@ -247,29 +274,6 @@ abstract class RESTTestBase extends WebTestBase {
   protected function rebuildCache() {
     // Rebuild routing cache, so that the REST API paths are available.
     $this->container->get('router.builder')->rebuild();
-  }
-
-  /**
-   * Check if a HTTP response header exists and has the expected value.
-   *
-   * @param string $header
-   *   The header key, example: Content-Type
-   * @param string $value
-   *   The header value.
-   * @param string $message
-   *   (optional) A message to display with the assertion.
-   * @param string $group
-   *   (optional) The group this message is in, which is displayed in a column
-   *   in test output. Use 'Debug' to indicate this is debugging output. Do not
-   *   translate this string. Defaults to 'Other'; most tests do not override
-   *   this default.
-   *
-   * @return bool
-   *   TRUE if the assertion succeeded, FALSE otherwise.
-   */
-  protected function assertHeader($header, $value, $message = '', $group = 'Browser') {
-    $header_value = $this->drupalGetHeader($header);
-    return $this->assertTrue($header_value == $value, $message ? $message : 'HTTP response header ' . $header . ' with value ' . $value . ' found.', $group);
   }
 
   /**
@@ -324,6 +328,32 @@ abstract class RESTTestBase extends WebTestBase {
           case 'delete':
             return array('delete any resttest content');
         }
+
+      case 'comment':
+        switch ($operation) {
+          case 'view':
+            return ['access comments'];
+
+          case 'create':
+            return ['post comments', 'skip comment approval'];
+
+          case 'update':
+            return ['edit own comments'];
+
+          case 'delete':
+            return ['administer comments'];
+        }
+        break;
+
+      case 'user':
+        switch ($operation) {
+          case 'view':
+            return ['access user profiles'];
+
+          default:
+            return ['administer users'];
+
+        }
     }
   }
 
@@ -342,4 +372,49 @@ abstract class RESTTestBase extends WebTestBase {
     return entity_load($this->testEntityType, $id);
   }
 
+  /**
+   * Remove node fields that can only be written by an admin user.
+   *
+   * @param \Drupal\node\NodeInterface $node
+   *   The node to remove fields where non-administrative users cannot write.
+   *
+   * @return \Drupal\node\NodeInterface
+   *   The node with removed fields.
+   */
+  protected function removeNodeFieldsForNonAdminUsers(NodeInterface $node) {
+    $node->set('status', NULL);
+    $node->set('created', NULL);
+    $node->set('changed', NULL);
+    $node->set('promote', NULL);
+    $node->set('sticky', NULL);
+    $node->set('revision_timestamp', NULL);
+    $node->set('revision_log', NULL);
+    $node->set('uid', NULL);
+
+    return $node;
+  }
+
+  /**
+   * Check to see if the HTTP request response body is identical to the expected
+   * value.
+   *
+   * @param $expected
+   *   The first value to check.
+   * @param $message
+   *   (optional) A message to display with the assertion. Do not translate
+   *   messages: use \Drupal\Component\Utility\SafeMarkup::format() to embed
+   *   variables in the message text, not t(). If left blank, a default message
+   *   will be displayed.
+   * @param $group
+   *   (optional) The group this message is in, which is displayed in a column
+   *   in test output. Use 'Debug' to indicate this is debugging output. Do not
+   *   translate this string. Defaults to 'Other'; most tests do not override
+   *   this default.
+   *
+   * @return bool
+   *   TRUE if the assertion succeeded, FALSE otherwise.
+   */
+  protected function assertResponseBody($expected, $message = '', $group = 'REST Response') {
+    return $this->assertIdentical($expected, $this->responseBody, $message ? $message : strtr('Response body @expected (expected) is equal to @response (actual).', array('@expected' => var_export($expected, TRUE), '@response' => var_export($this->responseBody, TRUE))), $group);
+  }
 }

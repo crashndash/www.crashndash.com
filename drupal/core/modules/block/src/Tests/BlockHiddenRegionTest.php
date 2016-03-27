@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\block\Tests\BlockHiddenRegionTest.
+ * Contains \Drupal\block\Tests\BlockHiddenRegionTest.
  */
 
 namespace Drupal\block\Tests;
@@ -23,7 +23,7 @@ class BlockHiddenRegionTest extends WebTestBase {
   protected $adminUser;
 
   /**
-   * Modules to enable.
+   * Modules to install.
    *
    * @var array
    */
@@ -42,6 +42,7 @@ class BlockHiddenRegionTest extends WebTestBase {
 
     $this->drupalLogin($this->adminUser);
     $this->drupalPlaceBlock('search_form_block');
+    $this->drupalPlaceBlock('local_tasks_block');
   }
 
   /**
@@ -55,8 +56,10 @@ class BlockHiddenRegionTest extends WebTestBase {
 
     // Install "block_test_theme" and set it as the default theme.
     $theme = 'block_test_theme';
-    \Drupal::service('theme_handler')->install(array($theme));
-    \Drupal::config('system.theme')
+    // We need to install a non-hidden theme so that there is more than one
+    // local task.
+    \Drupal::service('theme_handler')->install(array($theme, 'stark'));
+    $this->config('system.theme')
       ->set('default', $theme)
       ->save();
     // Installing a theme will cause the kernel terminate event to rebuild the

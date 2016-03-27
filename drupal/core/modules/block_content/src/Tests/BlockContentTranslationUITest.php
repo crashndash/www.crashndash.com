@@ -8,14 +8,14 @@
 namespace Drupal\block_content\Tests;
 
 use Drupal\Component\Utility\Unicode;
-use Drupal\content_translation\Tests\ContentTranslationUITest;
+use Drupal\content_translation\Tests\ContentTranslationUITestBase;
 
 /**
- * Tests the node translation UI.
+ * Tests the block content translation UI.
  *
  * @group block_content
  */
-class BlockContentTranslationUITest extends ContentTranslationUITest {
+class BlockContentTranslationUITest extends ContentTranslationUITestBase {
 
   /**
    * Modules to enable.
@@ -31,17 +31,45 @@ class BlockContentTranslationUITest extends ContentTranslationUITest {
   );
 
   /**
-   * Overrides \Drupal\simpletest\WebTestBase::setUp().
+   * {@inheritdoc}
+   */
+  protected $defaultCacheContexts = [
+    'languages:language_interface',
+    'session',
+    'theme',
+    'url.path',
+    'url.query_args',
+    'user.permissions',
+    'user.roles:authenticated',
+  ];
+
+  /**
+   * {@inheritdoc}
    */
   protected function setUp() {
     $this->entityTypeId = 'block_content';
     $this->bundle = 'basic';
     $this->testLanguageSelector = FALSE;
     parent::setUp();
+
+    $this->drupalPlaceBlock('page_title_block');
   }
 
   /**
-   * Overrides \Drupal\content_translation\Tests\ContentTranslationUITest::getTranslatorPermission().
+   * {@inheritdoc}
+   */
+  protected function setupBundle() {
+    // Create the basic bundle since it is provided by standard.
+    $bundle = entity_create('block_content_type', array(
+      'id' => $this->bundle,
+      'label' => $this->bundle,
+      'revision' => FALSE
+    ));
+    $bundle->save();
+  }
+
+  /**
+   * {@inheritdoc}
    */
   public function getTranslatorPermissions() {
     return array_merge(parent::getTranslatorPermissions(), array(
@@ -55,10 +83,10 @@ class BlockContentTranslationUITest extends ContentTranslationUITest {
   /**
    * Creates a custom block.
    *
-   * @param string $title
+   * @param bool|string $title
    *   (optional) Title of block. When no value is given uses a random name.
    *   Defaults to FALSE.
-   * @param string $bundle
+   * @param bool|string $bundle
    *   (optional) Bundle name. When no value is given, defaults to
    *   $this->bundle. Defaults to FALSE.
    *
@@ -78,7 +106,7 @@ class BlockContentTranslationUITest extends ContentTranslationUITest {
   }
 
   /**
-   * Overrides \Drupal\content_translation\Tests\ContentTranslationUITest::getNewEntityValues().
+   * {@inheritdoc}
    */
   protected function getNewEntityValues($langcode) {
     return array('info' => Unicode::strtolower($this->randomMachineName())) + parent::getNewEntityValues($langcode);
@@ -122,6 +150,10 @@ class BlockContentTranslationUITest extends ContentTranslationUITest {
     catch (\Exception $e) {
       $this->fail($message);
     }
+
+    // Check that the translate operation link is shown.
+    $this->drupalGet('admin/structure/block/block-content');
+    $this->assertLinkByHref('block/' . $entity->id() . '/translations');
   }
 
   /**
@@ -137,15 +169,37 @@ class BlockContentTranslationUITest extends ContentTranslationUITest {
     ));
     $bundle->save();
 
-    // Create a node for each bundle.
+    // Create a block content for each bundle.
     $enabled_block_content = $this->createBlockContent();
     $disabled_block_content = $this->createBlockContent(FALSE, $bundle->id());
 
-    // Make sure that only a single row was inserted into the
-    // {content_translation} table.
-    $rows = db_query('SELECT * FROM {content_translation}')->fetchAll();
+    // Make sure that only a single row was inserted into the block table.
+    $rows = db_query('SELECT * FROM {block_content_field_data} WHERE id = :id', array(':id' => $enabled_block_content->id()))->fetchAll();
     $this->assertEqual(1, count($rows));
-    $this->assertEqual($enabled_block_content->id(), reset($rows)->entity_id);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function doTestTranslationEdit() {
+    $entity = entity_load($this->entityTypeId, $this->entityId, TRUE);
+    $languages = $this->container->get('language_manager')->getLanguages();
+
+    foreach ($this->langcodes as $langcode) {
+      // We only want to test the title for non-english translations.
+      if ($langcode != 'en') {
+        $options = array('language' => $languages[$langcode]);
+        $url = $entity->urlInfo('edit-form', $options);
+        $this->drupalGet($url);
+
+        $title = t('<em>Edit @type</em> @title [%language translation]', array(
+          '@type' => $entity->bundle(),
+          '@title' => $entity->getTranslation($langcode)->label(),
+          '%language' => $languages[$langcode]->getName(),
+        ));
+        $this->assertRaw($title);
+      }
+    }
   }
 
 }

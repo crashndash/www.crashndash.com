@@ -13,6 +13,13 @@ use Drupal\Core\Render\Element;
 /**
  * Provides a form element for uploading a file.
  *
+ * If you add this element to a form the enctype="multipart/form-data" attribute
+ * will automatically be added to the form element.
+ *
+ * Properties:
+ * - #multiple: A Boolean indicating whether multiple files may be uploaded.
+ * - #size: The size of the file input element in characters.
+ *
  * @FormElement("file")
  */
 class File extends FormElement {
@@ -49,7 +56,7 @@ class File extends FormElement {
   }
 
   /**
-   * Prepares a #type 'file' render element for theme_input().
+   * Prepares a #type 'file' render element for input.html.twig.
    *
    * For assistance with handling the uploaded file correctly, see the API
    * provided by file.inc.
@@ -60,12 +67,12 @@ class File extends FormElement {
    *   #attributes.
    *
    * @return array
-   *   The $element with prepared variables ready for theme_input().
+   *   The $element with prepared variables ready for input.html.twig.
    */
   public static function preRenderFile($element) {
     $element['#attributes']['type'] = 'file';
     Element::setAttributes($element, array('id', 'name', 'size'));
-    static::setAttributes($element, array('form-file'));
+    static::setAttributes($element, array('js-form-file', 'form-file'));
 
     return $element;
   }

@@ -50,7 +50,7 @@ class ExportForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function getFormID() {
+  public function getFormId() {
     return 'locale_translate_export_form';
   }
 
@@ -61,8 +61,8 @@ class ExportForm extends FormBase {
     $languages = $this->languageManager->getLanguages();
     $language_options = array();
     foreach ($languages as $langcode => $language) {
-      if ($langcode != 'en' || locale_translate_english()) {
-        $language_options[$langcode] = $language->name;
+      if (locale_is_translatable($langcode)) {
+        $language_options[$langcode] = $language->getName();
       }
     }
     $language_default = $this->languageManager->getDefaultLanguage();
@@ -143,7 +143,7 @@ class ExportForm extends FormBase {
       $reader->setLangcode($language->getId());
       $reader->setOptions($content_options);
       $languages = $this->languageManager->getLanguages();
-      $language_name = isset($languages[$language->getId()]) ? $languages[$language->getId()]->name : '';
+      $language_name = isset($languages[$language->getId()]) ? $languages[$language->getId()]->getName() : '';
       $filename = $language->getId() .'.po';
     }
     else {

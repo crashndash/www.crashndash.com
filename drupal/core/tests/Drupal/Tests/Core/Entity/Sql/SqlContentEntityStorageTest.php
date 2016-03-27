@@ -11,8 +11,6 @@ use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\Sql\SqlContentEntityStorage;
-use Drupal\Core\Entity\Sql\SqlContentEntityStorageSchema;
-use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Language\Language;
 use Drupal\Tests\UnitTestCase;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -80,6 +78,13 @@ class SqlContentEntityStorageTest extends UnitTestCase {
   protected $cache;
 
   /**
+   * The language manager.
+   *
+   * @var \Drupal\Core\Language\LanguageManagerInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $languageManager;
+
+  /**
    * The database connection to use.
    *
    * @var \Drupal\Core\Database\Connection|\PHPUnit_Framework_MockObject_MockObject
@@ -101,6 +106,10 @@ class SqlContentEntityStorageTest extends UnitTestCase {
     $this->entityManager = $this->getMock('Drupal\Core\Entity\EntityManagerInterface');
     $this->moduleHandler = $this->getMock('Drupal\Core\Extension\ModuleHandlerInterface');
     $this->cache = $this->getMock('Drupal\Core\Cache\CacheBackendInterface');
+    $this->languageManager = $this->getMock('Drupal\Core\Language\LanguageManagerInterface');
+    $this->languageManager->expects($this->any())
+      ->method('getDefaultLanguage')
+      ->will($this->returnValue(new Language(array('langcode' => 'en'))));
     $this->connection = $this->getMockBuilder('Drupal\Core\Database\Connection')
       ->disableOriginalConstructor()
       ->getMock();
@@ -115,15 +124,15 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    *   The expected return value of
    *   SqlContentEntityStorage::getBaseTable().
    *
-   * @covers ::__construct()
-   * @covers ::getBaseTable()
+   * @covers ::__construct
+   * @covers ::getBaseTable
    *
    * @dataProvider providerTestGetBaseTable
    */
   public function testGetBaseTable($base_table, $expected) {
     $this->entityType->expects($this->once())
       ->method('getBaseTable')
-      ->will($this->returnValue('entity_test'));
+      ->willReturn($base_table);
 
     $this->setUpEntityStorage();
 
@@ -157,8 +166,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    *   The expected return value of
    *   SqlContentEntityStorage::getRevisionTable().
    *
-   * @cover ::__construct()
-   * @covers ::getRevisionTable()
+   * @covers ::__construct
+   * @covers ::getRevisionTable
    *
    * @dataProvider providerTestGetRevisionTable
    */
@@ -197,8 +206,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
   /**
    * Tests SqlContentEntityStorage::getDataTable().
    *
-   * @cover ::__construct()
-   * @covers ::getDataTable()
+   * @covers ::__construct
+   * @covers ::getDataTable
    */
   public function testGetDataTable() {
     $this->entityType->expects($this->once())
@@ -222,8 +231,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    *   The expected return value of
    *   SqlContentEntityStorage::getRevisionDataTable().
    *
-   * @cover ::__construct()
-   * @covers ::getRevisionDataTable()
+   * @covers ::__construct
+   * @covers ::getRevisionDataTable
    *
    * @dataProvider providerTestGetRevisionDataTable
    */
@@ -269,9 +278,9 @@ class SqlContentEntityStorageTest extends UnitTestCase {
   /**
    * Tests ContentEntityDatabaseStorage::onEntityTypeCreate().
    *
-   * @covers ::__construct()
-   * @covers ::onEntityTypeCreate()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::onEntityTypeCreate
+   * @covers ::getTableMapping
    */
   public function testOnEntityTypeCreate() {
     $columns = array(
@@ -281,7 +290,7 @@ class SqlContentEntityStorageTest extends UnitTestCase {
     );
 
     $this->fieldDefinitions = $this->mockFieldDefinitions(array('id'));
-    $this->fieldDefinitions['id']->expects($this->once())
+    $this->fieldDefinitions['id']->expects($this->any())
       ->method('getColumns')
       ->will($this->returnValue($columns));
     $this->fieldDefinitions['id']->expects($this->once())
@@ -312,7 +321,6 @@ class SqlContentEntityStorageTest extends UnitTestCase {
       'fields' => array(
         'id' => array(
           'type' => 'serial',
-          'description' => NULL,
           'not null' => TRUE,
         ),
       ),
@@ -334,7 +342,7 @@ class SqlContentEntityStorageTest extends UnitTestCase {
       ->will($this->returnValue($schema_handler));
 
     $storage = $this->getMockBuilder('Drupal\Core\Entity\Sql\SqlContentEntityStorage')
-      ->setConstructorArgs(array($this->entityType, $this->connection, $this->entityManager, $this->cache))
+      ->setConstructorArgs(array($this->entityType, $this->connection, $this->entityManager, $this->cache, $this->languageManager))
       ->setMethods(array('getStorageSchema'))
       ->getMock();
 
@@ -359,8 +367,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
   /**
    * Tests getTableMapping() with an empty entity type.
    *
-   * @covers ::__construct()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::getTableMapping
    */
   public function testGetTableMappingEmpty() {
     $this->setUpEntityStorage();
@@ -377,8 +385,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    * @param string[] $entity_keys
    *   A map of entity keys to use for the mocked entity type.
    *
-   * @covers ::__construct()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::getTableMapping
    *
    * @dataProvider providerTestGetTableMappingSimple()
    */
@@ -409,8 +417,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    * @param string[] $entity_keys
    *   A map of entity keys to use for the mocked entity type.
    *
-   * @covers ::__construct()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::getTableMapping
    *
    * @dataProvider providerTestGetTableMappingSimple()
    */
@@ -464,8 +472,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    * @param string[] $entity_keys
    *   A map of entity keys to use for the mocked entity type.
    *
-   * @covers ::__construct()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::getTableMapping
    *
    * @dataProvider providerTestGetTableMappingSimple()
    */
@@ -512,8 +520,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    * @param string[] $entity_keys
    *   A map of entity keys to use for the mocked entity type.
    *
-   * @covers ::__construct()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::getTableMapping
    *
    * @dataProvider providerTestGetTableMappingSimple()
    */
@@ -586,8 +594,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    * @param string[] $entity_keys
    *   A map of entity keys to use for the mocked entity type.
    *
-   * @covers ::__construct()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::getTableMapping
    *
    * @dataProvider providerTestGetTableMappingSimple()
    */
@@ -607,6 +615,7 @@ class SqlContentEntityStorageTest extends UnitTestCase {
         array('id', $entity_keys['id']),
         array('uuid', $entity_keys['uuid']),
         array('bundle', $entity_keys['bundle']),
+        array('langcode', $entity_keys['langcode']),
       )));
 
     $this->setUpEntityStorage();
@@ -631,7 +640,6 @@ class SqlContentEntityStorageTest extends UnitTestCase {
     $expected = array();
     $actual = $mapping->getExtraColumns('entity_test');
     $this->assertEquals($expected, $actual);
-    $expected = array('default_langcode');
     $actual = $mapping->getExtraColumns('entity_test_field_data');
     $this->assertEquals($expected, $actual);
   }
@@ -642,8 +650,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    * @param string[] $entity_keys
    *   A map of entity keys to use for the mocked entity type.
    *
-   * @covers ::__construct()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::getTableMapping
    *
    * @dataProvider providerTestGetTableMappingSimple()
    */
@@ -667,6 +675,7 @@ class SqlContentEntityStorageTest extends UnitTestCase {
         array('id', $entity_keys['id']),
         array('uuid', $entity_keys['uuid']),
         array('bundle', $entity_keys['bundle']),
+        array('langcode', $entity_keys['langcode']),
       )));
 
     $this->setUpEntityStorage();
@@ -691,7 +700,6 @@ class SqlContentEntityStorageTest extends UnitTestCase {
     $expected = array();
     $actual = $mapping->getExtraColumns('entity_test');
     $this->assertEquals($expected, $actual);
-    $expected = array('default_langcode');
     $actual = $mapping->getExtraColumns('entity_test_field_data');
     $this->assertEquals($expected, $actual);
   }
@@ -702,8 +710,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    * @param string[] $entity_keys
    *   A map of entity keys to use for the mocked entity type.
    *
-   * @covers ::__construct()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::getTableMapping
    *
    * @dataProvider providerTestGetTableMappingSimple()
    */
@@ -733,6 +741,7 @@ class SqlContentEntityStorageTest extends UnitTestCase {
         array('uuid', $entity_keys['uuid']),
         array('bundle', $entity_keys['bundle']),
         array('revision', $entity_keys['revision']),
+        array('langcode', $entity_keys['langcode']),
       )));
 
     $this->setUpEntityStorage();
@@ -747,13 +756,13 @@ class SqlContentEntityStorageTest extends UnitTestCase {
     );
     $this->assertEquals($expected, $mapping->getTableNames());
 
-    // The language code is not stored on the base table, but on the revision
-    // table.
+    // The default language code is stored on the base table.
     $expected = array_values(array_filter(array(
       $entity_keys['id'],
       $entity_keys['revision'],
       $entity_keys['bundle'],
       $entity_keys['uuid'],
+      $entity_keys['langcode'],
     )));
     $actual = $mapping->getFieldNames('entity_test');
     $this->assertEquals($expected, $actual);
@@ -789,7 +798,6 @@ class SqlContentEntityStorageTest extends UnitTestCase {
     $this->assertEquals($expected, $actual);
     $actual = $mapping->getExtraColumns('entity_test_revision');
     $this->assertEquals($expected, $actual);
-    $expected = array('default_langcode');
     $actual = $mapping->getExtraColumns('entity_test_field_data');
     $this->assertEquals($expected, $actual);
     $actual = $mapping->getExtraColumns('entity_test_field_revision');
@@ -802,8 +810,8 @@ class SqlContentEntityStorageTest extends UnitTestCase {
    * @param string[] $entity_keys
    *   A map of entity keys to use for the mocked entity type.
    *
-   * @covers ::__construct()
-   * @covers ::getTableMapping()
+   * @covers ::__construct
+   * @covers ::getTableMapping
    *
    * @dataProvider providerTestGetTableMappingSimple()
    */
@@ -854,6 +862,7 @@ class SqlContentEntityStorageTest extends UnitTestCase {
           array('uuid', $entity_keys['uuid']),
           array('bundle', $entity_keys['bundle']),
           array('revision', $entity_keys['revision']),
+          array('langcode', $entity_keys['langcode']),
         )));
 
       $this->setUpEntityStorage();
@@ -876,13 +885,13 @@ class SqlContentEntityStorageTest extends UnitTestCase {
       );
       $this->assertEquals($expected, $mapping->getTableNames());
 
-      // The language code is not stored on the base table, but on the revision
-      // table.
+      // The default language code is not stored on the base table.
       $expected = array_values(array_filter(array(
         $entity_keys['id'],
         $entity_keys['revision'],
         $entity_keys['bundle'],
         $entity_keys['uuid'],
+        $entity_keys['langcode'],
       )));
       $actual = $mapping->getFieldNames('entity_test');
       $this->assertEquals($expected, $actual);
@@ -918,7 +927,6 @@ class SqlContentEntityStorageTest extends UnitTestCase {
       $this->assertEquals($expected, $actual);
       $actual = $mapping->getExtraColumns('entity_test_revision');
       $this->assertEquals($expected, $actual);
-      $expected = array('default_langcode');
       $actual = $mapping->getExtraColumns('entity_test_field_data');
       $this->assertEquals($expected, $actual);
       $actual = $mapping->getExtraColumns('entity_test_field_revision');
@@ -927,7 +935,7 @@ class SqlContentEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::create()
+   * @covers ::create
    */
   public function testCreate() {
     $language_manager = $this->getMock('Drupal\Core\Language\LanguageManagerInterface');
@@ -1041,7 +1049,7 @@ class SqlContentEntityStorageTest extends UnitTestCase {
       ->method('getBaseFieldDefinitions')
       ->will($this->returnValue($this->fieldDefinitions));
 
-    $this->entityStorage = new SqlContentEntityStorage($this->entityType, $this->connection, $this->entityManager, $this->cache);
+    $this->entityStorage = new SqlContentEntityStorage($this->entityType, $this->connection, $this->entityManager, $this->cache, $this->languageManager);
   }
 
   /**
@@ -1118,9 +1126,11 @@ class SqlContentEntityStorageTest extends UnitTestCase {
       ->method('set');
 
     $entity_storage = $this->getMockBuilder('Drupal\Core\Entity\Sql\SqlContentEntityStorage')
-      ->setConstructorArgs(array($this->entityType, $this->connection, $this->entityManager, $this->cache))
-      ->setMethods(array('getFromStorage'))
+      ->setConstructorArgs(array($this->entityType, $this->connection, $this->entityManager, $this->cache, $this->languageManager))
+      ->setMethods(array('getFromStorage', 'invokeStorageLoadHook'))
       ->getMock();
+    $entity_storage->method('invokeStorageLoadHook')
+      ->willReturn(NULL);
     $entity_storage->expects($this->once())
       ->method('getFromStorage')
       ->with(array($id))
@@ -1168,9 +1178,11 @@ class SqlContentEntityStorageTest extends UnitTestCase {
       ->with($key, $entity, CacheBackendInterface::CACHE_PERMANENT, array($this->entityTypeId . '_values', 'entity_field_info'));
 
     $entity_storage = $this->getMockBuilder('Drupal\Core\Entity\Sql\SqlContentEntityStorage')
-      ->setConstructorArgs(array($this->entityType, $this->connection, $this->entityManager, $this->cache))
-      ->setMethods(array('getFromStorage'))
+      ->setConstructorArgs(array($this->entityType, $this->connection, $this->entityManager, $this->cache, $this->languageManager))
+      ->setMethods(array('getFromStorage', 'invokeStorageLoadHook'))
       ->getMock();
+    $entity_storage->method('invokeStorageLoadHook')
+      ->willReturn(NULL);
     $entity_storage->expects($this->once())
       ->method('getFromStorage')
       ->with(array($id))
@@ -1178,6 +1190,56 @@ class SqlContentEntityStorageTest extends UnitTestCase {
 
     $entities = $entity_storage->loadMultiple(array($id));
     $this->assertEquals($entity, $entities[$id]);
+  }
+
+  /**
+   * @covers ::hasData
+   */
+  public function testHasData() {
+    $query = $this->getMock('Drupal\Core\Entity\Query\QueryInterface');
+    $query->expects(($this->once()))
+      ->method('accessCheck')
+      ->with(FALSE)
+      ->willReturn($query);
+    $query->expects(($this->once()))
+      ->method('range')
+      ->with(0, 1)
+      ->willReturn($query);
+    $query->expects(($this->once()))
+      ->method('execute')
+      ->willReturn(array(5));
+
+    $factory = $this->getMockBuilder('Drupal\Core\Entity\Query\QueryFactory')
+      ->disableOriginalConstructor()
+      ->getMock();
+    $factory->expects($this->once())
+      ->method('get')
+      ->with($this->entityType, 'AND')
+      ->willReturn($query);
+
+    $this->container->set('entity.query.sql', $factory);
+
+    $database = $this->getMockBuilder('Drupal\Core\Database\Connection')
+      ->disableOriginalConstructor()
+      ->getMock();
+
+    $this->entityManager->expects($this->any())
+      ->method('getDefinition')
+      ->will($this->returnValue($this->entityType));
+
+    $this->entityManager->expects($this->any())
+      ->method('getFieldStorageDefinitions')
+      ->will($this->returnValue($this->fieldDefinitions));
+
+    $this->entityManager->expects($this->any())
+      ->method('getBaseFieldDefinitions')
+      ->will($this->returnValue($this->fieldDefinitions));
+
+    $this->entityStorage = new SqlContentEntityStorage($this->entityType, $database, $this->entityManager, $this->cache, $this->languageManager);
+
+    $result = $this->entityStorage->hasData();
+
+    $this->assertTrue($result, 'hasData returned TRUE');
   }
 
   /**

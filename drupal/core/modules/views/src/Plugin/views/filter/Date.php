@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\filter\Date.
+ * Contains \Drupal\views\Plugin\views\filter\Date.
  */
 
 namespace Drupal\views\Plugin\views\filter;
@@ -16,7 +16,7 @@ use Drupal\Core\Form\FormStateInterface;
  *
  * @ViewsFilter("date")
  */
-class Date extends Numeric {
+class Date extends NumericFilter {
 
   protected function defineOptions() {
     $options = parent::defineOptions();
@@ -37,7 +37,7 @@ class Date extends Numeric {
         '#title' => $this->t('Value type'),
         '#options' => array(
           'date' => $this->t('A date in any machine readable format. CCYY-MM-DD HH:MM:SS is preferred.'),
-          'offset' => $this->t('An offset from the current time such as "!example1" or "!example2"', array('!example1' => '+1 day', '!example2' => '-2 hours -30 minutes')),
+          'offset' => $this->t('An offset from the current time such as "@example1" or "@example2"', array('@example1' => '+1 day', '@example2' => '-2 hours -30 minutes')),
         ),
         '#default_value' => !empty($this->value['type']) ? $this->value['type'] : 'date',
       );
@@ -108,7 +108,7 @@ class Date extends Numeric {
   protected function buildGroupValidate($form, FormStateInterface $form_state) {
     // Special case to validate grouped date filters, this is because the
     // $group['value'] array contains the type of filter (date or offset)
-    // and therefore the number of items the comparission has to be done
+    // and therefore the number of items the comparison has to be done
     // against 'one' instead of 'zero'.
     foreach ($form_state->getValue(array('options', 'group_info', 'group_items')) as $id => $group) {
       if (empty($group['remove'])) {

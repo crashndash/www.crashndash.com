@@ -12,6 +12,7 @@ use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\file\Entity\File;
 use Drupal\file\Plugin\Field\FieldWidget\FileWidget;
+use Drupal\image\Entity\ImageStyle;
 
 /**
  * Plugin implementation of the 'image_image' widget.
@@ -71,7 +72,7 @@ class ImageWidget extends FileWidget {
       $preview_image_style = t('Preview image style: @style', array('@style' => $image_styles[$image_style_setting]));
     }
     else {
-      $preview_image_style = t('Original image');
+      $preview_image_style = t('No preview');
     }
 
     array_unshift($summary, $preview_image_style);
@@ -97,8 +98,8 @@ class ImageWidget extends FileWidget {
     if ($cardinality == 1) {
       // If there's only one field, return it as delta 0.
       if (empty($elements[0]['#default_value']['fids'])) {
-        $file_upload_help['#description'] = $this->fieldFilterXss($this->fieldDefinition->getDescription());
-        $elements[0]['#description'] = drupal_render($file_upload_help);
+        $file_upload_help['#description'] = $this->fieldDefinition->getDescription();
+        $elements[0]['#description'] = \Drupal::service('renderer')->renderPlain($file_upload_help);
       }
     }
     else {
@@ -127,8 +128,6 @@ class ImageWidget extends FileWidget {
     $extensions = array_intersect(explode(' ', $extensions), $supported_extensions);
     $element['#upload_validators']['file_validate_extensions'][0] = implode(' ', $extensions);
 
-    // Add all extra functionality provided by the image widget.
-    $element['#process'][] = array(get_class($this), 'process');
     // Add properties needed by process() method.
     $element['#preview_image_style'] = $this->getSetting('preview_image_style');
     $element['#title_field'] = $field_settings['title_field'];
@@ -138,8 +137,12 @@ class ImageWidget extends FileWidget {
 
     // Default image.
     $default_image = $field_settings['default_image'];
-    if (empty($default_image['fid'])) {
+    if (empty($default_image['uuid'])) {
       $default_image = $this->fieldDefinition->getFieldStorageDefinition()->getSetting('default_image');
+    }
+    // Convert the stored UUID into a file ID.
+    if (!empty($default_image['uuid']) && $entity = \Drupal::entityManager()->loadEntityByUuid('file', $default_image['uuid'])) {
+      $default_image['fid'] = $entity->id();
     }
     $element['#default_image'] = !empty($default_image['fid']) ? $default_image : array();
 
@@ -158,7 +161,6 @@ class ImageWidget extends FileWidget {
     $item['fids'] = $element['fids']['#value'];
 
     $element['#theme'] = 'image_widget';
-    $element['#attached']['css'][] = drupal_get_path('module', 'image') . '/css/image.theme.css';
 
     // Add the image preview.
     if (!empty($element['#files']) && $element['#preview_image_style']) {
@@ -225,10 +227,11 @@ class ImageWidget extends FileWidget {
       '#type' => 'textfield',
       '#default_value' => isset($item['alt']) ? $item['alt'] : '',
       '#description' => t('This text will be used by screen readers, search engines, or when the image cannot be loaded.'),
-      // @see https://drupal.org/node/465106#alt-text
+      // @see https://www.drupal.org/node/465106#alt-text
       '#maxlength' => 512,
       '#weight' => -12,
       '#access' => (bool) $item['fids'] && $element['#alt_field'],
+      '#required' => $element['#alt_field_required'],
       '#element_validate' => $element['#alt_field_required'] == 1 ? array(array(get_called_class(), 'validateRequiredFields')) : array(),
     );
     $element['title'] = array(
@@ -239,6 +242,7 @@ class ImageWidget extends FileWidget {
       '#maxlength' => 1024,
       '#weight' => -11,
       '#access' => (bool) $item['fids'] && $element['#title_field'],
+      '#required' => $element['#title_field_required'],
       '#element_validate' => $element['#title_field_required'] == 1 ? array(array(get_called_class(), 'validateRequiredFields')) : array(),
     );
 
@@ -264,13 +268,55 @@ class ImageWidget extends FileWidget {
       if (!array_key_exists($field, $image_field)) {
         return;
       }
-      // Check if field is left empty.
-      elseif (empty($image_field[$field])) {
-        $form_state->setError($element, t('The field !title is required', array('!title' => $element['#title'])));
-        return;
-      }
+    }
+    else {
+      $form_state->setLimitValidationErrors([]);
     }
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    $dependencies = parent::calculateDependencies();
+    $style_id = $this->getSetting('preview_image_style');
+    /** @var \Drupal\image\ImageStyleInterface $style */
+    if ($style_id && $style = ImageStyle::load($style_id)) {
+      // If this widget uses a valid image style to display the preview of the
+      // uploaded image, add that image style configuration entity as dependency
+      // of this widget.
+      $dependencies[$style->getConfigDependencyKey()][] = $style->getConfigDependencyName();
+    }
+    return $dependencies;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function onDependencyRemoval(array $dependencies) {
+    $changed = parent::onDependencyRemoval($dependencies);
+    $style_id = $this->getSetting('preview_image_style');
+    /** @var \Drupal\image\ImageStyleInterface $style */
+    if ($style_id && $style = ImageStyle::load($style_id)) {
+      if (!empty($dependencies[$style->getConfigDependencyKey()][$style->getConfigDependencyName()])) {
+        /** @var \Drupal\image\ImageStyleStorageInterface $storage */
+        $storage = \Drupal::entityManager()->getStorage($style->getEntityTypeId());
+        $replacement_id = $storage->getReplacementId($style_id);
+        // If a valid replacement has been provided in the storage, replace the
+        // preview image style with the replacement.
+        if ($replacement_id && ImageStyle::load($replacement_id)) {
+          $this->setSetting('preview_image_style', $replacement_id);
+        }
+        // If there's no replacement or the replacement is invalid, disable the
+        // image preview.
+        else {
+          $this->setSetting('preview_image_style', '');
+        }
+        // Signal that the formatter plugin settings were updated.
+        $changed = TRUE;
+      }
+    }
+    return $changed;
+  }
 
 }

@@ -27,6 +27,7 @@ class CacheTest extends UnitTestCase {
       [['foo'], FALSE],
       [['foo', 'bar'], FALSE],
       [['foo', 'bar', 'llama:2001988', 'baz', 'llama:14031991'], FALSE],
+      // Invalid.
       [[FALSE], 'Cache tags must be strings, boolean given.'],
       [[TRUE], 'Cache tags must be strings, boolean given.'],
       [['foo', FALSE], 'Cache tags must be strings, boolean given.'],
@@ -45,7 +46,7 @@ class CacheTest extends UnitTestCase {
   }
 
   /**
-   * @covers validateTags
+   * @covers ::validateTags
    *
    * @dataProvider validateTagsProvider
    */
@@ -53,8 +54,10 @@ class CacheTest extends UnitTestCase {
     if ($expected_exception_message !== FALSE) {
       $this->setExpectedException('LogicException', $expected_exception_message);
     }
-    Cache::validateTags($tags);
+    // If it doesn't throw an exception, validateTags() returns NULL.
+    $this->assertNull(Cache::validateTags($tags));
   }
+
 
   /**
    * Provides a list of pairs of cache tags arrays to be merged.
@@ -74,12 +77,44 @@ class CacheTest extends UnitTestCase {
   }
 
   /**
-   * @covers mergeTags
+   * @covers ::mergeTags
    *
    * @dataProvider mergeTagsProvider
    */
   public function testMergeTags(array $a, array $b, array $expected) {
     $this->assertEquals($expected, Cache::mergeTags($a, $b));
+  }
+
+  /**
+   * Provides a list of pairs of cache tags arrays to be merged.
+   *
+   * @return array
+   */
+  public function mergeMaxAgesProvider() {
+    return [
+      [Cache::PERMANENT, Cache::PERMANENT, Cache::PERMANENT],
+      [60, 60, 60],
+      [0, 0, 0],
+
+      [60, 0, 0],
+      [0, 60, 0],
+
+      [Cache::PERMANENT, 0, 0],
+      [0, Cache::PERMANENT, 0],
+
+      [Cache::PERMANENT, 60, 60],
+      [60, Cache::PERMANENT, 60],
+    ];
+  }
+
+
+  /**
+   * @covers ::mergeMaxAges
+   *
+   * @dataProvider mergeMaxAgesProvider
+   */
+  public function testMergeMaxAges($a, $b, $expected) {
+    $this->assertSame($expected, Cache::mergeMaxAges($a, $b));
   }
 
   /**
@@ -104,36 +139,18 @@ class CacheTest extends UnitTestCase {
       ['node', [5 => NULL], ['node:']],
       ['node', ['a' => NULL], ['node:']],
       ['node', ['a' => TRUE], ['node:1']],
+      // Test the $glue parameter.
+      ['config:system.menu', ['menu_name'], ['config:system.menu.menu_name'], '.'],
     ];
   }
 
   /**
-   * @covers buildTags
+   * @covers ::buildTags
    *
    * @dataProvider buildTagsProvider
    */
-  public function testBuildTags($prefix, array $suffixes, array $expected) {
-    $this->assertEquals($expected, Cache::buildTags($prefix, $suffixes));
-  }
-
-  /**
-   * @covers deleteTags
-   *
-   * @expectedException \LogicException
-   * @expectedExceptionMessage Cache tags must be strings, array given.
-   */
-  public function testDeleteTags() {
-    Cache::deleteTags(['node' => [2, 3, 5, 8, 13]]);
-  }
-
-  /**
-   * @covers invalidateTags
-   *
-   * @expectedException \LogicException
-   * @expectedExceptionMessage Cache tags must be strings, array given.
-   */
-  public function testInvalidateTags() {
-    Cache::deleteTags(['node' => [2, 3, 5, 8, 13]]);
+  public function testBuildTags($prefix, array $suffixes, array $expected, $glue = ':') {
+    $this->assertEquals($expected, Cache::buildTags($prefix, $suffixes, $glue));
   }
 
 }

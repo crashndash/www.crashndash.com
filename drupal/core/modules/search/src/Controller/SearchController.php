@@ -2,13 +2,14 @@
 
 /**
  * @file
- * Contains Drupal\search\Controller\SearchController
+ * Contains \Drupal\search\Controller\SearchController.
  */
 
 namespace Drupal\search\Controller;
 
-use Drupal\Core\Config\ConfigFactory;
+use Drupal\Core\Cache\CacheableDependencyInterface;
 use Drupal\Core\Controller\ControllerBase;
+use Drupal\Core\Render\RendererInterface;
 use Drupal\search\SearchPageInterface;
 use Drupal\search\SearchPageRepositoryInterface;
 use Psr\Log\LoggerInterface;
@@ -35,16 +36,26 @@ class SearchController extends ControllerBase {
   protected $logger;
 
   /**
+   * The renderer.
+   *
+   * @var \Drupal\Core\Render\RendererInterface
+   */
+  protected $renderer;
+
+  /**
    * Constructs a new search controller.
    *
    * @param \Drupal\search\SearchPageRepositoryInterface $search_page_repository
    *   The search page repository.
    * @param \Psr\Log\LoggerInterface $logger
    *   A logger instance.
+   * @param \Drupal\Core\Render\RendererInterface $renderer
+   *   The renderer.
    */
-  public function __construct(SearchPageRepositoryInterface $search_page_repository, LoggerInterface $logger) {
+  public function __construct(SearchPageRepositoryInterface $search_page_repository, LoggerInterface $logger, RendererInterface $renderer) {
     $this->searchPageRepository = $search_page_repository;
     $this->logger = $logger;
+    $this->renderer = $renderer;
   }
 
   /**
@@ -53,7 +64,8 @@ class SearchController extends ControllerBase {
   public static function create(ContainerInterface $container) {
     return new static(
       $container->get('search.search_page_repository'),
-      $container->get('logger.factory')->get('search')
+      $container->get('logger.factory')->get('search'),
+      $container->get('renderer')
     );
   }
 
@@ -74,6 +86,7 @@ class SearchController extends ControllerBase {
 
     // Build the form first, because it may redirect during the submit,
     // and we don't want to build the results based on last time's request.
+    $build['#cache']['contexts'][] = 'url.query_args:keys';
     if ($request->query->has('keys')) {
       $keys = trim($request->get('keys'));
       $plugin->setSearch($keys, $request->query->all(), $request->attributes->all());
@@ -109,35 +122,53 @@ class SearchController extends ControllerBase {
       );
     }
 
-    $no_results = t('<ul>
-    <li>Check if your spelling is correct.</li>
-    <li>Remove quotes around phrases to search for each word individually. <em>bike shed</em> will often show more results than <em>&quot;bike shed&quot;</em>.</li>
-    <li>Consider loosening your query with <em>OR</em>. <em>bike OR shed</em> will often show more results than <em>bike shed</em>.</li>
-    </ul>');
     $build['search_results'] = array(
       '#theme' => array('item_list__search_results__' . $plugin->getPluginId(), 'item_list__search_results'),
       '#items' => $results,
       '#empty' => array(
-        // @todo Revisit where this help text is added.
-        '#markup' => '<h3>' . $this->t('Your search yielded no results.') . '</h3>' . $no_results,
+        '#markup' => '<h3>' . $this->t('Your search yielded no results.') . '</h3>',
       ),
       '#list_type' => 'ol',
-      '#attributes' => array(
-        'class' => array(
-          'search-results',
-          $plugin->getPluginId() . '-results',
-        ),
-      ),
-      '#cache' => array(
-        'tags' => $entity->getCacheTag(),
+      '#context' => array(
+        'plugin' => $plugin->getPluginId(),
       ),
     );
+
+    $this->renderer->addCacheableDependency($build, $entity);
+    if ($plugin instanceof CacheableDependencyInterface) {
+      $this->renderer->addCacheableDependency($build, $plugin);
+    }
+
+    // If this plugin uses a search index, then also add the cache tag tracking
+    // that search index, so that cached search result pages are invalidated
+    // when necessary.
+    if ($plugin->getType()) {
+      $build['search_results']['#cache']['tags'][] = 'search_index';
+      $build['search_results']['#cache']['tags'][] = 'search_index:' . $plugin->getType();
+    }
 
     $build['pager'] = array(
-      '#theme' => 'pager',
+      '#type' => 'pager',
     );
 
-    $build['#attached']['library'][] = 'search/drupal.search.results';
+    return $build;
+  }
+
+  /**
+   * Creates a render array for the search help page.
+   *
+   * @param \Symfony\Component\HttpFoundation\Request $request
+   *   The request object.
+   * @param \Drupal\search\SearchPageInterface $entity
+   *   The search page entity.
+   *
+   * @return array
+   *   The search help page.
+   */
+  public function searchHelp(SearchPageInterface $entity) {
+    $build = array();
+
+    $build['search_help'] = $entity->getPlugin()->getHelp();
 
     return $build;
   }
@@ -191,7 +222,8 @@ class SearchController extends ControllerBase {
       drupal_set_message($this->t('The %label search page has been disabled.', array('%label' => $search_page->label())));
     }
 
-    return $this->redirect('search.settings');
+    $url = $search_page->urlInfo('collection');
+    return $this->redirect($url->getRouteName(), $url->getRouteParameters(), $url->getOptions());
   }
 
   /**
@@ -208,7 +240,7 @@ class SearchController extends ControllerBase {
     $this->searchPageRepository->setDefaultSearchPage($search_page);
 
     drupal_set_message($this->t('The default search page is now %label. Be sure to check the ordering of your search pages.', array('%label' => $search_page->label())));
-    return $this->redirect('search.settings');
+    return $this->redirect('entity.search_page.collection');
   }
 
 }

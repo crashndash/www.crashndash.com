@@ -8,7 +8,7 @@
 namespace Drupal\views;
 
 use Drupal\Component\Utility\Unicode;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * Defines a helper class for stuff related to views data.
@@ -114,9 +114,18 @@ class ViewsDataHelper {
                 elseif (!empty($table_data['table'][$string])) {
                   $strings[$field][$key][$string] = $table_data['table'][$string];
                 }
+                // We don't have any help provided for this field. If a better
+                // description should be used for the Views UI you use
+                // hook_views_data_alter() in module.views.inc or implement a
+                // custom entity views_data handler.
+                // @see hook_views_data_alter()
+                // @see \Drupal\node\NodeViewsData
+                elseif ($string == 'help') {
+                  $strings[$field][$key][$string] = '';
+                }
                 else {
-                  if ($string != 'base' && $string != 'base') {
-                    $strings[$field][$key][$string] = String::format("Error: missing @component", array('@component' => $string));
+                  if ($string != 'base') {
+                    $strings[$field][$key][$string] = SafeMarkup::format("Error: missing @component", array('@component' => $string));
                   }
                 }
               }

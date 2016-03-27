@@ -2,12 +2,13 @@
 
 /**
  * @file
- * Definition of Drupal\views_test_data\Plugin\views\area\TestExample
+ * Contains \Drupal\views_test_data\Plugin\views\area\TestExample.
  */
 
 namespace Drupal\views_test_data\Plugin\views\area;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Session\AccountInterface;
 use Drupal\views\Plugin\views\area\AreaPluginBase;
 
 /**
@@ -20,17 +21,25 @@ use Drupal\views\Plugin\views\area\AreaPluginBase;
 class TestExample extends AreaPluginBase {
 
   /**
-   * Overrides Drupal\views\Plugin\views\area\AreaPluginBase::option_definition().
+   * {@inheritdoc}
+   */
+  public function access(AccountInterface $account) {
+    return $this->options['custom_access'];
+  }
+
+  /**
+   * {@inheritdoc}
    */
   public function defineOptions() {
     $options = parent::defineOptions();
     $options['string'] = array('default' => '');
+    $options['custom_access'] = array('default' => TRUE);
 
     return $options;
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\area\AreaPluginBase::buildOptionsForm()
+   * {@inheritdoc}
    */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
@@ -38,7 +47,7 @@ class TestExample extends AreaPluginBase {
   }
 
   /**
-   * Implements \Drupal\views\Plugin\views\area\AreaPluginBase::render().
+   * {@inheritdoc}
    */
   public function render($empty = FALSE) {
     if (!$empty || !empty($this->options['empty'])) {

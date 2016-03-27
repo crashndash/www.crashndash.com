@@ -1,19 +1,23 @@
 <?php
+
 /**
  * @file
- * Provides Configuration Management destination plugin.
+ * Contains \Drupal\migrate\Plugin\migrate\destination\Config.
  */
 
 namespace Drupal\migrate\Plugin\migrate\destination;
 
+use Drupal\Component\Plugin\DependentPluginInterface;
+use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Entity\DependencyTrait;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\migrate\Entity\MigrationInterface;
-use Drupal\migrate\MigrateException;
 use Drupal\migrate\Row;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Drupal\Core\Config\Config as ConfigObject;
 
 /**
+ * Provides Configuration Management destination plugin.
+ *
  * Persist data to the config system.
  *
  * When a property is NULL, the default is used unless the configuration option
@@ -23,7 +27,9 @@ use Drupal\Core\Config\Config as ConfigObject;
  *   id = "config"
  * )
  */
-class Config extends DestinationBase implements ContainerFactoryPluginInterface {
+class Config extends DestinationBase implements ContainerFactoryPluginInterface, DependentPluginInterface {
+
+  use DependencyTrait;
 
   /**
    * The config object.
@@ -43,12 +49,12 @@ class Config extends DestinationBase implements ContainerFactoryPluginInterface 
    *   The plugin implementation definition.
    * @param \Drupal\migrate\Entity\MigrationInterface $migration
    *   The migration entity.
-   * @param \Drupal\Core\Config\Config $config
-   *   The configuration object.
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
+   *   The configuration factory.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, MigrationInterface $migration, ConfigObject $config) {
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, MigrationInterface $migration, ConfigFactoryInterface $config_factory) {
     parent::__construct($configuration, $plugin_id, $plugin_definition, $migration);
-    $this->config = $config;
+    $this->config = $config_factory->getEditable($configuration['config_name']);
   }
 
   /**
@@ -60,7 +66,7 @@ class Config extends DestinationBase implements ContainerFactoryPluginInterface 
       $plugin_id,
       $plugin_definition,
       $migration,
-      $container->get('config.factory')->get($configuration['config_name'])
+      $container->get('config.factory')
     );
   }
 
@@ -74,19 +80,7 @@ class Config extends DestinationBase implements ContainerFactoryPluginInterface 
       }
     }
     $this->config->save();
-    return TRUE;
-  }
-
-  /**
-   * Throw an exception because config can not be rolled back.
-   *
-   * @param array $destination_keys
-   *   The array of destination ids to roll back.
-   *
-   * @throws \Drupal\migrate\MigrateException
-   */
-  public function rollbackMultiple(array $destination_keys) {
-    throw new MigrateException('Configuration can not be rolled back');
+    return [$this->config->getName()];
   }
 
   /**
@@ -100,7 +94,17 @@ class Config extends DestinationBase implements ContainerFactoryPluginInterface 
    * {@inheritdoc}
    */
   public function getIds() {
-    return array();
+    $ids['config_name']['type'] = 'string';
+    return $ids;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    $provider = explode('.', $this->config->getName(), 2)[0];
+    $this->addDependency('module', $provider);
+    return $this->dependencies;
   }
 
 }

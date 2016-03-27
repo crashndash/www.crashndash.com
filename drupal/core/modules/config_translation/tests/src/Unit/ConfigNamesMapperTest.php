@@ -11,10 +11,10 @@ use Drupal\config_translation\ConfigNamesMapper;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Drupal\Core\Language\Language;
+use Drupal\Core\Routing\RouteMatch;
 use Drupal\Core\Url;
 use Drupal\Tests\UnitTestCase;
 use Symfony\Component\Routing\Route;
-use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Tests the functionality provided by the configuration names mapper.
@@ -81,6 +81,13 @@ class ConfigNamesMapperTest extends UnitTestCase {
    */
   protected $urlGenerator;
 
+  /**
+   * The mocked language manager.
+   *
+   * @var \Drupal\Core\Language\LanguageManagerInterface $language_manager|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $languageManager;
+
   protected function setUp() {
     $this->routeProvider = $this->getMock('Drupal\Core\Routing\RouteProviderInterface');
 
@@ -113,6 +120,8 @@ class ConfigNamesMapperTest extends UnitTestCase {
       ->with('system.site_information_settings')
       ->will($this->returnValue($this->baseRoute));
 
+    $this->languageManager = $this->getMock('Drupal\Core\Language\LanguageManagerInterface');
+
     $this->configNamesMapper = new TestConfigNamesMapper(
       'system.site_information_settings',
       $this->pluginDefinition,
@@ -121,7 +130,8 @@ class ConfigNamesMapperTest extends UnitTestCase {
       $this->localeConfigManager,
       $this->configMapperManager,
       $this->routeProvider,
-      $this->getStringTranslationStub()
+      $this->getStringTranslationStub(),
+      $this->languageManager
     );
   }
 
@@ -130,7 +140,7 @@ class ConfigNamesMapperTest extends UnitTestCase {
    */
   public function testGetTitle() {
     $result = $this->configNamesMapper->getTitle();
-    $this->assertSame($this->pluginDefinition['title'], $result);
+    $this->assertSame($this->pluginDefinition['title'], (string) $result);
   }
 
   /**
@@ -192,7 +202,7 @@ class ConfigNamesMapperTest extends UnitTestCase {
   public function testGetOverviewRoute() {
     $expected = new Route('/admin/config/system/site-information/translate',
       array(
-        '_content' => '\Drupal\config_translation\Controller\ConfigTranslationController::itemPage',
+        '_controller' => '\Drupal\config_translation\Controller\ConfigTranslationController::itemPage',
         'plugin_id' => 'system.site_information_settings',
       ),
       array(
@@ -229,9 +239,8 @@ class ConfigNamesMapperTest extends UnitTestCase {
    * Tests ConfigNamesMapper::getAddRouteParameters().
    */
   public function testGetAddRouteParameters() {
-    $request = Request::create('');
-    $request->attributes->set('langcode', 'xx');
-    $this->configNamesMapper->populateFromRequest($request);
+    $route_match = new RouteMatch('example', new Route('/test/{langcode}'), ['langcode' => 'xx']);
+    $this->configNamesMapper->populateFromRouteMatch($route_match);
 
     $expected = array('langcode' => 'xx');
     $result = $this->configNamesMapper->getAddRouteParameters();
@@ -268,9 +277,8 @@ class ConfigNamesMapperTest extends UnitTestCase {
    * Tests ConfigNamesMapper::getEditRouteParameters().
    */
   public function testGetEditRouteParameters() {
-    $request = Request::create('');
-    $request->attributes->set('langcode', 'xx');
-    $this->configNamesMapper->populateFromRequest($request);
+    $route_match = new RouteMatch('example', new Route('/test/{langcode}'), ['langcode' => 'xx']);
+    $this->configNamesMapper->populateFromRouteMatch($route_match);
 
     $expected = array('langcode' => 'xx');
     $result = $this->configNamesMapper->getEditRouteParameters();
@@ -307,9 +315,8 @@ class ConfigNamesMapperTest extends UnitTestCase {
    * Tests ConfigNamesMapper::getDeleteRouteParameters().
    */
   public function testGetDeleteRouteParameters() {
-    $request = Request::create('');
-    $request->attributes->set('langcode', 'xx');
-    $this->configNamesMapper->populateFromRequest($request);
+    $route_match = new RouteMatch('example', new Route('/test/{langcode}'), ['langcode' => 'xx']);
+    $this->configNamesMapper->populateFromRouteMatch($route_match);
 
     $expected = array('langcode' => 'xx');    $result = $this->configNamesMapper->getDeleteRouteParameters();
     $this->assertSame($expected, $result);
@@ -360,25 +367,25 @@ class ConfigNamesMapperTest extends UnitTestCase {
   }
 
   /**
-   * Tests ConfigNamesMapper::populateFromRequest().
+   * Tests ConfigNamesMapper::populateFromRouteMatch().
    */
-  public function testPopulateFromRequest() {
+  public function testPopulateFromRouteMatch() {
     // Make sure the language code is not set initially.
     $this->assertSame(NULL, $this->configNamesMapper->getInternalLangcode());
 
     // Test that an empty request does not set the language code.
-    $request = Request::create('');
-    $this->configNamesMapper->populateFromRequest($request);
+    $route_match = new RouteMatch('example', new Route('/test/{langcode}'));
+    $this->configNamesMapper->populateFromRouteMatch($route_match);
     $this->assertSame(NULL, $this->configNamesMapper->getInternalLangcode());
 
     // Test that a request with a 'langcode' attribute sets the language code.
-    $request->attributes->set('langcode', 'xx');
-    $this->configNamesMapper->populateFromRequest($request);
+    $route_match = new RouteMatch('example', new Route('/test/{langcode}'), ['langcode' => 'xx']);
+    $this->configNamesMapper->populateFromRouteMatch($route_match);
     $this->assertSame('xx', $this->configNamesMapper->getInternalLangcode());
 
     // Test that the language code gets unset with the wrong request.
-    $request->attributes->remove('langcode');
-    $this->configNamesMapper->populateFromRequest($request);
+    $route_match = new RouteMatch('example', new Route('/test/{langcode}'));
+    $this->configNamesMapper->populateFromRouteMatch($route_match);
     $this->assertSame(NULL, $this->configNamesMapper->getInternalLangcode());
   }
 
@@ -387,7 +394,7 @@ class ConfigNamesMapperTest extends UnitTestCase {
    */
   public function testGetTypeLabel() {
     $result = $this->configNamesMapper->getTypeLabel();
-    $this->assertSame($this->pluginDefinition['title'], $result);
+    $this->assertSame($this->pluginDefinition['title'], (string) $result);
   }
 
   /**
@@ -435,10 +442,6 @@ class ConfigNamesMapperTest extends UnitTestCase {
     }
     catch (\RuntimeException $e) {}
   }
-
-  // @todo Test ConfigNamesMapper::getLanguageWithFallback() once
-  //   https://drupal.org/node/1862202 lands in core, because then we can
-  //   remove the direct language_load() call.
 
   /**
    * Tests ConfigNamesMapper::getConfigData().
@@ -499,7 +502,7 @@ class ConfigNamesMapperTest extends UnitTestCase {
   }
 
   /**
-   * Provides data for for ConfigMapperTest::testHasSchema().
+   * Provides data for ConfigMapperTest::testHasSchema().
    *
    * @return array
    *   An array of arrays, where each inner array has an array of values that
@@ -534,7 +537,7 @@ class ConfigNamesMapperTest extends UnitTestCase {
 
     $map = array();
     foreach ($config_names as $i => $config_name) {
-      $map[] = array($config_name, $mock_return_values[$i]);
+      $map[] = isset($mock_return_values[$i]) ? array($config_name, $mock_return_values[$i]) : array();
     }
     $this->configMapperManager
       ->expects($this->any())
@@ -556,10 +559,12 @@ class ConfigNamesMapperTest extends UnitTestCase {
    */
   public function providerTestHasTranslatable() {
     return array(
+      array(array(), FALSE),
       array(array(TRUE), TRUE),
       array(array(FALSE), FALSE),
       array(array(TRUE, TRUE, TRUE), TRUE),
-      array(array(TRUE, FALSE, TRUE), FALSE),
+      array(array(FALSE, FALSE, FALSE), FALSE),
+      array(array(TRUE, FALSE, TRUE), TRUE),
     );
   }
 
@@ -583,7 +588,7 @@ class ConfigNamesMapperTest extends UnitTestCase {
 
     $map = array();
     foreach ($config_names as $i => $config_name) {
-      $map[] = array($config_name, $language, $mock_return_values[$i]);
+      $map[] = array($config_name, $language->getId(), $mock_return_values[$i]);
     }
     $this->localeConfigManager
       ->expects($this->any())
@@ -618,7 +623,7 @@ class ConfigNamesMapperTest extends UnitTestCase {
    */
   public function testGetTypeName() {
     $result = $this->configNamesMapper->getTypeName();
-    $this->assertSame('Settings', $result);
+    $this->assertSame('Settings', (string) $result);
   }
 
   /**

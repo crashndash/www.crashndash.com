@@ -10,8 +10,8 @@ namespace Drupal\entity_test\Controller;
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Entity\Query\QueryFactory;
+use Drupal\Core\Routing\RouteMatchInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Controller routines for entity_test routes.
@@ -63,32 +63,12 @@ class EntityTestController extends ControllerBase {
   }
 
   /**
-   * Displays the 'Edit existing entity_test' form.
-   *
-   * @param \Symfony\Component\HttpFoundation\Request $request
-   *   The request object to get entity type from.
-   * @param string $entity_type_id
-   *   The entity type ID.
-   *
-   * @return array
-   *   The processed form for the edited entity.
-   *
-   * @see \Drupal\entity_test\Routing\EntityTestRoutes::routes()
-   */
-  public function testEdit(Request $request, $entity_type_id) {
-    $entity = $request->attributes->get($entity_type_id);
-    $form = $this->entityFormBuilder()->getForm($entity);
-    $form['#title'] = $entity->label();
-    return $form;
-  }
-
-  /**
    * Returns an empty page.
    *
    * @see \Drupal\entity_test\Routing\EntityTestRoutes::routes()
    */
   public function testAdmin() {
-    return '';
+    return [];
   }
 
   /**
@@ -150,7 +130,7 @@ class EntityTestController extends ControllerBase {
     $labels = [];
     foreach ($entities as $entity) {
       $labels[] = $entity->label();
-      $cache_tags = Cache::mergeTags($cache_tags, $entity->getCacheTag());
+      $cache_tags = Cache::mergeTags($cache_tags, $entity->getCacheTags());
     }
     // Always associate the list cache tag, otherwise the cached empty result
     // wouldn't be invalidated. This would continue to show nothing matches the
@@ -162,6 +142,7 @@ class EntityTestController extends ControllerBase {
       '#items' => $labels,
       '#title' => $entity_type_id . ' entities',
       '#cache' => [
+        'contexts' => $entity_type_definition->getListCacheContexts(),
         'tags' => $cache_tags,
       ],
     ];
@@ -182,11 +163,13 @@ class EntityTestController extends ControllerBase {
    *   A renderable array.
    */
   public function listEntitiesEmpty($entity_type_id) {
+    $entity_type_definition = $this->entityManager()->getDefinition($entity_type_id);
     return [
       '#theme' => 'item_list',
       '#items' => [],
       '#cache' => [
-        'tags' => $this->entityManager()->getDefinition($entity_type_id)->getListCacheTags(),
+        'contexts' => $entity_type_definition->getListCacheContexts(),
+        'tags' => $entity_type_definition->getListCacheTags(),
       ],
     ];
   }

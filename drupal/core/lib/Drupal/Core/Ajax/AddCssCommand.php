@@ -2,12 +2,10 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Ajax\AddCssCommand.
+ * Contains \Drupal\Core\Ajax\AddCssCommand.
  */
 
 namespace Drupal\Core\Ajax;
-
-use Drupal\Core\Ajax\CommandInterface;
 
 /**
  * An AJAX command for adding css to the page via ajax.

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Config\Entity\ConfigEntityInterface.
+ * Contains \Drupal\Core\Config\Entity\ConfigEntityInterface.
  */
 
 namespace Drupal\Core\Config\Entity;
@@ -15,7 +15,7 @@ use Drupal\Core\Entity\EntityInterface;
  * @ingroup config_api
  * @ingroup entity_api
  */
-interface ConfigEntityInterface extends EntityInterface {
+interface ConfigEntityInterface extends EntityInterface, ThirdPartySettingsInterface {
 
   /**
    * Enables the configuration entity.
@@ -144,22 +144,11 @@ interface ConfigEntityInterface extends EntityInterface {
   /**
    * Calculates dependencies and stores them in the dependency property.
    *
-   * @return array
-   *   An array of dependencies grouped by type (module, theme, entity).
+   * @return $this
    *
    * @see \Drupal\Core\Config\Entity\ConfigDependencyManager
    */
   public function calculateDependencies();
-
-  /**
-   * Gets the configuration dependency name.
-   *
-   * @return string
-   *   The configuration dependency name.
-   *
-   * @see \Drupal\Core\Config\Entity\ConfigDependencyManager
-   */
-  public function getConfigDependencyName();
 
   /**
    * Informs the entity that entities it depends on will be deleted.
@@ -167,20 +156,23 @@ interface ConfigEntityInterface extends EntityInterface {
    * This method allows configuration entities to remove dependencies instead
    * of being deleted themselves. Configuration entities can use this method to
    * avoid being unnecessarily deleted during an extension uninstallation.
-   * Implementations should save the entity if dependencies have been
-   * successfully removed. For example, entity displays remove references to
-   * widgets and formatters if the plugin that supplies them depends on a
-   * module that is being uninstalled.
+   * For example, entity displays remove references to widgets and formatters if
+   * the plugin that supplies them depends on a module that is being
+   * uninstalled.
    *
-   * @todo https://www.drupal.org/node/2336727 this method is only fired during
-   *   extension uninstallation but it could be used during config entity
-   *   deletion too.
+   * If this method returns TRUE then the entity needs to be re-saved by the
+   * caller for the changes to take effect. Implementations should not save the
+   * entity.
    *
    * @param array $dependencies
    *   An array of dependencies that will be deleted keyed by dependency type.
    *   Dependency types are, for example, entity, module and theme.
    *
+   * @return bool
+   *   TRUE if the entity has been changed as a result, FALSE if not.
+   *
    * @see \Drupal\Core\Config\Entity\ConfigDependencyManager
+   * @see \Drupal\Core\Config\ConfigEntityBase::preDelete()
    * @see \Drupal\Core\Config\ConfigManager::uninstall()
    * @see \Drupal\Core\Entity\EntityDisplayBase::onDependencyRemoval()
    */
@@ -195,5 +187,39 @@ interface ConfigEntityInterface extends EntityInterface {
    * @see \Drupal\Core\Config\Entity\ConfigDependencyManager
    */
   public function getDependencies();
+
+  /**
+   * Checks whether this entity is installable.
+   *
+   * For example, a default view might not be installable if the base table
+   * doesn't exist.
+   *
+   * @retun bool
+   *   TRUE if the entity is installable, FALSE otherwise.
+   */
+  public function isInstallable();
+
+  /**
+   * Sets that the data should be trusted.
+   *
+   * If the data is trusted then dependencies will not be calculated on save and
+   * schema will not be used to cast the values. Generally this is only used
+   * during module and theme installation. Once the config entity has been saved
+   * the data will no longer be marked as trusted. This is an optimization for
+   * creation of configuration during installation.
+   *
+   * @return $this
+   *
+   * @see \Drupal\Core\Config\ConfigInstaller::createConfiguration()
+   */
+  public function trustData();
+
+  /**
+   * Gets whether on not the data is trusted.
+   *
+   * @return bool
+   *   TRUE if the configuration data is trusted, FALSE if not.
+   */
+  public function hasTrustedData();
 
 }

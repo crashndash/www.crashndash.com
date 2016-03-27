@@ -42,13 +42,20 @@ trait SchemaCheckTrait {
    * @param string $config_name
    *   The configuration name.
    * @param array $config_data
-   *   The configuration data.
+   *   The configuration data, assumed to be data for a top-level config object.
    *
    * @return array|bool
    *   FALSE if no schema found. List of errors if any found. TRUE if fully
    *   valid.
    */
   public function checkConfigSchema(TypedConfigManagerInterface $typed_config, $config_name, $config_data) {
+    // We'd like to verify that the top-level type is either config_base,
+    // config_entity, or a derivative. The only thing we can really test though
+    // is that the schema supports having langcode in it. So add 'langcode' to
+    // the data if it doesn't already exist.
+    if (!isset($config_data['langcode'])) {
+      $config_data['langcode'] = 'en';
+    }
     $this->configName = $config_name;
     if (!$typed_config->hasConfigSchema($config_name)) {
       return FALSE;
@@ -81,7 +88,7 @@ trait SchemaCheckTrait {
     $error_key = $this->configName . ':' . $key;
     $element = $this->schema->get($key);
     if ($element instanceof Undefined) {
-      return array($error_key => 'Missing schema.');
+      return array($error_key => 'missing schema');
     }
 
     // Do not check value if it is defined to be ignored.
@@ -99,18 +106,22 @@ trait SchemaCheckTrait {
           (($type == 'double' || $type == 'integer') && $element instanceof FloatInterface) ||
           ($type == 'boolean' && $element instanceof BooleanInterface) ||
           ($type == 'string' && $element instanceof StringInterface) ||
-          // Null values are allowed for all types.
+          // Null values are allowed for all primitive types.
           ($value === NULL);
+      }
+      // Array elements can also opt-in for allowing a NULL value.
+      elseif ($element instanceof ArrayElement && $element->isNullable() && $value === NULL) {
+        $success = TRUE;
       }
       $class = get_class($element);
       if (!$success) {
-        return array($error_key => "Variable type is $type but applied schema class is $class.");
+        return array($error_key => "variable type is $type but applied schema class is $class");
       }
     }
     else {
       $errors = array();
       if (!$element instanceof TraversableTypedDataInterface) {
-        $errors[$error_key] = 'Non-scalar value but not defined as an array (such as mapping or sequence).';
+        $errors[$error_key] = 'non-scalar value but not defined as an array (such as mapping or sequence)';
       }
 
       // Go on processing so we can get errors on all levels. Any non-scalar

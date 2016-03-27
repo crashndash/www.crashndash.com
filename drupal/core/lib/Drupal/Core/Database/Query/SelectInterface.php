@@ -2,10 +2,12 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Database\Query\SelectInterface
+ * Contains \Drupal\Core\Database\Query\SelectInterface.
  */
 
 namespace Drupal\Core\Database\Query;
+
+use Drupal\Core\Database\Connection;
 
 /**
  * Interface definition for a Select Query object.
@@ -124,6 +126,34 @@ interface SelectInterface extends ConditionInterface, AlterableInterface, Extend
    *   A reference to the union query array structure.
    */
   public function &getUnion();
+
+  /**
+   * Escapes characters that work as wildcard characters in a LIKE pattern.
+   *
+   * @param $string
+   *   The string to escape.
+   *
+   * @return string
+   *   The escaped string.
+   *
+   * @see \Drupal\Core\Database\Connection::escapeLike()
+   */
+  public function escapeLike($string);
+
+  /**
+   * Escapes a field name string.
+   *
+   * Force all field names to be strictly alphanumeric-plus-underscore.
+   * For some database drivers, it may also wrap the field name in
+   * database-specific escape characters.
+   *
+   * @param string $string
+   *   An unsanitized field name.
+   *
+   * @return
+   *   The sanitized field name string.
+   */
+  public function escapeField($string);
 
   /**
    * Compiles and returns an associative array of the arguments for this prepared statement.
@@ -512,6 +542,88 @@ interface SelectInterface extends ConditionInterface, AlterableInterface, Extend
   public function havingCondition($field, $value = NULL, $operator = NULL);
 
   /**
+   * Gets a list of all conditions in the HAVING clause.
+   *
+   * This method returns by reference. That allows alter hooks to access the
+   * data structure directly and manipulate it before it gets compiled.
+   *
+   * @return array
+   *   An array of conditions.
+   *
+   * @see \Drupal\Core\Database\Query\ConditionInterface::conditions()
+   */
+  public function &havingConditions();
+
+  /**
+   * Gets a list of all values to insert into the HAVING clause.
+   *
+   * @return array
+   *   An associative array of placeholders and values.
+   */
+  public function havingArguments();
+
+  /**
+   * Adds an arbitrary HAVING clause to the query.
+   *
+   * @param $snippet
+   *   A portion of a HAVING clause as a prepared statement. It must use named
+   *   placeholders, not ? placeholders.
+   * @param $args
+   *   (optional) An associative array of arguments.
+   *
+   * @return $this
+   */
+  public function having($snippet, $args = array());
+
+  /**
+   * Compiles the HAVING clause for later retrieval.
+   *
+   * @param $connection
+   *   The database connection for which to compile the clause.
+   */
+  public function havingCompile(Connection $connection);
+
+  /**
+   * Sets a condition in the HAVING clause that the specified field be NULL.
+   *
+   * @param $field
+   *   The name of the field to check.
+   *
+   * @return $this
+   */
+  public function havingIsNull($field);
+
+  /**
+   * Sets a condition in the HAVING clause that the specified field be NOT NULL.
+   *
+   * @param $field
+   *   The name of the field to check.
+   *
+   * @return $this
+   */
+  public function havingIsNotNull($field);
+
+  /**
+   * Sets a HAVING condition that the specified subquery returns values.
+   *
+   * @param \Drupal\Core\Database\Query\SelectInterface $select
+   *   The subquery that must contain results.
+   *
+   * @return $this
+   */
+  public function havingExists(SelectInterface $select);
+
+  /**
+   * Sets a HAVING condition that the specified subquery returns no values.
+   *
+   * @param \Drupal\Core\Database\Query\SelectInterface $select
+   *   The subquery that must contain results.
+   *
+   * @return $this
+   */
+  public function havingNotExists(SelectInterface $select);
+
+  /**
    * Clone magic method.
    *
    * Select queries have dependent objects that must be deep-cloned.  The
@@ -535,4 +647,13 @@ interface SelectInterface extends ConditionInterface, AlterableInterface, Extend
    *   The called object.
    */
   public function forUpdate($set = TRUE);
+
+  /**
+   * Returns a string representation of how the query will be executed in SQL.
+   *
+   * @return string
+   *   The Select Query object expressed as a string.
+   */
+  public function __toString();
+
 }

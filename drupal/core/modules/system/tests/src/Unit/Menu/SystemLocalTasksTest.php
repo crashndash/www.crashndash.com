@@ -8,14 +8,14 @@
 namespace Drupal\Tests\system\Unit\Menu;
 
 use Drupal\Core\Extension\Extension;
-use Drupal\Tests\Core\Menu\LocalTaskIntegrationTest;
+use Drupal\Tests\Core\Menu\LocalTaskIntegrationTestBase;
 
 /**
  * Tests existence of system local tasks.
  *
  * @group system
  */
-class SystemLocalTasksTest extends LocalTaskIntegrationTest {
+class SystemLocalTasksTest extends LocalTaskIntegrationTestBase {
 
   /**
    * The mocked theme handler.
@@ -36,7 +36,7 @@ class SystemLocalTasksTest extends LocalTaskIntegrationTest {
 
     $this->themeHandler = $this->getMock('Drupal\Core\Extension\ThemeHandlerInterface');
 
-    $theme = new Extension('theme', DRUPAL_ROOT . '/core/themes/bartik', 'bartik.info.yml');
+    $theme = new Extension($this->root, 'theme', '/core/themes/bartik', 'bartik.info.yml');
     $theme->status = 1;
     $theme->info = array('name' => 'bartik');
     $this->themeHandler->expects($this->any())
@@ -44,6 +44,10 @@ class SystemLocalTasksTest extends LocalTaskIntegrationTest {
       ->will($this->returnValue(array(
         'bartik' => $theme,
       )));
+    $this->themeHandler->expects($this->any())
+      ->method('hasUi')
+      ->with('bartik')
+      ->willReturn(TRUE);
     $this->container->set('theme_handler', $this->themeHandler);
   }
 

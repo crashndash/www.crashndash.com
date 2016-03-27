@@ -2,13 +2,12 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\style\StyleSummaryPluginBase.
+ * Contains \Drupal\views\Plugin\views\style\DefaultSummary.
  */
 
 namespace Drupal\views\Plugin\views\style;
 
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\views\Plugin\views\style\StylePluginBase;
 
 /**
  * The default style plugin for summaries.

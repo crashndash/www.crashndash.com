@@ -23,6 +23,13 @@ class TaxonomyAttributesTest extends TaxonomyTestBase {
    */
   public static $modules = array('rdf', 'views');
 
+  /**
+   * Vocabulary created for testing purposes.
+   *
+   * @var \Drupal\taxonomy\VocabularyInterface
+   */
+  protected $vocabulary;
+
   protected function setUp() {
     parent::setUp();
 
@@ -73,6 +80,6 @@ class TaxonomyAttributesTest extends TaxonomyTestBase {
     $this->assertTrue($graph->hasProperty($term_uri, 'http://www.w3.org/2004/02/skos/core#prefLabel', $expected_value), 'Term label found in RDF output (skos:prefLabel).');
 
     // @todo Add test for term description once it is a field:
-    // https://drupal.org/node/569434
+    //   https://www.drupal.org/node/569434.
   }
 }

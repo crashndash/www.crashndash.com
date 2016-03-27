@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\Core\Routing\CurrentRouteMatch.
+ * Contains \Drupal\Core\Routing\CurrentRouteMatch.
  */
 
 namespace Drupal\Core\Routing;
@@ -130,6 +130,13 @@ class CurrentRouteMatch implements RouteMatchInterface, StackedRouteMatchInterfa
    */
   public function getParentRouteMatch() {
     return $this->getRouteMatch($this->requestStack->getParentRequest());
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getRouteMatchFromRequest(Request $request) {
+    return $this->getRouteMatch($request);
   }
 
 }

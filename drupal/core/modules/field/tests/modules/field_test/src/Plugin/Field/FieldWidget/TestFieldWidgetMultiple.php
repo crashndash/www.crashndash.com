@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\field_test\Plugin\Field\FieldWidget\TestFieldWidgetMultiple.
+ * Contains \Drupal\field_test\Plugin\Field\FieldWidget\TestFieldWidgetMultiple.
  */
 
 namespace Drupal\field_test\Plugin\Field\FieldWidget;
@@ -94,12 +94,12 @@ class TestFieldWidgetMultiple extends WidgetBase {
     foreach ($values as $value) {
       $items[] = array('value' => $value);
     }
-    form_set_value($element, $items, $form_state);
+    $form_state->setValueForElement($element, $items);
   }
 
   /**
    * {@inheritdoc}
-   * Used in \Drupal\entity_reference\Tests\EntityReferenceAdminTest::testAvailableFormatters().
+   * Used in \Drupal\field\Tests\EntityReference\EntityReferenceAdminTest::testAvailableFormatters().
    */
   public static function isApplicable(FieldDefinitionInterface $field_definition) {
     // Returns FALSE if machine name of the field equals field_onewidgetfield.

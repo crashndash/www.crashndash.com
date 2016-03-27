@@ -7,13 +7,11 @@
 
 namespace Drupal\image\Form;
 
-use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
 use Drupal\image\ConfigurableImageEffectInterface;
 use Drupal\image\ImageEffectManager;
-use Drupal\Component\Utility\String;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -58,7 +56,7 @@ class ImageStyleEditForm extends ImageStyleFormBase {
     $user_input = $form_state->getUserInput();
     $form['#title'] = $this->t('Edit style %name', array('%name' => $this->entity->label()));
     $form['#tree'] = TRUE;
-    $form['#attached']['css'][drupal_get_path('module', 'image') . '/css/image.admin.css'] = array();
+    $form['#attached']['library'][] = 'image/admin';
 
     // Show the thumbnail preview.
     $preview_arguments = array('#theme' => 'image_style_preview', '#style' => $this->entity);
@@ -100,7 +98,7 @@ class ImageStyleEditForm extends ImageStyleFormBase {
         '#tree' => FALSE,
         'data' => array(
           'label' => array(
-            '#markup' => String::checkPlain($effect->label()),
+            '#plain_text' => $effect->label(),
           ),
         ),
       );
@@ -275,25 +273,13 @@ class ImageStyleEditForm extends ImageStyleFormBase {
    * Updates image effect weights.
    *
    * @param array $effects
-   *   Associative array with effects having effect uuid as keys and and array
+   *   Associative array with effects having effect uuid as keys and array
    *   with effect data as values.
    */
   protected function updateEffectWeights(array $effects) {
     foreach ($effects as $uuid => $effect_data) {
       if ($this->entity->getEffects()->has($uuid)) {
         $this->entity->getEffect($uuid)->setWeight($effect_data['weight']);
-      }
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  protected function copyFormValuesToEntity(EntityInterface $entity, array $form, FormStateInterface $form_state) {
-    foreach ($form_state->getValues() as $key => $value) {
-      // Do not copy effects here, see self::updateEffectWeights().
-      if ($key != 'effects') {
-        $entity->set($key, $value);
       }
     }
   }

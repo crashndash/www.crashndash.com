@@ -27,7 +27,7 @@ class ReverseProxyMiddlewareTest extends UnitTestCase {
   /**
    * {@inheritdoc}
    */
-  public function setUp() {
+  protected function setUp() {
     $this->mockHttpKernel = $this->getMock('Symfony\Component\HttpKernel\HttpKernelInterface');
   }
 
@@ -51,7 +51,7 @@ class ReverseProxyMiddlewareTest extends UnitTestCase {
   /**
    * Tests that subscriber sets trusted headers when reverse proxy is set.
    *
-   * @dataProvider testReverseProxyEnabledProvider
+   * @dataProvider reverseProxyEnabledProvider
    */
   public function testReverseProxyEnabled($provided_settings) {
       // Enable reverse proxy and add test values.
@@ -62,17 +62,15 @@ class ReverseProxyMiddlewareTest extends UnitTestCase {
   /**
    * Data provider for testReverseProxyEnabled.
    */
-  public function testReverseProxyEnabledProvider() {
+  public function reverseProxyEnabledProvider() {
     return array(
       array(
         array(
-          'reverse_proxy_header' => 'HTTP_X_FORWARDED_FOR',
-          'reverse_proxy_addresses' => array(),
-        ),
-      ),
-      array(
-        array(
-          'reverse_proxy_header' => 'X_FORWARDED_HOST',
+          'reverse_proxy_header' => 'X_FORWARDED_FOR_CUSTOMIZED',
+          'reverse_proxy_proto_header' => 'X_FORWARDED_PROTO_CUSTOMIZED',
+          'reverse_proxy_host_header' => 'X_FORWARDED_HOST_CUSTOMIZED',
+          'reverse_proxy_port_header' => 'X_FORWARDED_PORT_CUSTOMIZED',
+          'reverse_proxy_forwarded_header' => 'FORWARDED_CUSTOMIZED',
           'reverse_proxy_addresses' => array('127.0.0.2', '127.0.0.3'),
         ),
       ),
@@ -95,6 +93,10 @@ class ReverseProxyMiddlewareTest extends UnitTestCase {
 
     $middleware->handle($request);
     $this->assertSame($settings->get('reverse_proxy_header'), $request->getTrustedHeaderName($request::HEADER_CLIENT_IP));
+    $this->assertSame($settings->get('reverse_proxy_proto_header'), $request->getTrustedHeaderName($request::HEADER_CLIENT_PROTO));
+    $this->assertSame($settings->get('reverse_proxy_host_header'), $request->getTrustedHeaderName($request::HEADER_CLIENT_HOST));
+    $this->assertSame($settings->get('reverse_proxy_port_header'), $request->getTrustedHeaderName($request::HEADER_CLIENT_PORT));
+    $this->assertSame($settings->get('reverse_proxy_forwarded_header'), $request->getTrustedHeaderName($request::HEADER_FORWARDED));
     $this->assertSame($settings->get('reverse_proxy_addresses'), $request->getTrustedProxies());
   }
 }

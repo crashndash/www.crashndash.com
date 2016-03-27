@@ -28,7 +28,6 @@ class NodeValidationTest extends EntityUnitTestBase {
    */
   protected function setUp() {
     parent::setUp();
-    $this->installEntitySchema('node');
 
     // Create a node type for testing.
     $type = entity_create('node_type', array('type' => 'page', 'name' => 'page'));
@@ -56,6 +55,11 @@ class NodeValidationTest extends EntityUnitTestBase {
     $this->assertEqual($violations[0]->getPropertyPath(), 'title');
     $this->assertEqual($violations[0]->getMessage(), 'This value should not be null.');
 
+    $node->set('title', '');
+    $violations = $node->validate();
+    $this->assertEqual(count($violations), 1, 'Violation found when title is set to an empty string.');
+    $this->assertEqual($violations[0]->getPropertyPath(), 'title');
+
     // Make the title valid again.
     $node->set('title', $this->randomString());
     // Save the node so that it gets an ID and a changed date.
@@ -64,7 +68,7 @@ class NodeValidationTest extends EntityUnitTestBase {
     $node->set('changed', 433918800);
     $violations = $node->validate();
     $this->assertEqual(count($violations), 1, 'Violation found when changed date is before the last changed date.');
-    $this->assertEqual($violations[0]->getPropertyPath(), 'changed.0.value');
+    $this->assertEqual($violations[0]->getPropertyPath(), '');
     $this->assertEqual($violations[0]->getMessage(), 'The content has either been modified by another user, or you have already submitted modifications. As a result, your changes cannot be saved.');
   }
 }

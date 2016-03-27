@@ -9,8 +9,6 @@ namespace Drupal\Core\Test;
 
 use Drupal\Core\DrupalKernel;
 use Drupal\Core\Extension\Extension;
-use Drupal\Core\Installer\InstallerServiceProvider;
-use Composer\Autoload\ClassLoader;
 use Drupal\Core\Site\Settings;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -42,8 +40,8 @@ class TestRunnerKernel extends DrupalKernel {
       'simpletest' => 0,
     );
     $this->moduleData = array(
-      'system' => new Extension('module', 'core/modules/system/system.info.yml', 'system.module'),
-      'simpletest' => new Extension('module', 'core/modules/simpletest/simpletest.info.yml', 'simpletest.module'),
+      'system' => new Extension($this->root, 'module', 'core/modules/system/system.info.yml', 'system.module'),
+      'simpletest' => new Extension($this->root, 'module', 'core/modules/simpletest/simpletest.info.yml', 'simpletest.module'),
     );
   }
 
@@ -55,6 +53,7 @@ class TestRunnerKernel extends DrupalKernel {
     if (!Settings::getAll()) {
       new Settings(array(
         'hash_salt' => 'run-tests',
+        'container_yamls' => [],
         // If there is no settings.php, then there is no parent site. In turn,
         // there is no public files directory; use a custom public files path.
         'file_public_path' => 'sites/default/files',
@@ -75,7 +74,11 @@ class TestRunnerKernel extends DrupalKernel {
 
     simpletest_classloader_register();
 
+    // Register stream wrappers.
+    $this->getContainer()->get('stream_wrapper_manager')->register();
+
     // Create the build/artifacts directory if necessary.
+    include_once DRUPAL_ROOT . '/core/includes/file.inc';
     if (!is_dir('public://simpletest')) {
       mkdir('public://simpletest', 0777, TRUE);
     }

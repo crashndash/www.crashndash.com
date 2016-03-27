@@ -7,6 +7,7 @@
 
 namespace Drupal\system\Tests\Installer;
 
+use Drupal\Core\Language\LanguageManager;
 use Drupal\simpletest\InstallerTestBase;
 
 /**
@@ -21,12 +22,12 @@ class InstallerLanguagePageTest extends InstallerTestBase {
    */
   protected function setUpLanguage() {
     // Place a custom local translation in the translations directory.
-    mkdir(DRUPAL_ROOT . '/' . $this->siteDirectory . '/files/translations', 0777, TRUE);
-    touch(DRUPAL_ROOT . '/' . $this->siteDirectory . '/files/translations/drupal-8.0.0.xoxo.po');
+    mkdir(\Drupal::root() . '/' . $this->siteDirectory . '/files/translations', 0777, TRUE);
+    touch(\Drupal::root() . '/' . $this->siteDirectory . '/files/translations/drupal-8.0.0.xoxo.po');
 
     // Check that all predefined languages show up with their native names.
     $this->drupalGet($GLOBALS['base_url'] . '/core/install.php');
-    foreach (\Drupal::languageManager()->getStandardLanguageList() as $langcode => $names) {
+    foreach (LanguageManager::getStandardLanguageList() as $langcode => $names) {
       $this->assertOption('edit-langcode', $langcode);
       $this->assertRaw('>' . $names[1] . '<');
     }

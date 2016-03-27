@@ -7,7 +7,6 @@
 
 namespace Drupal\Core\EventSubscriber;
 
-use Drupal\Component\Utility\String;
 use Drupal\Core\Logger\LoggerChannelFactoryInterface;
 use Drupal\Core\Utility\Error;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
@@ -45,9 +44,7 @@ class ExceptionLoggingSubscriber implements EventSubscriberInterface {
    */
   public function on403(GetResponseForExceptionEvent $event) {
     $request = $event->getRequest();
-    // @todo Remove dependency on the internal _system_path attribute:
-    //   https://www.drupal.org/node/2293523.
-    $this->logger->get('access denied')->warning(String::checkPlain($request->attributes->get('_system_path')));
+    $this->logger->get('access denied')->warning('@uri', ['@uri' => $request->getRequestUri()]);
   }
 
   /**
@@ -58,9 +55,7 @@ class ExceptionLoggingSubscriber implements EventSubscriberInterface {
    */
   public function on404(GetResponseForExceptionEvent $event) {
     $request = $event->getRequest();
-    // @todo Remove dependency on the internal _system_path attribute:
-    //   https://www.drupal.org/node/2293523.
-    $this->logger->get('page not found')->warning(String::checkPlain($request->attributes->get('_system_path')));
+    $this->logger->get('page not found')->warning('@uri', ['@uri' => $request->getRequestUri()]);
   }
 
   /**
@@ -72,7 +67,7 @@ class ExceptionLoggingSubscriber implements EventSubscriberInterface {
   public function onError(GetResponseForExceptionEvent $event) {
     $exception = $event->getException();
     $error = Error::decodeException($exception);
-    $this->logger->get('php')->log($error['severity_level'], '%type: !message in %function (line %line of %file).', $error);
+    $this->logger->get('php')->log($error['severity_level'], '%type: @message in %function (line %line of %file).', $error);
 
     $is_critical = !$exception instanceof HttpExceptionInterface || $exception->getStatusCode() >= 500;
     if ($is_critical) {

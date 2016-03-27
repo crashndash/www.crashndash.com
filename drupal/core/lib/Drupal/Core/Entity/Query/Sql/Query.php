@@ -9,7 +9,6 @@ namespace Drupal\Core\Entity\Query\Sql;
 
 use Drupal\Core\Database\Connection;
 use Drupal\Core\Database\Query\SelectInterface;
-use Drupal\Core\Entity\EntityManagerInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Entity\Query\QueryBase;
 use Drupal\Core\Entity\Query\QueryException;
@@ -79,7 +78,7 @@ class Query extends QueryBase implements QueryInterface {
 
 
   /**
-   * Implements \Drupal\Core\Entity\Query\QueryInterface::execute().
+   * {@inheritdoc}
    */
   public function execute() {
     return $this
@@ -93,15 +92,22 @@ class Query extends QueryBase implements QueryInterface {
   /**
    * Prepares the basic query with proper metadata/tags and base fields.
    *
-   * @throws \Drupal\Core\Entity\Query\QueryException
-   *   Thrown if the base table does not exists.
-   *
    * @return \Drupal\Core\Entity\Query\Sql\Query
    *   Returns the called object.
+   *
+   * @throws \Drupal\Core\Entity\Query\QueryException
+   *   Thrown if the base table does not exist.
    */
   protected function prepare() {
-    if (!$base_table = $this->entityType->getBaseTable()) {
-      throw new QueryException("No base table, invalid query.");
+    if ($this->allRevisions) {
+      if (!$base_table = $this->entityType->getRevisionTable()) {
+        throw new QueryException("No revision table for " . $this->entityTypeId . ", invalid query.");
+      }
+    }
+    else {
+      if (!$base_table = $this->entityType->getBaseTable()) {
+        throw new QueryException("No base table for " . $this->entityTypeId . ", invalid query.");
+      }
     }
     $simple_query = TRUE;
     if ($this->entityType->getDataTable()) {
@@ -146,7 +152,7 @@ class Query extends QueryBase implements QueryInterface {
     }
     // This now contains first the table containing entity properties and
     // last the entity base table. They might be the same.
-    $this->sqlQuery->addMetaData('age', $this->age);
+    $this->sqlQuery->addMetaData('all_revisions', $this->allRevisions);
     $this->sqlQuery->addMetaData('simple_query', $simple_query);
     return $this;
   }
@@ -282,7 +288,7 @@ class Query extends QueryBase implements QueryInterface {
   }
 
   /**
-   * Returns whether the query requires GROUP BY and ORDER BY MIN/MAX.
+   * Determines whether the query requires GROUP BY and ORDER BY MIN/MAX.
    *
    * @return bool
    */

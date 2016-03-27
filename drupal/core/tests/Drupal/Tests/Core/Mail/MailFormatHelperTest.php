@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\Tests\Core\Mail\MailFormatHelperTest.
+ * Contains \Drupal\Tests\Core\Mail\MailFormatHelperTest.
  */
 
 namespace Drupal\Tests\Core\Mail;
@@ -17,7 +17,7 @@ use Drupal\Tests\UnitTestCase;
 class MailFormatHelperTest extends UnitTestCase {
 
   /**
-   * Makes sure that drupal_wrap_mail() wraps the correct types of lines.
+   * @covers ::wrapMail
    */
   public function testWrapMail() {
     $delimiter = "End of header\n";

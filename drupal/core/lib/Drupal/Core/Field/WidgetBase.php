@@ -7,10 +7,11 @@
 
 namespace Drupal\Core\Field;
 
+use Drupal\Component\Utility\Html;
 use Drupal\Component\Utility\NestedArray;
 use Drupal\Component\Utility\SortArray;
-use Drupal\Component\Utility\String;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Render\Element;
 use Symfony\Component\Validator\ConstraintViolationInterface;
 use Symfony\Component\Validator\ConstraintViolationListInterface;
 
@@ -83,8 +84,8 @@ abstract class WidgetBase extends PluginSettingsBase implements WidgetInterface 
     if ($this->handlesMultipleValues() || isset($get_delta)) {
       $delta = isset($get_delta) ? $get_delta : 0;
       $element = array(
-        '#title' => String::checkPlain($this->fieldDefinition->getLabel()),
-        '#description' => $this->fieldFilterXss(\Drupal::token()->replace($this->fieldDefinition->getDescription())),
+        '#title' => $this->fieldDefinition->getLabel(),
+        '#description' => FieldFilteredMarkup::create(\Drupal::token()->replace($this->fieldDefinition->getDescription())),
       );
       $element = $this->formSingleElement($items, $delta, $element, $form, $form_state);
 
@@ -126,9 +127,9 @@ abstract class WidgetBase extends PluginSettingsBase implements WidgetInterface 
       '#parents' => array_merge($parents, array($field_name . '_wrapper')),
       '#attributes' => array(
         'class' => array(
-          'field-type-' . drupal_html_class($this->fieldDefinition->getType()),
-          'field-name-' . drupal_html_class($field_name),
-          'field-widget-' . drupal_html_class($this->getPluginId()),
+          'field--type-' . Html::getClass($this->fieldDefinition->getType()),
+          'field--name-' . Html::getClass($field_name),
+          'field--widget-' . Html::getClass($this->getPluginId()),
         ),
       ),
       'widget' => $elements,
@@ -162,18 +163,34 @@ abstract class WidgetBase extends PluginSettingsBase implements WidgetInterface 
         break;
     }
 
-    $title = String::checkPlain($this->fieldDefinition->getLabel());
-    $description = $this->fieldFilterXss(\Drupal::token()->replace($this->fieldDefinition->getDescription()));
+    $title = $this->fieldDefinition->getLabel();
+    $description = FieldFilteredMarkup::create(\Drupal::token()->replace($this->fieldDefinition->getDescription()));
 
     $elements = array();
 
     for ($delta = 0; $delta <= $max; $delta++) {
+      // Add a new empty item if it doesn't exist yet at this delta.
+      if (!isset($items[$delta])) {
+        $items->appendItem();
+      }
+
       // For multiple fields, title and description are handled by the wrapping
       // table.
-      $element = array(
-        '#title' => $is_multiple ? '' : $title,
-        '#description' => $is_multiple ? '' : $description,
-      );
+      if ($is_multiple) {
+        $element = [
+          '#title' => $this->t('@title (value @number)', ['@title' => $title, '@number' => $delta + 1]),
+          '#title_display' => 'invisible',
+          '#description' => '',
+        ];
+      }
+      else {
+        $element = [
+          '#title' => $title,
+          '#title_display' => 'before',
+          '#description' => $description,
+        ];
+      }
+
       $element = $this->formSingleElement($items, $delta, $element, $form, $form_state);
 
       if ($element) {
@@ -183,7 +200,7 @@ abstract class WidgetBase extends PluginSettingsBase implements WidgetInterface 
           // defined by widget.
           $element['_weight'] = array(
             '#type' => 'weight',
-            '#title' => t('Weight for row @number', array('@number' => $delta + 1)),
+            '#title' => $this->t('Weight for row @number', array('@number' => $delta + 1)),
             '#title_display' => 'invisible',
             // Note: this 'delta' is the FAPI #type 'weight' element's property.
             '#delta' => $max,
@@ -211,7 +228,7 @@ abstract class WidgetBase extends PluginSettingsBase implements WidgetInterface 
       // Add 'add more' button, if not working with a programmed form.
       if ($cardinality == FieldStorageDefinitionInterface::CARDINALITY_UNLIMITED && !$form_state->isProgrammed()) {
         $id_prefix = implode('-', array_merge($parents, array($field_name)));
-        $wrapper_id = drupal_html_id($id_prefix . '-add-more-wrapper');
+        $wrapper_id = Html::getUniqueId($id_prefix . '-add-more-wrapper');
         $elements['#prefix'] = '<div id="' . $wrapper_id . '">';
         $elements['#suffix'] = '</div>';
 
@@ -318,7 +335,7 @@ abstract class WidgetBase extends PluginSettingsBase implements WidgetInterface 
         'widget' => $this,
         'items' => $items,
         'delta' => $delta,
-        'default' => !empty($entity->field_ui_default_value),
+        'default' => $this->isDefaultValueWidget($form_state),
       );
       \Drupal::moduleHandler()->alter(array('field_widget_form', 'field_widget_' . $this->getPluginId() . '_form'), $element, $form_state, $context);
     }
@@ -380,15 +397,13 @@ abstract class WidgetBase extends PluginSettingsBase implements WidgetInterface 
     $field_state = static::getWidgetState($form['#parents'], $field_name, $form_state);
 
     if ($violations->count()) {
-      $form_builder = \Drupal::formBuilder();
-
-      // Locate the correct element in the the form.
+      // Locate the correct element in the form.
       $element = NestedArray::getValue($form_state->getCompleteForm(), $field_state['array_parents']);
 
       // Do not report entity-level validation errors if Form API errors have
       // already been reported for the field.
       // @todo Field validation should not be run on fields with FAPI errors to
-      //   begin with. See https://drupal.org/node/2070429.
+      //   begin with. See https://www.drupal.org/node/2070429.
       $element_path = implode('][', $element['#parents']);
       if ($reported_errors = $form_state->getErrors()) {
         foreach (array_keys($reported_errors) as $error_path) {
@@ -398,8 +413,8 @@ abstract class WidgetBase extends PluginSettingsBase implements WidgetInterface 
         }
       }
 
-      // Only set errors if the element is accessible.
-      if (!isset($element['#access']) || $element['#access']) {
+      // Only set errors if the element is visible.
+      if (Element::isVisibleElement($element)) {
         $handles_multiple = $this->handlesMultipleValues();
 
         $violations_by_delta = array();
@@ -537,6 +552,19 @@ abstract class WidgetBase extends PluginSettingsBase implements WidgetInterface 
   public static function isApplicable(FieldDefinitionInterface $field_definition) {
     // By default, widgets are available for all fields.
     return TRUE;
+  }
+
+  /**
+   * Returns whether the widget used for default value form.
+   *
+   * @param \Drupal\Core\Form\FormStateInterface $form_state
+   *   The current state of the form.
+   *
+   * @return bool
+   *   TRUE if a widget used to input default value, FALSE otherwise.
+   */
+  protected function isDefaultValueWidget(FormStateInterface $form_state) {
+    return (bool) $form_state->get('default_value_widget');
   }
 
 }

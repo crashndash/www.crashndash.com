@@ -15,6 +15,8 @@ use Drupal\Core\TypedData\Type\FloatInterface;
 use Drupal\Core\TypedData\Type\IntegerInterface;
 use Drupal\Core\TypedData\Type\StringInterface;
 use Drupal\Core\TypedData\Type\UriInterface;
+use Drupal\Core\TypedData\Validation\TypedDataAwareValidatorTrait;
+use Drupal\Component\Render\MarkupInterface;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
 
@@ -23,8 +25,10 @@ use Symfony\Component\Validator\ConstraintValidator;
  */
 class PrimitiveTypeConstraintValidator extends ConstraintValidator {
 
+  use TypedDataAwareValidatorTrait;
+
   /**
-   * Implements \Symfony\Component\Validator\ConstraintValidatorInterface::validate().
+   * {@inheritdoc}
    */
   public function validate($value, Constraint $constraint) {
 
@@ -32,7 +36,7 @@ class PrimitiveTypeConstraintValidator extends ConstraintValidator {
       return;
     }
 
-    $typed_data = $this->context->getMetadata()->getTypedData();
+    $typed_data = $this->getTypedData();
     $valid = TRUE;
     if ($typed_data instanceof BinaryInterface && !is_resource($value)) {
       $valid = FALSE;
@@ -46,10 +50,15 @@ class PrimitiveTypeConstraintValidator extends ConstraintValidator {
     if ($typed_data instanceof IntegerInterface && filter_var($value, FILTER_VALIDATE_INT) === FALSE) {
       $valid = FALSE;
     }
-    if ($typed_data instanceof StringInterface && !is_scalar($value)) {
+    if ($typed_data instanceof StringInterface && !is_scalar($value) && !($value instanceof MarkupInterface)) {
       $valid = FALSE;
     }
-    if ($typed_data instanceof UriInterface && filter_var($value, FILTER_VALIDATE_URL) === FALSE) {
+    // Ensure that URIs comply with http://tools.ietf.org/html/rfc3986, which
+    // requires:
+    // - That it is well formed (parse_url() returns FALSE if not).
+    // - That it contains a scheme (parse_url(, PHP_URL_SCHEME) returns NULL if
+    //   not).
+    if ($typed_data instanceof UriInterface && in_array(parse_url($value, PHP_URL_SCHEME), [NULL, FALSE], TRUE)) {
       $valid = FALSE;
     }
     // @todo: Move those to separate constraint validators.

@@ -18,7 +18,8 @@ use Drupal\Core\TypedData\ComplexDataInterface;
  * complex data type.
  *
  * By default there is no metadata for contained properties. Extending classes
- * may want to override Map::getPropertyDefinitions() to define it.
+ * may want to override MapDataDefinition::getPropertyDefinitions() to define
+ * it.
  *
  * @ingroup typed_data
  *
@@ -52,24 +53,13 @@ class Map extends TypedData implements \IteratorAggregate, ComplexDataInterface 
   protected $properties = array();
 
   /**
-   * Gets an array of property definitions of contained properties.
-   *
-   * @return \Drupal\Core\TypedData\DataDefinitionInterface[]
-   *   An array of property definitions of contained properties, keyed by
-   *   property name.
+   * {@inheritdoc}
    */
-  protected function getPropertyDefinitions() {
-    return $this->definition->getPropertyDefinitions();
-  }
-
-  /**
-   * Overrides \Drupal\Core\TypedData\TypedData::getValue().
-   */
-  public function getValue($include_computed = FALSE) {
+  public function getValue() {
     // Update the values and return them.
     foreach ($this->properties as $name => $property) {
       $definition = $property->getDataDefinition();
-      if ($include_computed || !$definition->isComputed()) {
+      if (!$definition->isComputed()) {
         $value = $property->getValue();
         // Only write NULL values if the whole map is not NULL.
         if (isset($this->values) || isset($value)) {
@@ -94,11 +84,11 @@ class Map extends TypedData implements \IteratorAggregate, ComplexDataInterface 
 
     // Update any existing property objects.
     foreach ($this->properties as $name => $property) {
-      $value = NULL;
-      if (isset($values[$name])) {
-        $value = $values[$name];
-      }
+      $value = isset($values[$name]) ? $values[$name] : NULL;
       $property->setValue($value, FALSE);
+      // Remove the value from $this->values to ensure it does not contain any
+      // value for computed properties.
+      unset($this->values[$name]);
     }
     // Notify the parent of any changes.
     if ($notify && isset($this->parent)) {
@@ -107,7 +97,7 @@ class Map extends TypedData implements \IteratorAggregate, ComplexDataInterface 
   }
 
   /**
-   * Overrides \Drupal\Core\TypedData\TypedData::getString().
+   * {@inheritdoc}
    */
   public function getString() {
     $strings = array();
@@ -115,11 +105,11 @@ class Map extends TypedData implements \IteratorAggregate, ComplexDataInterface 
       $strings[] = $property->getString();
     }
     // Remove any empty strings resulting from empty items.
-    return implode(', ', array_filter($strings, 'drupal_strlen'));
+    return implode(', ', array_filter($strings, '\Drupal\Component\Utility\Unicode::strlen'));
   }
 
   /**
-   * Implements \Drupal\Core\TypedData\ComplexDataInterface::get().
+   * {@inheritdoc}
    */
   public function get($property_name) {
     if (!isset($this->properties[$property_name])) {
@@ -128,30 +118,45 @@ class Map extends TypedData implements \IteratorAggregate, ComplexDataInterface 
         $value = $this->values[$property_name];
       }
       // If the property is unknown, this will throw an exception.
-      $this->properties[$property_name] = \Drupal::typedDataManager()->getPropertyInstance($this, $property_name, $value);
+      $this->properties[$property_name] = $this->getTypedDataManager()->getPropertyInstance($this, $property_name, $value);
     }
     return $this->properties[$property_name];
   }
 
   /**
-   * Implements \Drupal\Core\TypedData\ComplexDataInterface::set().
+   * {@inheritdoc}
    */
   public function set($property_name, $value, $notify = TRUE) {
+    // Separate the writing in a protected method, such that onChange
+    // implementations can make use of it.
+    $this->writePropertyValue($property_name, $value);
+    $this->onChange($property_name, $notify);
+    return $this;
+  }
+
+  /**
+   * Writes the value of a property without handling changes.
+   *
+   * Implementations of onChange() should use this method instead of set() in
+   * order to avoid onChange() being triggered again.
+   *
+   * @param string $property_name
+   *   The name of the property to be written.
+   * @param $value
+   *   The value to set.
+   */
+  protected function writePropertyValue($property_name, $value) {
     if ($this->definition->getPropertyDefinition($property_name)) {
-      $this->get($property_name)->setValue($value, $notify);
+      $this->get($property_name)->setValue($value, FALSE);
     }
     else {
       // Just set the plain value, which allows adding a new entry to the map.
       $this->values[$property_name] = $value;
-      // Directly notify ourselves.
-      if ($notify) {
-        $this->onChange($property_name, $value);
-      }
     }
   }
 
   /**
-   * Implements \Drupal\Core\TypedData\ComplexDataInterface::getProperties().
+   * {@inheritdoc}
    */
   public function getProperties($include_computed = FALSE) {
     $properties = array();
@@ -175,14 +180,14 @@ class Map extends TypedData implements \IteratorAggregate, ComplexDataInterface 
   }
 
   /**
-   * Implements \IteratorAggregate::getIterator().
+   * {@inheritdoc}
    */
   public function getIterator() {
     return new \ArrayIterator($this->getProperties());
   }
 
   /**
-   * Implements \Drupal\Core\TypedData\ComplexDataInterface::isEmpty().
+   * {@inheritdoc}
    */
   public function isEmpty() {
     foreach ($this->properties as $property) {
@@ -212,11 +217,16 @@ class Map extends TypedData implements \IteratorAggregate, ComplexDataInterface 
   }
 
   /**
-   * Implements \Drupal\Core\TypedData\ComplexDataInterface::onChange().
+   * {@inheritdoc}
+   *
+   * @param bool $notify
+   *   (optional) Whether to forward the notification to the parent. Defaults to
+   *   TRUE. By passing FALSE, overrides of this method can re-use the logic
+   *   of parent classes without triggering notification.
    */
-  public function onChange($property_name) {
+  public function onChange($property_name, $notify = TRUE) {
     // Notify the parent of changes.
-    if (isset($this->parent)) {
+    if ($notify && isset($this->parent)) {
       $this->parent->onChange($this->name);
     }
   }

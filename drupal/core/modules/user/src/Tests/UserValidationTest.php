@@ -8,9 +8,9 @@
 namespace Drupal\user\Tests;
 
 use Drupal\Core\Entity\EntityInterface;
-use Drupal\Core\Field\Plugin\Field\FieldType\EmailItem;
+use Drupal\Core\Language\Language;
 use Drupal\Core\Render\Element\Email;
-use Drupal\simpletest\DrupalUnitTestBase;
+use Drupal\simpletest\KernelTestBase;
 use Drupal\user\Entity\Role;
 use Drupal\user\Entity\User;
 
@@ -19,14 +19,14 @@ use Drupal\user\Entity\User;
  *
  * @group user
  */
-class UserValidationTest extends DrupalUnitTestBase {
+class UserValidationTest extends KernelTestBase {
 
   /**
    * Modules to enable.
    *
    * @var array
    */
-  public static $modules = array('entity', 'field', 'user', 'system');
+  public static $modules = array('field', 'user', 'system');
 
   /**
    * {@inheritdoc}
@@ -74,7 +74,10 @@ class UserValidationTest extends DrupalUnitTestBase {
    * Runs entity validation checks.
    */
   function testValidation() {
-    $user = User::create(array('name' => 'test'));
+    $user = User::create(array(
+      'name' => 'test',
+      'mail' => 'test@example.com',
+    ));
     $violations = $user->validate();
     $this->assertEqual(count($violations), 0, 'No violations when validating a default user.');
 
@@ -114,7 +117,7 @@ class UserValidationTest extends DrupalUnitTestBase {
     // @todo There are two violations because EmailItem::getConstraints()
     //   overlaps with the implicit constraint of the 'email' property type used
     //   in EmailItem::propertyDefinitions(). Resolve this in
-    //   https://drupal.org/node/2023465.
+    //   https://www.drupal.org/node/2023465.
     $this->assertEqual(count($violations), 2, 'Violations found when email is too long');
     $this->assertEqual($violations[0]->getPropertyPath(), 'mail.0.value');
     $this->assertEqual($violations[0]->getMessage(), t('%name: the email address can not be longer than @max characters.', array('%name' => $user->get('mail')->getFieldDefinition()->getLabel(), '@max' => Email::EMAIL_MAX_LENGTH)));
@@ -128,20 +131,35 @@ class UserValidationTest extends DrupalUnitTestBase {
     $this->assertEqual($violations[0]->getPropertyPath(), 'mail');
     $this->assertEqual($violations[0]->getMessage(), t('The email address %mail is already taken.', array('%mail' => 'existing@example.com')));
     $user->set('mail', NULL);
-
-    $user->set('signature', $this->randomString(256));
-    $this->assertLengthViolation($user, 'signature', 255);
-    $user->set('signature', NULL);
+    $violations = $user->validate();
+    $this->assertEqual(count($violations), 1, 'Email addresses may not be removed');
+    $this->assertEqual($violations[0]->getPropertyPath(), 'mail');
+    $this->assertEqual($violations[0]->getMessage(), t('@name field is required.', array('@name' => $user->getFieldDefinition('mail')->getLabel())));
+    $user->set('mail', 'someone@example.com');
 
     $user->set('timezone', $this->randomString(33));
-    $this->assertLengthViolation($user, 'timezone', 32);
+    $this->assertLengthViolation($user, 'timezone', 32, 2, 1);
+    $user->set('timezone', 'invalid zone');
+    $this->assertAllowedValuesViolation($user, 'timezone');
     $user->set('timezone', NULL);
 
     $user->set('init', 'invalid');
     $violations = $user->validate();
     $this->assertEqual(count($violations), 1, 'Violation found when init email is invalid');
-    $this->assertEqual($violations[0]->getPropertyPath(), 'init.0.value');
-    $this->assertEqual($violations[0]->getMessage(), t('This value is not a valid email address.'));
+    $user->set('init', NULL);
+
+    $user->set('langcode', 'invalid');
+    $this->assertAllowedValuesViolation($user, 'langcode');
+    $user->set('langcode', NULL);
+
+    // Only configurable langcodes are allowed for preferred languages.
+    $user->set('preferred_langcode', Language::LANGCODE_NOT_SPECIFIED);
+    $this->assertAllowedValuesViolation($user, 'preferred_langcode');
+    $user->set('preferred_langcode', NULL);
+
+    $user->set('preferred_admin_langcode', Language::LANGCODE_NOT_SPECIFIED);
+    $this->assertAllowedValuesViolation($user, 'preferred_admin_langcode');
+    $user->set('preferred_admin_langcode', NULL);
 
     Role::create(array('id' => 'role1'))->save();
     Role::create(array('id' => 'role2'))->save();
@@ -149,6 +167,7 @@ class UserValidationTest extends DrupalUnitTestBase {
     // Test cardinality of user roles.
     $user = entity_create('user', array(
       'name' => 'role_test',
+      'mail' => 'test@example.com',
       'roles' => array('role1', 'role2'),
     ));
     $violations = $user->validate();
@@ -157,7 +176,7 @@ class UserValidationTest extends DrupalUnitTestBase {
     $user->roles[1]->target_id = 'unknown_role';
     $violations = $user->validate();
     $this->assertEqual(count($violations), 1);
-    $this->assertEqual($violations[0]->getPropertyPath(), 'roles.1');
+    $this->assertEqual($violations[0]->getPropertyPath(), 'roles.1.target_id');
     $this->assertEqual($violations[0]->getMessage(), t('The referenced entity (%entity_type: %name) does not exist.', array('%entity_type' => 'user_role', '%name' => 'unknown_role')));
   }
 
@@ -170,13 +189,32 @@ class UserValidationTest extends DrupalUnitTestBase {
    *   The field that violates the maximum length.
    * @param int $length
    *   Number of characters that was exceeded.
+   * @param int $count
+   *   (optional) The number of expected violations. Defaults to 1.
+   * @param int $expected_index
+   *   (optional) The index at which to expect the violation. Defaults to 0.
    */
-  protected function assertLengthViolation(EntityInterface $entity, $field_name, $length) {
+  protected function assertLengthViolation(EntityInterface $entity, $field_name, $length, $count = 1, $expected_index = 0) {
     $violations = $entity->validate();
-    $this->assertEqual(count($violations), 1, "Violation found when $field_name is too long.");
-    $this->assertEqual($violations[0]->getPropertyPath(), "$field_name.0.value");
+    $this->assertEqual(count($violations), $count, "Violation found when $field_name is too long.");
+    $this->assertEqual($violations[$expected_index]->getPropertyPath(), "$field_name.0.value");
     $field_label = $entity->get($field_name)->getFieldDefinition()->getLabel();
-    $this->assertEqual($violations[0]->getMessage(), t('%name: may not be longer than @max characters.', array('%name' => $field_label, '@max' => $length)));
+    $this->assertEqual($violations[$expected_index]->getMessage(), t('%name: may not be longer than @max characters.', array('%name' => $field_label, '@max' => $length)));
+  }
+
+  /**
+   * Verifies that a AllowedValues violation exists for the given field.
+   *
+   * @param \Drupal\core\Entity\EntityInterface $entity
+   *   The entity object to validate.
+   * @param string $field_name
+   *   The name of the field to verify.
+   */
+  protected function assertAllowedValuesViolation(EntityInterface $entity, $field_name) {
+    $violations = $entity->validate();
+    $this->assertEqual(count($violations), 1, "Allowed values violation for $field_name found.");
+    $this->assertEqual($violations[0]->getPropertyPath(), "$field_name.0.value");
+    $this->assertEqual($violations[0]->getMessage(), t('The value you selected is not a valid choice.'));
   }
 
 }

@@ -2,14 +2,13 @@
 
 /**
  * @file
- * Definition of Drupal\taxonomy\TermForm.
+ * Contains \Drupal\taxonomy\TermForm.
  */
 
 namespace Drupal\taxonomy;
 
 use Drupal\Core\Entity\ContentEntityForm;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\Core\Language\LanguageInterface;
 
 /**
  * Base for controller for taxonomy term edit forms.
@@ -22,35 +21,28 @@ class TermForm extends ContentEntityForm {
   public function form(array $form, FormStateInterface $form_state) {
     $term = $this->entity;
     $vocab_storage = $this->entityManager->getStorage('taxonomy_vocabulary');
+    $taxonomy_storage = $this->entityManager->getStorage('taxonomy_term');
     $vocabulary = $vocab_storage->load($term->bundle());
 
-    $parent = array_keys(taxonomy_term_load_parents($term->id()));
+    $parent = array_keys($taxonomy_storage->loadParents($term->id()));
     $form_state->set(['taxonomy', 'parent'], $parent);
     $form_state->set(['taxonomy', 'vocabulary'], $vocabulary);
-
-    $language_configuration = $this->moduleHandler->moduleExists('language') ? language_get_default_configuration('taxonomy_term', $vocabulary->id()) : FALSE;
-    $form['langcode'] = array(
-      '#type' => 'language_select',
-      '#title' => $this->t('Language'),
-      '#languages' => LanguageInterface::STATE_ALL,
-      '#default_value' => $term->getUntranslated()->language()->getId(),
-      '#access' => !empty($language_configuration['language_show']),
-    );
 
     $form['relations'] = array(
       '#type' => 'details',
       '#title' => $this->t('Relations'),
-      '#open' => $vocabulary->hierarchy == TAXONOMY_HIERARCHY_MULTIPLE,
+      '#open' => $vocabulary->getHierarchy() == TAXONOMY_HIERARCHY_MULTIPLE,
       '#weight' => 10,
     );
 
-    // taxonomy_get_tree and taxonomy_term_load_parents may contain large
+    // \Drupal\taxonomy\TermStorageInterface::loadTree() and
+    // \Drupal\taxonomy\TermStorageInterface::loadParents() may contain large
     // numbers of items so we check for taxonomy.settings:override_selector
     // before loading the full vocabulary. Contrib modules can then intercept
     // before hook_form_alter to provide scalable alternatives.
     if (!$this->config('taxonomy.settings')->get('override_selector')) {
-      $parent = array_keys(taxonomy_term_load_parents($term->id()));
-      $children = taxonomy_get_tree($vocabulary->id(), $term->id());
+      $parent = array_keys($taxonomy_storage->loadParents($term->id()));
+      $children = $taxonomy_storage->loadTree($vocabulary->id(), $term->id());
 
       // A term can't be the child of itself, nor of its children.
       foreach ($children as $child) {
@@ -58,7 +50,7 @@ class TermForm extends ContentEntityForm {
       }
       $exclude[] = $term->id();
 
-      $tree = taxonomy_get_tree($vocabulary->id());
+      $tree = $taxonomy_storage->loadTree($vocabulary->id());
       $options = array('<' . $this->t('root') . '>');
       if (empty($parent)) {
         $parent = array(0);
@@ -104,8 +96,8 @@ class TermForm extends ContentEntityForm {
   /**
    * {@inheritdoc}
    */
-  public function validate(array $form, FormStateInterface $form_state) {
-    parent::validate($form, $form_state);
+  public function validateForm(array &$form, FormStateInterface $form_state) {
+    parent::validateForm($form, $form_state);
 
     // Ensure numeric values.
     if ($form_state->hasValue('weight') && !is_numeric($form_state->getValue('weight'))) {
@@ -164,8 +156,8 @@ class TermForm extends ContentEntityForm {
     }
     // If we've increased the number of parents and this is a single or flat
     // hierarchy, update the vocabulary immediately.
-    elseif ($current_parent_count > $previous_parent_count && $vocabulary->hierarchy != TAXONOMY_HIERARCHY_MULTIPLE) {
-      $vocabulary->hierarchy = $current_parent_count == 1 ? TAXONOMY_HIERARCHY_SINGLE : TAXONOMY_HIERARCHY_MULTIPLE;
+    elseif ($current_parent_count > $previous_parent_count && $vocabulary->getHierarchy() != TAXONOMY_HIERARCHY_MULTIPLE) {
+      $vocabulary->setHierarchy($current_parent_count == 1 ? TAXONOMY_HIERARCHY_SINGLE : TAXONOMY_HIERARCHY_MULTIPLE);
       $vocabulary->save();
     }
 

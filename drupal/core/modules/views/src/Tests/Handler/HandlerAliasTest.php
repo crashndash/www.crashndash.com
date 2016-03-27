@@ -2,12 +2,12 @@
 
 /**
  * @file
- * Definition of Drupal\views\Tests\Handler\HandlerAliasTest.
+ * Contains \Drupal\views\Tests\Handler\HandlerAliasTest.
  */
 
 namespace Drupal\views\Tests\Handler;
 
-use Drupal\views\Tests\ViewUnitTestBase;
+use Drupal\views\Tests\ViewKernelTestBase;
 use Drupal\views\Views;
 
 /**
@@ -15,7 +15,7 @@ use Drupal\views\Views;
  *
  * @group views
  */
-class HandlerAliasTest extends ViewUnitTestBase {
+class HandlerAliasTest extends ViewKernelTestBase {
 
   public static $modules = array('user');
 
@@ -33,7 +33,7 @@ class HandlerAliasTest extends ViewUnitTestBase {
   }
 
   /**
-   * Overrides Drupal\views\Tests\ViewTestBase::viewsData().
+   * {@inheritdoc}
    */
   protected function viewsData() {
     $data = parent::viewsData();
@@ -82,7 +82,7 @@ class HandlerAliasTest extends ViewUnitTestBase {
     $this->assertIdentical($filter->definition['real field'], 'uid');
 
     $this->assertIdentical($filter->field, 'uid_raw');
-    $this->assertIdentical($filter->table, 'users');
+    $this->assertIdentical($filter->table, 'users_field_data');
     $this->assertIdentical($filter->realField, 'uid');
   }
 

@@ -6,6 +6,9 @@
 
 namespace Drupal\serialization\Tests;
 
+use Drupal\Core\Url;
+use Drupal\entity_test\Entity\EntityTestMulRev;
+
 /**
  * Tests that entities references can be resolved.
  *
@@ -18,7 +21,7 @@ class EntityResolverTest extends NormalizerTestBase {
    *
    * @var array
    */
-  public static $modules = array('entity_reference', 'hal', 'rest');
+  public static $modules = ['hal', 'rest'];
 
   /**
    * The format being tested.
@@ -29,6 +32,8 @@ class EntityResolverTest extends NormalizerTestBase {
 
   protected function setUp() {
     parent::setUp();
+
+    \Drupal::service('router.builder')->rebuild();
 
     // Create the test field storage.
     entity_create('field_storage_config', array(
@@ -53,21 +58,21 @@ class EntityResolverTest extends NormalizerTestBase {
    */
   function testUuidEntityResolver() {
     // Create an entity to get the UUID from.
-    $entity = entity_create('entity_test_mulrev', array('type' => 'entity_test_mulrev'));
+    $entity = EntityTestMulRev::create(array('type' => 'entity_test_mulrev'));
     $entity->set('name', 'foobar');
     $entity->set('field_test_entity_reference', array(array('target_id' => 1)));
     $entity->save();
 
-    $field_uri = _url('rest/relation/entity_test_mulrev/entity_test_mulrev/field_test_entity_reference', array('absolute' => TRUE));
+    $field_uri = Url::fromUri('base:rest/relation/entity_test_mulrev/entity_test_mulrev/field_test_entity_reference', array('absolute' => TRUE))->toString();
 
     $data = array(
       '_links' => array(
         'type' => array(
-          'href' => _url('rest/type/entity_test_mulrev/entity_test_mulrev', array('absolute' => TRUE)),
+          'href' => Url::fromUri('base:rest/type/entity_test_mulrev/entity_test_mulrev', array('absolute' => TRUE))->toString(),
         ),
         $field_uri => array(
           array(
-            'href' => _url('entity/entity_test_mulrev/' . $entity->id()),
+            'href' => $entity->url(),
           ),
         ),
       ),
@@ -75,7 +80,7 @@ class EntityResolverTest extends NormalizerTestBase {
         $field_uri => array(
           array(
             '_links' => array(
-              'self' => _url('entity/entity_test_mulrev/' . $entity->id()),
+              'self' => $entity->url(),
             ),
             'uuid' => array(
               array(

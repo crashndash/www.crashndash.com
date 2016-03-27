@@ -10,7 +10,6 @@ namespace Drupal\node;
 use Drupal\user\EntityOwnerInterface;
 use Drupal\Core\Entity\EntityChangedInterface;
 use Drupal\Core\Entity\ContentEntityInterface;
-use Drupal\user\UserInterface;
 
 /**
  * Provides an interface defining a node entity.
@@ -18,7 +17,7 @@ use Drupal\user\UserInterface;
 interface NodeInterface extends ContentEntityInterface, EntityChangedInterface, EntityOwnerInterface {
 
   /**
-   * Returns the node type.
+   * Gets the node type.
    *
    * @return string
    *   The node type.
@@ -26,7 +25,7 @@ interface NodeInterface extends ContentEntityInterface, EntityChangedInterface, 
   public function getType();
 
   /**
-   * Returns the node title.
+   * Gets the node title.
    *
    * @return string
    *   Title of the node.
@@ -45,7 +44,7 @@ interface NodeInterface extends ContentEntityInterface, EntityChangedInterface, 
   public function setTitle($title);
 
   /**
-   * Returns the node creation timestamp.
+   * Gets the node creation timestamp.
    *
    * @return int
    *   Creation timestamp of the node.
@@ -123,7 +122,7 @@ interface NodeInterface extends ContentEntityInterface, EntityChangedInterface, 
   public function setPublished($published);
 
   /**
-   * Returns the node revision creation timestamp.
+   * Gets the node revision creation timestamp.
    *
    * @return int
    *   The UNIX timestamp of when this revision was created.
@@ -142,7 +141,7 @@ interface NodeInterface extends ContentEntityInterface, EntityChangedInterface, 
   public function setRevisionCreationTime($timestamp);
 
   /**
-   * Returns the node revision author.
+   * Gets the node revision author.
    *
    * @return \Drupal\user\UserInterface
    *   The user entity for the revision author.
@@ -159,13 +158,5 @@ interface NodeInterface extends ContentEntityInterface, EntityChangedInterface, 
    *   The called node entity.
    */
   public function setRevisionAuthorId($uid);
-
-  /**
-   * Prepares the langcode for a node.
-   *
-   * @return string
-   *   The langcode for this node.
-   */
-  public function prepareLangcode();
 
 }

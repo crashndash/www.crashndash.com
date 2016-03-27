@@ -1,9 +1,13 @@
 /**
- * Pagination.
+ * @file
+ * Styles for Seven's Pagination.
  */
 .pager__items {
-  margin: 0.25em 0 0.25em 1.5em;
+  margin: 0.25em 0 0.25em 1.5em; /* LTR */
   padding: 0;
+}
+[dir="rtl"] .pager__items {
+  margin: 0.25em 1.5em 0.25em 0;
 }
 .pager__item {
   display: inline-block;
@@ -16,10 +20,9 @@
   border-bottom: 2px solid transparent;
   line-height: 1.55em;
   padding: 0 5px 2px;
-  text-decoration: none;
-  -webkit-transition: border-bottom-color 0.2s;
-  transition: border-bottom-color 0.2s;
   font-weight: 600;
+  text-decoration: none;
+  transition: border-bottom-color 0.2s;
   -webkit-font-smoothing: antialiased;
 }
 .pager__item.is-active a {

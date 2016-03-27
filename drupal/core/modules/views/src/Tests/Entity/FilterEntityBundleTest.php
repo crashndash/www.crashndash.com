@@ -8,6 +8,7 @@
 namespace Drupal\views\Tests\Entity;
 
 use Drupal\views\Tests\ViewTestBase;
+use Drupal\views\Tests\ViewTestData;
 use Drupal\views\Views;
 
 /**
@@ -46,10 +47,12 @@ class FilterEntityBundleTest extends ViewTestBase {
   protected $entities = array();
 
   protected function setUp() {
-    parent::setUp();
+    parent::setUp(FALSE);
 
     $this->drupalCreateContentType(array('type' => 'test_bundle'));
     $this->drupalCreateContentType(array('type' => 'test_bundle_2'));
+
+    ViewTestData::createTestViews(get_class($this), array('views_test_config'));
 
     $this->entityBundles = entity_get_bundles('node');
 
@@ -57,7 +60,7 @@ class FilterEntityBundleTest extends ViewTestBase {
 
     foreach ($this->entityBundles as $key => $info) {
       for ($i = 0; $i < 5; $i++) {
-        $entity = entity_create('node', array('label' => $this->randomMachineName(), 'uid' => 1, 'type' => $key));
+        $entity = entity_create('node', array('title' => $this->randomString(), 'uid' => 1, 'type' => $key));
         $entity->save();
         $this->entities[$key][$entity->id()] = $entity;
         $this->entities['count']++;
@@ -70,6 +73,19 @@ class FilterEntityBundleTest extends ViewTestBase {
    */
   public function testFilterEntity() {
     $view = Views::getView('test_entity_type_filter');
+
+    // Tests \Drupal\views\Plugin\views\filter\Bundle::calculateDependencies().
+    $expected = [
+      'config' => [
+        'node.type.test_bundle',
+        'node.type.test_bundle_2',
+      ],
+      'module' => [
+        'node'
+      ],
+    ];
+    $this->assertIdentical($expected, $view->getDependencies());
+
     $this->executeView($view);
 
     // Test we have all the results, with all types selected.

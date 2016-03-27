@@ -9,8 +9,11 @@ namespace Drupal\Core\Entity\Entity;
 
 use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Entity\Display\EntityViewDisplayInterface;
+use Drupal\Core\Entity\EntityDisplayPluginCollection;
+use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Entity\EntityDisplayBase;
+use Drupal\Core\TypedData\TranslatableInterface;
 
 /**
  * Configuration entity that contains display options for all components of a
@@ -22,6 +25,14 @@ use Drupal\Core\Entity\EntityDisplayBase;
  *   entity_keys = {
  *     "id" = "id",
  *     "status" = "status"
+ *   },
+ *   config_export = {
+ *     "id",
+ *     "targetEntityType",
+ *     "bundle",
+ *     "mode",
+ *     "content",
+ *     "hidden",
  *   }
  * )
  */
@@ -36,8 +47,8 @@ class EntityViewDisplay extends EntityDisplayBase implements EntityViewDisplayIn
    * Returns the display objects used to render a set of entities.
    *
    * Depending on the configuration of the view mode for each bundle, this can
-   * be either the display object associated to the view mode, or the 'default'
-   * display.
+   * be either the display object associated with the view mode, or the
+   * 'default' display.
    *
    * This method should only be used internally when rendering an entity. When
    * assigning suggested display options for a component in a given view mode,
@@ -150,7 +161,7 @@ class EntityViewDisplay extends EntityDisplayBase implements EntityViewDisplayIn
    * @return \Drupal\Core\Entity\Display\EntityViewDisplayInterface
    *   The display object that should be used to render the entity.
    *
-   * @see \Drupal\entity\Entity\EntityDisplay::collectRenderDisplays()
+   * @see \Drupal\Core\Entity\Entity\EntityViewDisplay::collectRenderDisplays()
    */
   public static function collectRenderDisplay(FieldableEntityInterface $entity, $view_mode) {
     $displays = static::collectRenderDisplays(array($entity), $view_mode);
@@ -164,6 +175,17 @@ class EntityViewDisplay extends EntityDisplayBase implements EntityViewDisplayIn
     $this->pluginManager = \Drupal::service('plugin.manager.field.formatter');
 
     parent::__construct($values, $entity_type);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function postSave(EntityStorageInterface $storage, $update = TRUE) {
+    // Reset the render cache for the target entity type.
+    parent::postSave($storage, $update);
+    if (\Drupal::entityManager()->hasHandler($this->targetEntityType, 'view_builder')) {
+      \Drupal::entityManager()->getViewBuilder($this->targetEntityType)->resetCache();
+    }
   }
 
   /**
@@ -211,32 +233,46 @@ class EntityViewDisplay extends EntityDisplayBase implements EntityViewDisplayIn
     }
 
     // Run field formatters.
-    foreach ($this->getFieldDefinitions() as $field_name => $definition) {
-      if ($formatter = $this->getRenderer($field_name)) {
+    foreach ($this->getComponents() as $name => $options) {
+      if ($formatter = $this->getRenderer($name)) {
         // Group items across all entities and pass them to the formatter's
         // prepareView() method.
         $grouped_items = array();
         foreach ($entities as $id => $entity) {
-          $items = $entity->get($field_name);
+          $items = $entity->get($name);
           $items->filterEmptyItems();
           $grouped_items[$id] = $items;
         }
         $formatter->prepareView($grouped_items);
 
         // Then let the formatter build the output for each entity.
-        foreach ($entities as $key => $entity) {
-          $items = $entity->get($field_name);
-          $build_list[$key][$field_name] = $formatter->view($items);
-          $build_list[$key][$field_name]['#access'] = $items->access('view');
+        foreach ($entities as $id => $entity) {
+          $items = $grouped_items[$id];
+          /** @var \Drupal\Core\Access\AccessResultInterface $field_access */
+          $field_access = $items->access('view', NULL, TRUE);
+          // The language of the field values to display is already determined
+          // in the incoming $entity. The formatter should build its output of
+          // those values using:
+          // - the entity language if the entity is translatable,
+          // - the current "content language" otherwise.
+          if ($entity instanceof TranslatableInterface && $entity->isTranslatable()) {
+            $view_langcode = $entity->language()->getId();
+          }
+          else {
+            $view_langcode = NULL;
+          }
+          $build_list[$id][$name] = $field_access->isAllowed() ? $formatter->view($items, $view_langcode) : [];
+          // Apply the field access cacheability metadata to the render array.
+          $this->renderer->addCacheableDependency($build_list[$id][$name], $field_access);
         }
       }
     }
 
-    foreach ($entities as $key => $entity) {
+    foreach ($entities as $id => $entity) {
       // Assign the configured weights.
       foreach ($this->getComponents() as $name => $options) {
-        if (isset($build_list[$key][$name])) {
-          $build_list[$key][$name]['#weight'] = $options['weight'];
+        if (isset($build_list[$id][$name])) {
+          $build_list[$id][$name]['#weight'] = $options['weight'];
         }
       }
 
@@ -252,4 +288,22 @@ class EntityViewDisplay extends EntityDisplayBase implements EntityViewDisplayIn
     return $build_list;
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function getPluginCollections() {
+    $configurations = array();
+    foreach ($this->getComponents() as $field_name => $configuration) {
+      if (!empty($configuration['type']) && ($field_definition = $this->getFieldDefinition($field_name))) {
+        $configurations[$configuration['type']] = $configuration + array(
+          'field_definition' => $field_definition,
+          'view_mode' => $this->originalMode,
+        );
+      }
+    }
+
+    return array(
+      'formatters' => new EntityDisplayPluginCollection($this->pluginManager, $configurations)
+    );
+  }
 }

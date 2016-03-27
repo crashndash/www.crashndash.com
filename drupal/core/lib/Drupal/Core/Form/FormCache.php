@@ -8,9 +8,7 @@
 namespace Drupal\Core\Form;
 
 use Drupal\Component\Utility\Crypt;
-use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Access\CsrfTokenGenerator;
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\KeyValueStore\KeyValueExpirableFactoryInterface;
 use Drupal\Core\PageCache\RequestPolicyInterface;
@@ -82,8 +80,17 @@ class FormCache implements FormCacheInterface {
   protected $requestPolicy;
 
   /**
+   * The app root.
+   *
+   * @var string
+   */
+  protected $root;
+
+  /**
    * Constructs a new FormCache.
    *
+   * @param string $root
+   *   The app root.
    * @param \Drupal\Core\KeyValueStore\KeyValueExpirableFactoryInterface $key_value_expirable_factory
    *   The key value expirable factory, used to create key value expirable
    *   stores for the form cache and form state cache.
@@ -95,19 +102,17 @@ class FormCache implements FormCacheInterface {
    *   The CSRF token generator.
    * @param \Psr\Log\LoggerInterface $logger
    *   A logger instance.
-   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
-   *   The configuration factory.
    * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
    *   The request stack.
    * @param \Drupal\Core\PageCache\RequestPolicyInterface $request_policy
    *   A policy rule determining the cacheability of a request.
    */
-  public function __construct(KeyValueExpirableFactoryInterface $key_value_expirable_factory, ModuleHandlerInterface $module_handler, AccountInterface $current_user, CsrfTokenGenerator $csrf_token, LoggerInterface $logger, ConfigFactoryInterface $config_factory, RequestStack $request_stack, RequestPolicyInterface $request_policy) {
+  public function __construct($root, KeyValueExpirableFactoryInterface $key_value_expirable_factory, ModuleHandlerInterface $module_handler, AccountInterface $current_user, CsrfTokenGenerator $csrf_token, LoggerInterface $logger, RequestStack $request_stack, RequestPolicyInterface $request_policy) {
+    $this->root = $root;
     $this->keyValueExpirableFactory = $key_value_expirable_factory;
     $this->moduleHandler = $module_handler;
     $this->currentUser = $current_user;
     $this->logger = $logger;
-    $this->configFactory = $config_factory;
     $this->csrfToken = $csrf_token;
     $this->requestStack = $request_stack;
     $this->requestPolicy = $request_policy;
@@ -160,17 +165,9 @@ class FormCache implements FormCacheInterface {
           $this->moduleHandler->loadInclude($file['module'], $file['type'], $file['name']);
         }
         elseif (file_exists($file)) {
-          require_once DRUPAL_ROOT . '/' . $file;
+          require_once $this->root . '/' . $file;
         }
       }
-      // Retrieve the list of previously known safe strings and store it for
-      // this request.
-      // @todo Ensure we are not storing an excessively large string list
-      //   in: https://www.drupal.org/node/2295823
-      $build_info += ['safe_strings' => []];
-      SafeMarkup::setMultiple($build_info['safe_strings']);
-      unset($build_info['safe_strings']);
-      $form_state->setBuildInfo($build_info);
     }
   }
 
@@ -200,29 +197,17 @@ class FormCache implements FormCacheInterface {
       $this->keyValueExpirableFactory->get('form')->setWithExpire($form_build_id, $form, $expire);
     }
 
-    // Cache form state.
-    if ($this->configFactory->get('system.performance')->get('cache.page.use_internal') && $this->isPageCacheable()) {
-      $form_state->addBuildInfo('immutable', TRUE);
-    }
-
-    // Store the known list of safe strings for form re-use.
-    // @todo Ensure we are not storing an excessively large string list in:
-    //   https://www.drupal.org/node/2295823
-    $form_state->addBuildInfo('safe_strings', SafeMarkup::getAll());
-
     if ($data = $form_state->getCacheableArray()) {
       $this->keyValueExpirableFactory->get('form_state')->setWithExpire($form_build_id, $data, $expire);
     }
   }
 
   /**
-   * Checks if the page is cacheable.
-   *
-   * @return bool
-   *   TRUE is the page is cacheable, FALSE if not.
+   * {@inheritdoc}
    */
-  protected function isPageCacheable() {
-    return ($this->requestPolicy->check($this->requestStack->getCurrentRequest()) === RequestPolicyInterface::ALLOW);
+  public function deleteCache($form_build_id) {
+    $this->keyValueExpirableFactory->get('form')->delete($form_build_id);
+    $this->keyValueExpirableFactory->get('form_state')->delete($form_build_id);
   }
 
 }

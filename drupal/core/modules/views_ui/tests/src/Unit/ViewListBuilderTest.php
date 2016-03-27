@@ -7,6 +7,7 @@
 
 namespace Drupal\Tests\views_ui\Unit;
 
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Tests\UnitTestCase;
@@ -82,13 +83,17 @@ class ViewListBuilderTest extends UnitTestCase {
     );
     $route_provider = $this->getMock('Drupal\Core\Routing\RouteProviderInterface');
     $state = $this->getMock('\Drupal\Core\State\StateInterface');
+    $menu_storage = $this->getMock('\Drupal\Core\Entity\EntityStorageInterface');
     $page_display = $this->getMock('Drupal\views\Plugin\views\display\Page',
       array('initDisplay', 'getPath'),
-      array(array(), 'default', $display_manager->getDefinition('page'), $route_provider, $state)
+      array(array(), 'default', $display_manager->getDefinition('page'), $route_provider, $state, $menu_storage)
     );
     $page_display->expects($this->any())
       ->method('getPath')
-      ->will($this->returnValue('test_page'));
+      ->will($this->onConsecutiveCalls(
+        $this->returnValue('test_page'),
+        $this->returnValue('<object>malformed_path</object>'),
+        $this->returnValue('<script>alert("placeholder_page/%")</script>')));
 
     $embed_display = $this->getMock('Drupal\views\Plugin\views\display\Embed', array('initDisplay'),
       array(array(), 'default', $display_manager->getDefinition('embed'))
@@ -105,6 +110,16 @@ class ViewListBuilderTest extends UnitTestCase {
     $values['display']['page_1']['display_plugin'] = 'page';
     $values['display']['page_1']['display_options']['path'] = 'test_page';
 
+    $values['display']['page_2']['id'] = 'page_2';
+    $values['display']['page_2']['display_title'] = 'Page 2';
+    $values['display']['page_2']['display_plugin'] = 'page';
+    $values['display']['page_2']['display_options']['path'] = '<object>malformed_path</object>';
+
+    $values['display']['page_3']['id'] = 'page_3';
+    $values['display']['page_3']['display_title'] = 'Page 3';
+    $values['display']['page_3']['display_plugin'] = 'page';
+    $values['display']['page_3']['display_options']['path'] = '<script>alert("placeholder_page/%")</script>';
+
     $values['display']['embed']['id'] = 'embed';
     $values['display']['embed']['display_title'] = 'Embedded';
     $values['display']['embed']['display_plugin'] = 'embed';
@@ -114,6 +129,8 @@ class ViewListBuilderTest extends UnitTestCase {
       ->will($this->returnValueMap(array(
         array('default', $values['display']['default'], $default_display),
         array('page', $values['display']['page_1'], $page_display),
+        array('page', $values['display']['page_2'], $page_display),
+        array('page', $values['display']['page_3'], $page_display),
         array('embed', $values['display']['embed'], $embed_display),
       )));
 
@@ -121,7 +138,11 @@ class ViewListBuilderTest extends UnitTestCase {
     $user = $this->getMock('Drupal\Core\Session\AccountInterface');
     $request_stack = new RequestStack();
     $request_stack->push(new Request());
-    $executable_factory = new ViewExecutableFactory($user, $request_stack);
+    $views_data = $this->getMockBuilder('Drupal\views\ViewsData')
+      ->disableOriginalConstructor()
+      ->getMock();
+    $route_provider = $this->getMock('Drupal\Core\Routing\RouteProviderInterface');
+    $executable_factory = new ViewExecutableFactory($user, $request_stack, $views_data, $route_provider);
     $container->set('views.executable', $executable_factory);
     $container->set('plugin.manager.views.display', $display_manager);
     \Drupal::setContainer($container);
@@ -136,8 +157,19 @@ class ViewListBuilderTest extends UnitTestCase {
 
     $row = $view_list_builder->buildRow($view);
 
-    $this->assertEquals(array('Embed admin label', 'Page admin label'), $row['data']['view_name']['data']['#displays'], 'Wrong displays got added to view list');
-    $this->assertEquals($row['data']['path'], '/test_page', 'The path of the page display is not added.');
+    $expected_displays = array(
+      'Embed admin label',
+      'Page admin label',
+      'Page admin label',
+      'Page admin label',
+    );
+    $this->assertEquals($expected_displays, $row['data']['view_name']['data']['#displays']);
+
+    $display_paths = $row['data']['path']['data']['#items'];
+    // These values will be escaped by Twig when rendered.
+    $this->assertEquals('/test_page, /<object>malformed_path</object>, /<script>alert("placeholder_page/%")</script>', implode(', ', $display_paths));
+    $this->assertFalse(SafeMarkup::isSafe('/<object>malformed_path</object>'), '/<script>alert("/<object>malformed_path</object> is not marked safe.');
+    $this->assertFalse(SafeMarkup::isSafe('/<script>alert("placeholder_page/%")'), '/<script>alert("/<script>alert("placeholder_page/%") is not marked safe.');
   }
 
 }

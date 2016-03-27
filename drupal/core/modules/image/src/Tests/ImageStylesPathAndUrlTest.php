@@ -2,13 +2,12 @@
 
 /**
  * @file
- * Definition of Drupal\image\Tests\ImageStylesPathAndUrlTest.
+ * Contains \Drupal\image\Tests\ImageStylesPathAndUrlTest.
  */
 
 namespace Drupal\image\Tests;
 
 use Drupal\simpletest\WebTestBase;
-use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Tests the functions for generating paths and URLs for image styles.
@@ -79,22 +78,6 @@ class ImageStylesPathAndUrlTest extends WebTestBase {
   }
 
   /**
-   * Tests an image style URL using the "public://" scheme and page cache.
-   */
-  public function testImageStyleUrlAndPathPublicWithPageCache() {
-    $this->enablePageCache();
-    $this->doImageStyleUrlAndPathTests('public');
-  }
-
-  /**
-   * Tests an image style URL using the "private://" scheme and page cache.
-   */
-  public function testImageStyleUrlAndPathPrivateWithPageCache() {
-    $this->enablePageCache();
-    $this->doImageStyleUrlAndPathTests('private');
-  }
-
-  /**
    * Tests an image style URL with a file URL that has an extra slash in it.
    */
   function testImageStyleUrlExtraSlash() {
@@ -119,7 +102,7 @@ class ImageStylesPathAndUrlTest extends WebTestBase {
 
     // Make the default scheme neither "public" nor "private" to verify the
     // functions work for other than the default scheme.
-    \Drupal::config('system.file')->set('default_scheme', 'temporary')->save();
+    $this->config('system.file')->set('default_scheme', 'temporary')->save();
 
     // Create the directories for the styles.
     $directory = $scheme . '://styles/' . $this->style->id();
@@ -162,11 +145,11 @@ class ImageStylesPathAndUrlTest extends WebTestBase {
     // rather than a URI. We need to temporarily switch the default scheme to
     // match the desired scheme before testing this, then switch it back to the
     // "temporary" scheme used throughout this test afterwards.
-    \Drupal::config('system.file')->set('default_scheme', $scheme)->save();
+    $this->config('system.file')->set('default_scheme', $scheme)->save();
     $relative_path = file_uri_target($original_uri);
     $generate_url_from_relative_path = $this->style->buildUrl($relative_path, $clean_url);
     $this->assertEqual($generate_url, $generate_url_from_relative_path);
-    \Drupal::config('system.file')->set('default_scheme', 'temporary')->save();
+    $this->config('system.file')->set('default_scheme', 'temporary')->save();
 
     // Fetch the URL that generates the file.
     $this->drupalGet($generate_url);
@@ -212,15 +195,20 @@ class ImageStylesPathAndUrlTest extends WebTestBase {
         $this->assertNoRaw( chr(137) . chr(80) . chr(78) . chr(71) . chr(13) . chr(10) . chr(26) . chr(10), 'No PNG signature found in the response body.');
       }
     }
-    elseif ($clean_url) {
-      // Add some extra chars to the token.
-      $this->drupalGet(str_replace(IMAGE_DERIVATIVE_TOKEN . '=', IMAGE_DERIVATIVE_TOKEN . '=Zo', $generate_url));
-      $this->assertResponse(200, 'Existing image was accessible at the URL with an invalid token.');
+    else {
+      $this->assertEqual($this->drupalGetHeader('Expires'), 'Sun, 19 Nov 1978 05:00:00 GMT', 'Expires header was sent.');
+      $this->assertEqual(strpos($this->drupalGetHeader('Cache-Control'), 'no-cache'), FALSE, 'Cache-Control header contains \'no-cache\' to prevent caching.');
+
+      if ($clean_url) {
+        // Add some extra chars to the token.
+        $this->drupalGet(str_replace(IMAGE_DERIVATIVE_TOKEN . '=', IMAGE_DERIVATIVE_TOKEN . '=Zo', $generate_url));
+        $this->assertResponse(200, 'Existing image was accessible at the URL with an invalid token.');
+      }
     }
 
     // Allow insecure image derivatives to be created for the remainder of this
     // test.
-    \Drupal::config('image.settings')->set('allow_insecure_derivatives', TRUE)->save();
+    $this->config('image.settings')->set('allow_insecure_derivatives', TRUE)->save();
 
     // Create another working copy of the file.
     $files = $this->drupalGetTestFiles('image');
@@ -233,24 +221,41 @@ class ImageStylesPathAndUrlTest extends WebTestBase {
     // Suppress the security token in the URL, then get the URL of a file that
     // has not been created and try to create it. Check that the security token
     // is not present in the URL but that the image is still accessible.
-    \Drupal::config('image.settings')->set('suppress_itok_output', TRUE)->save();
+    $this->config('image.settings')->set('suppress_itok_output', TRUE)->save();
     $generated_uri = $this->style->buildUri($original_uri);
     $this->assertFalse(file_exists($generated_uri), 'Generated file does not exist.');
     $generate_url = $this->style->buildUrl($original_uri, $clean_url);
     $this->assertIdentical(strpos($generate_url, IMAGE_DERIVATIVE_TOKEN . '='), FALSE, 'The security token does not appear in the image style URL.');
     $this->drupalGet($generate_url);
     $this->assertResponse(200, 'Image was accessible at the URL with a missing token.');
-  }
 
-  /**
-   * Turn on page caching.
-   */
-  protected function enablePageCache() {
-    // Turn on page caching and rerun the test.
-    $config = \Drupal::config('system.performance');
-    $config->set('cache.page.use_internal', 1);
-    $config->set('cache.page.max_age', 300);
-    $config->save();
+    // Stop supressing the security token in the URL.
+    $this->config('image.settings')->set('suppress_itok_output', FALSE)->save();
+    // Ensure allow_insecure_derivatives is enabled.
+    $this->assertEqual($this->config('image.settings')->get('allow_insecure_derivatives'), TRUE);
+    // Check that a security token is still required when generating a second
+    // image derivative using the first one as a source.
+    $nested_url = $this->style->buildUrl($generated_uri, $clean_url);
+    $matches_expected_url_format = (boolean) preg_match('/styles\/' . $this->style->id() . '\/' . $scheme . '\/styles\/' . $this->style->id() . '\/' . $scheme . '/', $nested_url);
+    $this->assertTrue($matches_expected_url_format, "Url for a derivative of an image style matches expected format.");
+    $nested_url_with_wrong_token = str_replace(IMAGE_DERIVATIVE_TOKEN . '=', 'wrongparam=', $nested_url);
+    $this->drupalGet($nested_url_with_wrong_token);
+    $this->assertResponse(403, 'Image generated from an earlier derivative was inaccessible at the URL with a missing token.');
+    // Check that this restriction cannot be bypassed by adding extra slashes
+    // to the URL.
+    $this->drupalGet(substr_replace($nested_url_with_wrong_token, '//styles/', strrpos($nested_url_with_wrong_token, '/styles/'), strlen('/styles/')));
+    $this->assertResponse(403, 'Image generated from an earlier derivative was inaccessible at the URL with a missing token, even with an extra forward slash in the URL.');
+    $this->drupalGet(substr_replace($nested_url_with_wrong_token, '////styles/', strrpos($nested_url_with_wrong_token, '/styles/'), strlen('/styles/')));
+    $this->assertResponse(403, 'Image generated from an earlier derivative was inaccessible at the URL with a missing token, even with multiple forward slashes in the URL.');
+    // Make sure the image can still be generated if a correct token is used.
+    $this->drupalGet($nested_url);
+    $this->assertResponse(200, 'Image was accessible when a correct token was provided in the URL.');
+
+    // Check that requesting a nonexistent image does not create any new
+    // directories in the file system.
+    $directory = $scheme . '://styles/' .  $this->style->id() . '/' . $scheme . '/' . $this->randomMachineName();
+    $this->drupalGet(file_create_url($directory . '/' . $this->randomString()));
+    $this->assertFalse(file_exists($directory), 'New directory was not created in the filesystem when requesting an unauthorized image.');
   }
 
 }

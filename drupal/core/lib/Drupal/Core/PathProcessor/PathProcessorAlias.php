@@ -8,6 +8,7 @@
 namespace Drupal\Core\PathProcessor;
 
 use Drupal\Core\Path\AliasManagerInterface;
+use Drupal\Core\Render\BubbleableMetadata;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
@@ -33,7 +34,7 @@ class PathProcessorAlias implements InboundPathProcessorInterface, OutboundPathP
   }
 
   /**
-   * Implements Drupal\Core\PathProcessor\InboundPathProcessorInterface::processInbound().
+   * {@inheritdoc}
    */
   public function processInbound($path, Request $request) {
     $path = $this->aliasManager->getPathByAlias($path);
@@ -41,9 +42,9 @@ class PathProcessorAlias implements InboundPathProcessorInterface, OutboundPathP
   }
 
   /**
-   * Implements Drupal\Core\PathProcessor\OutboundPathProcessorInterface::processOutbound().
+   * {@inheritdoc}
    */
-  public function processOutbound($path, &$options = array(), Request $request = NULL) {
+  public function processOutbound($path, &$options = array(), Request $request = NULL, BubbleableMetadata $bubbleable_metadata = NULL) {
     if (empty($options['alias'])) {
       $langcode = isset($options['language']) ? $options['language']->getId() : NULL;
       $path = $this->aliasManager->getAliasByPath($path, $langcode);

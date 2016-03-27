@@ -10,7 +10,7 @@ namespace Drupal\views\Ajax;
 use Drupal\Core\Ajax\CommandInterface;
 
 /**
- * Provides an AJAX command for scolling to the top of an element.
+ * Provides an AJAX command for scrolling to the top of an element.
  *
  * This command is implemented in Drupal.AjaxCommands.prototype.viewsScrollTop.
  */
@@ -34,7 +34,7 @@ class ScrollTopCommand implements CommandInterface {
   }
 
   /**
-   * Implements \Drupal\Core\Ajax\CommandInterface::render().
+   * {@inheritdoc}
    */
   public function render() {
     return array(

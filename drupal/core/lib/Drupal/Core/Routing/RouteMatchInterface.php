@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\Core\Routing\RouteMatchInterface.
+ * Contains \Drupal\Core\Routing\RouteMatchInterface.
  */
 
 namespace Drupal\Core\Routing;
@@ -19,6 +19,8 @@ namespace Drupal\Core\Routing;
  * The route match object contains useful information about the selected route
  * as well as the raw and upcast parameters derived from the incoming
  * request.
+ *
+ * @ingroup routing
  */
 interface RouteMatchInterface {
 
@@ -39,7 +41,13 @@ interface RouteMatchInterface {
   public function getRouteObject();
 
   /**
-   * Returns the value of a named route parameter.
+   * Returns the processed value of a named route parameter.
+   *
+   * Raw URL parameters are processed by the parameter conversion system, which
+   * does operations such as converting entity ID parameters to fully-loaded
+   * entities. For example, the path node/12345 would have a raw node ID
+   * parameter value of 12345, while the processed parameter value would be the
+   * corresponding loaded node object.
    *
    * @param string $parameter_name
    *   The parameter name.
@@ -47,14 +55,24 @@ interface RouteMatchInterface {
    * @return mixed|null
    *   The parameter value. NULL if the route doesn't define the parameter or
    *   if the parameter value can't be determined from the request.
+   *
+   * @see \Drupal\Core\Routing\RouteMatchInterface::getRawParameter()
    */
   public function getParameter($parameter_name);
 
   /**
-   * Returns the bag of all route parameters.
+   * Returns the bag of all processed route parameters.
+   *
+   * Raw URL parameters are processed by the parameter conversion system, which
+   * does operations such as converting entity ID parameters to fully-loaded
+   * entities. For example, the path node/12345 would have a raw node ID
+   * parameter value of 12345, while the processed parameter value would be the
+   * corresponding loaded node object.
    *
    * @return \Symfony\Component\HttpFoundation\ParameterBag
    *   The parameter bag.
+   *
+   * @see \Drupal\Core\Routing\RouteMatchInterface::getRawParameters()
    */
   public function getParameters();
 
@@ -68,6 +86,8 @@ interface RouteMatchInterface {
    *   The raw (non-upcast) parameter value. NULL if the route doesn't define
    *   the parameter or if the raw parameter value can't be determined from the
    *   request.
+   *
+   * @see \Drupal\Core\Routing\RouteMatchInterface::getParameter()
    */
   public function getRawParameter($parameter_name);
 
@@ -76,6 +96,8 @@ interface RouteMatchInterface {
    *
    * @return \Symfony\Component\HttpFoundation\ParameterBag
    *   The parameter bag.
+   *
+   * @see \Drupal\Core\Routing\RouteMatchInterface::getParameters()
    */
   public function getRawParameters();
 

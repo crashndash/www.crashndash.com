@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Lock\LockBackendAbstract.
+ * Contains \Drupal\Core\Lock\LockBackendAbstract.
  */
 
 namespace Drupal\Core\Lock;
@@ -29,7 +29,7 @@ abstract class LockBackendAbstract implements LockBackendInterface {
   protected $locks = array();
 
   /**
-   * Implements Drupal\Core\Lock\LockBackedInterface::wait().
+   * {@inheritdoc}
    */
   public function wait($name, $delay = 30) {
     // Pause the process for short periods between calling
@@ -68,7 +68,7 @@ abstract class LockBackendAbstract implements LockBackendInterface {
   }
 
   /**
-   * Implements Drupal\Core\Lock\LockBackedInterface::getLockId().
+   * {@inheritdoc}
    */
   public function getLockId() {
     if (!isset($this->lockId)) {

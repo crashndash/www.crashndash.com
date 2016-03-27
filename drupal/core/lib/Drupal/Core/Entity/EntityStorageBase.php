@@ -7,7 +7,6 @@
 
 namespace Drupal\Core\Entity;
 
-use Drupal\Component\Utility\String;
 use Drupal\Core\Entity\Query\QueryInterface;
 
 /**
@@ -32,6 +31,11 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
   /**
    * Information about the entity type.
    *
+   * The following code returns the same object:
+   * @code
+   * \Drupal::entityManager()->getDefinition($this->entityTypeId)
+   * @endcode
+   *
    * @var \Drupal\Core\Entity\EntityTypeInterface
    */
   protected $entityType;
@@ -51,6 +55,13 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
    * @var string
    */
   protected $uuidKey;
+
+  /**
+   * The name of the entity langcode property.
+   *
+   * @var string
+   */
+  protected $langcodeKey;
 
   /**
    * The UUID service.
@@ -77,6 +88,7 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
     $this->entityType = $entity_type;
     $this->idKey = $this->entityType->getKey('id');
     $this->uuidKey = $this->entityType->getKey('uuid');
+    $this->langcodeKey = $this->entityType->getKey('langcode');
     $this->entityClass = $this->entityType->getClass();
   }
 
@@ -339,20 +351,26 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
       return;
     }
 
+    // Ensure that the entities are keyed by ID.
+    $keyed_entities = [];
+    foreach ($entities as $entity) {
+      $keyed_entities[$entity->id()] = $entity;
+    }
+
     // Allow code to run before deleting.
     $entity_class = $this->entityClass;
-    $entity_class::preDelete($this, $entities);
-    foreach ($entities as $entity) {
+    $entity_class::preDelete($this, $keyed_entities);
+    foreach ($keyed_entities as $entity) {
       $this->invokeHook('predelete', $entity);
     }
 
     // Perform the delete and reset the static cache for the deleted entities.
-    $this->doDelete($entities);
-    $this->resetCache(array_keys($entities));
+    $this->doDelete($keyed_entities);
+    $this->resetCache(array_keys($keyed_entities));
 
     // Allow code to run after deleting.
-    $entity_class::postDelete($this, $entities);
-    foreach ($entities as $entity) {
+    $entity_class::postDelete($this, $keyed_entities);
+    foreach ($keyed_entities as $entity) {
       $this->invokeHook('delete', $entity);
     }
   }
@@ -369,6 +387,34 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
    * {@inheritdoc}
    */
   public function save(EntityInterface $entity) {
+    // Track if this entity is new.
+    $is_new = $entity->isNew();
+
+    // Execute presave logic and invoke the related hooks.
+    $id = $this->doPreSave($entity);
+
+    // Perform the save and reset the static cache for the changed entity.
+    $return = $this->doSave($id, $entity);
+
+    // Execute post save logic and invoke the related hooks.
+    $this->doPostSave($entity, !$is_new);
+
+    return $return;
+  }
+
+  /**
+   * Performs presave entity processing.
+   *
+   * @param \Drupal\Core\Entity\EntityInterface $entity
+   *   The saved entity.
+   *
+   * @return int|string
+   *   The processed entity identifier.
+   *
+   * @throws \Drupal\Core\Entity\EntityStorageException
+   *   If the entity identifier is invalid.
+   */
+  protected function doPreSave(EntityInterface $entity) {
     $id = $entity->id();
 
     // Track the original ID.
@@ -376,14 +422,12 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
       $id = $entity->getOriginalId();
     }
 
-    // Track if this entity is new.
-    $is_new = $entity->isNew();
     // Track if this entity exists already.
     $id_exists = $this->has($id, $entity);
 
     // A new entity should not already exist.
-    if ($id_exists && $is_new) {
-      throw new EntityStorageException(String::format('@type entity with ID @id already exists.', array('@type' => $this->entityTypeId, '@id' => $id)));
+    if ($id_exists && $entity->isNew()) {
+      throw new EntityStorageException("'{$this->entityTypeId}' entity with ID '$id' already exists.");
     }
 
     // Load the original entity, if any.
@@ -395,25 +439,7 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
     $entity->preSave($this);
     $this->invokeHook('presave', $entity);
 
-    // Perform the save and reset the static cache for the changed entity.
-    $return = $this->doSave($id, $entity);
-    $this->resetCache(array($id));
-
-    // The entity is no longer new.
-    $entity->enforceIsNew(FALSE);
-
-    // Allow code to run after saving.
-    $entity->postSave($this, !$is_new);
-    $this->invokeHook($is_new ? 'insert' : 'update', $entity);
-
-    // After saving, this is now the "original entity", and subsequent saves
-    // will be updates instead of inserts, and updates must always be able to
-    // correctly identify the original entity.
-    $entity->setOriginalId($entity->id());
-
-    unset($entity->original);
-
-    return $return;
+    return $id;
   }
 
   /**
@@ -431,6 +457,32 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
   abstract protected function doSave($id, EntityInterface $entity);
 
   /**
+   * Performs post save entity processing.
+   *
+   * @param \Drupal\Core\Entity\EntityInterface $entity
+   *   The saved entity.
+   * @param bool $update
+   *   Specifies whether the entity is being updated or created.
+   */
+  protected function doPostSave(EntityInterface $entity, $update) {
+    $this->resetCache(array($entity->id()));
+
+    // The entity is no longer new.
+    $entity->enforceIsNew(FALSE);
+
+    // Allow code to run after saving.
+    $entity->postSave($this, $update);
+    $this->invokeHook($update ? 'update' : 'insert', $entity);
+
+    // After saving, this is now the "original entity", and subsequent saves
+    // will be updates instead of inserts, and updates must always be able to
+    // correctly identify the original entity.
+    $entity->setOriginalId($entity->id());
+
+    unset($entity->original);
+  }
+
+  /**
    * Builds an entity query.
    *
    * @param \Drupal\Core\Entity\Query\QueryInterface $entity_query
@@ -441,7 +493,8 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
    */
   protected function buildPropertyQuery(QueryInterface $entity_query, array $values) {
     foreach ($values as $name => $value) {
-      $entity_query->condition($name, $value);
+      // Cast scalars to array so we can consistently use an IN condition.
+      $entity_query->condition($name, (array) $value, 'IN');
     }
   }
 
@@ -460,7 +513,26 @@ abstract class EntityStorageBase extends EntityHandlerBase implements EntityStor
    * {@inheritdoc}
    */
   public function getQuery($conjunction = 'AND') {
-    return \Drupal::entityQuery($this->getEntityTypeId(), $conjunction);
+    // Access the service directly rather than entity.query factory so the
+    // storage's current entity type is used.
+    return \Drupal::service($this->getQueryServiceName())->get($this->entityType, $conjunction);
   }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getAggregateQuery($conjunction = 'AND') {
+    // Access the service directly rather than entity.query factory so the
+    // storage's current entity type is used.
+    return \Drupal::service($this->getQueryServiceName())->getAggregate($this->entityType, $conjunction);
+  }
+
+  /**
+   * Gets the name of the service for the query for this entity storage.
+   *
+   * @return string
+   *   The name of the service for the query for this entity storage.
+   */
+  abstract protected function getQueryServiceName();
 
 }

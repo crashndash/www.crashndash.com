@@ -7,31 +7,31 @@
 
 namespace Drupal\Core\DependencyInjection;
 
-use Symfony\Component\DependencyInjection\Container as SymfonyContainer;
+use Drupal\Component\DependencyInjection\Container as DrupalContainer;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
- * Extends the symfony container to set the service ID on the created object.
+ * Extends the Drupal container to set the service ID on the created object.
  */
-class Container extends SymfonyContainer {
+class Container extends DrupalContainer {
 
   /**
    * {@inheritdoc}
    */
-  public function get($id, $invalidBehavior = self::EXCEPTION_ON_INVALID_REFERENCE) {
-    $service = parent::get($id, $invalidBehavior);
-    // Some services are called but do not exist, so the parent returns nothing.
-    if (is_object($service)) {
-      $service->_serviceId = $id;
-    }
+  public function set($id, $service, $scope = ContainerInterface::SCOPE_CONTAINER) {
+     parent::set($id, $service, $scope);
 
-    return $service;
+    // Ensure that the _serviceId property is set on synthetic services as well.
+    if (isset($this->services[$id]) && is_object($this->services[$id]) && !isset($this->services[$id]->_serviceId)) {
+      $this->services[$id]->_serviceId = $id;
+    }
   }
 
   /**
    * {@inheritdoc}
    */
   public function __sleep() {
-    trigger_error('The container was serialized.', E_USER_ERROR);
+    assert(FALSE, 'The container was serialized.');
     return array_keys(get_object_vars($this));
   }
 

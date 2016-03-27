@@ -7,6 +7,8 @@
 
 namespace Drupal\block_content\Tests;
 
+use Drupal\block_content\Entity\BlockContent;
+
 /**
  * Create a block with revisions.
  *
@@ -67,8 +69,8 @@ class BlockContentRevisionsTest extends BlockContentTestBase {
       // Confirm the correct revision text appears.
       $loaded = entity_revision_load('block_content', $revision_id);
       // Verify revision log is the same.
-      $this->assertEqual($loaded->getRevisionLog(), $logs[$delta], format_string('Correct log message found for revision !revision', array(
-        '!revision' => $loaded->getRevisionId(),
+      $this->assertEqual($loaded->getRevisionLog(), $logs[$delta], format_string('Correct log message found for revision @revision', array(
+        '@revision' => $loaded->getRevisionId(),
       )));
     }
 
@@ -88,7 +90,7 @@ class BlockContentRevisionsTest extends BlockContentTestBase {
 
     // Verify that the non-default revision id is greater than the default
     // revision id.
-    $default_revision = entity_load('block_content', $loaded->id());
+    $default_revision = BlockContent::load($loaded->id());
     $this->assertTrue($loaded->getRevisionId() > $default_revision->getRevisionId(), 'Revision id is greater than default revision id.');
   }
 

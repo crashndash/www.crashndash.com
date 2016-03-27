@@ -8,11 +8,10 @@
 namespace Drupal\Tests\Core\Entity;
 
 use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Drupal\Core\Entity\Entity;
-use Drupal\Core\Entity\Exception\NoCorrespondingEntityClassException;
 use Drupal\Core\Language\Language;
-use Drupal\entity_test\Entity\EntityTest;
 use Drupal\entity_test\Entity\EntityTestMul;
 use Drupal\Tests\UnitTestCase;
 
@@ -73,11 +72,11 @@ class EntityUnitTest extends UnitTestCase {
   protected $languageManager;
 
   /**
-   * The mocked cache backend.
+   * The mocked cache tags invalidator.
    *
-   * @var \Drupal\Core\Cache\CacheBackendInterface|\PHPUnit_Framework_MockObject_MockObject
+   * @var \Drupal\Core\Cache\CacheTagsInvalidatorInterface|\PHPUnit_Framework_MockObject_MockObject
    */
-  protected $cacheBackend;
+  protected $cacheTagsInvalidator;
 
   /**
    * The entity values.
@@ -116,14 +115,13 @@ class EntityUnitTest extends UnitTestCase {
       ->with('en')
       ->will($this->returnValue(new Language(array('id' => 'en'))));
 
-    $this->cacheBackend = $this->getMock('Drupal\Core\Cache\CacheBackendInterface');
+    $this->cacheTagsInvalidator = $this->getMock('Drupal\Core\Cache\CacheTagsInvalidator');
 
     $container = new ContainerBuilder();
     $container->set('entity.manager', $this->entityManager);
     $container->set('uuid', $this->uuid);
     $container->set('language_manager', $this->languageManager);
-    $container->set('cache.test', $this->cacheBackend);
-    $container->setParameter('cache_bins', array('cache.test' => 'test'));
+    $container->set('cache_tags.invalidator', $this->cacheTagsInvalidator);
     \Drupal::setContainer($container);
 
     $this->entity = $this->getMockForAbstractClass('\Drupal\Core\Entity\Entity', array($this->values, $this->entityTypeId));
@@ -233,6 +231,11 @@ class EntityUnitTest extends UnitTestCase {
    * @covers ::language
    */
   public function testLanguage() {
+    $this->entityType->expects($this->any())
+      ->method('getKey')
+      ->will($this->returnValueMap(array(
+        array('langcode', 'langcode'),
+      )));
     $this->assertSame('en', $this->entity->language()->getId());
   }
 
@@ -393,12 +396,12 @@ class EntityUnitTest extends UnitTestCase {
    * @covers ::postSave
    */
   public function testPostSave() {
-    $this->cacheBackend->expects($this->at(0))
+    $this->cacheTagsInvalidator->expects($this->at(0))
       ->method('invalidateTags')
       ->with(array(
         $this->entityTypeId . '_list', // List cache tag.
       ));
-    $this->cacheBackend->expects($this->at(1))
+    $this->cacheTagsInvalidator->expects($this->at(1))
       ->method('invalidateTags')
       ->with(array(
         $this->entityTypeId . ':' . $this->values['id'], // Own cache tag.
@@ -450,7 +453,7 @@ class EntityUnitTest extends UnitTestCase {
    * @covers ::postDelete
    */
   public function testPostDelete() {
-    $this->cacheBackend->expects($this->once())
+    $this->cacheTagsInvalidator->expects($this->once())
       ->method('invalidateTags')
       ->with(array(
         $this->entityTypeId . ':' . $this->values['id'],
@@ -482,4 +485,64 @@ class EntityUnitTest extends UnitTestCase {
   public function testReferencedEntities() {
     $this->assertSame(array(), $this->entity->referencedEntities());
   }
+
+  /**
+   * @covers ::getCacheTags
+   * @covers ::getCacheTagsToInvalidate
+   * @covers ::addCacheTags
+   */
+  public function testCacheTags() {
+    // Ensure that both methods return the same by default.
+    $this->assertEquals([$this->entityTypeId . ':' . 1], $this->entity->getCacheTags());
+    $this->assertEquals([$this->entityTypeId . ':' . 1], $this->entity->getCacheTagsToInvalidate());
+
+    // Add an additional cache tag and make sure only getCacheTags() returns
+    // that.
+    $this->entity->addCacheTags(['additional_cache_tag']);
+
+    // EntityTypeId is random so it can shift order. We need to duplicate the
+    // sort from \Drupal\Core\Cache\Cache::mergeTags().
+    $tags = ['additional_cache_tag', $this->entityTypeId . ':' . 1];
+    sort($tags);
+    $this->assertEquals($tags, $this->entity->getCacheTags());
+    $this->assertEquals([$this->entityTypeId . ':' . 1], $this->entity->getCacheTagsToInvalidate());
+  }
+
+  /**
+   * @covers ::getCacheContexts
+   * @covers ::addCacheContexts
+   */
+  public function testCacheContexts() {
+    $cache_contexts_manager = $this->getMockBuilder('Drupal\Core\Cache\Context\CacheContextsManager')
+      ->disableOriginalConstructor()
+      ->getMock();
+    $cache_contexts_manager->method('assertValidTokens')->willReturn(TRUE);
+
+    $container = new ContainerBuilder();
+    $container->set('cache_contexts_manager', $cache_contexts_manager);
+    \Drupal::setContainer($container);
+
+    // There are no cache contexts by default.
+    $this->assertEquals([], $this->entity->getCacheContexts());
+
+    // Add an additional cache context.
+    $this->entity->addCacheContexts(['user']);
+    $this->assertEquals(['user'], $this->entity->getCacheContexts());
+  }
+
+  /**
+   * @covers ::getCacheMaxAge
+   * @covers ::mergeCacheMaxAge
+   */
+  public function testCacheMaxAge() {
+    // Cache max age is permanent by default.
+    $this->assertEquals(Cache::PERMANENT, $this->entity->getCacheMaxAge());
+
+    // Set two cache max ages, the lower value is the one that needs to be
+    // returned.
+    $this->entity->mergeCacheMaxAge(600);
+    $this->entity->mergeCacheMaxAge(1800);
+    $this->assertEquals(600, $this->entity->getCacheMaxAge());
+  }
+
 }

@@ -7,18 +7,17 @@
 
 namespace Drupal\node;
 
-use Drupal\Core\Entity\EntityForm;
+use Drupal\Core\Entity\BundleEntityFormBase;
 use Drupal\Core\Entity\EntityManagerInterface;
-use Drupal\Component\Utility\String;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\Core\Url;
+use Drupal\language\Entity\ContentLanguageSettings;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Form controller for node type forms.
  */
-class NodeTypeForm extends EntityForm {
+class NodeTypeForm extends BundleEntityFormBase {
 
   /**
    * The entity manager.
@@ -31,7 +30,7 @@ class NodeTypeForm extends EntityForm {
    * Constructs the NodeTypeForm object.
    *
    * @param \Drupal\Core\Entity\EntityManagerInterface $entity_manager
-   *   The entity manager
+   *   The entity manager.
    */
   public function __construct(EntityManagerInterface $entity_manager) {
     $this->entityManager = $entity_manager;
@@ -54,7 +53,7 @@ class NodeTypeForm extends EntityForm {
 
     $type = $this->entity;
     if ($this->operation == 'add') {
-      $form['#title'] = String::checkPlain($this->t('Add content type'));
+      $form['#title'] = $this->t('Add content type');
       $fields = $this->entityManager->getBaseFieldDefinitions('node');
       // Create a node with a fake bundle using the type's UUID so that we can
       // get the default values for workflow settings.
@@ -72,7 +71,7 @@ class NodeTypeForm extends EntityForm {
     $form['name'] = array(
       '#title' => t('Name'),
       '#type' => 'textfield',
-      '#default_value' => $type->name,
+      '#default_value' => $type->label(),
       '#description' => t('The human-readable name of this content type. This text will be displayed as part of the list on the <em>Add content</em> page. This name must be unique.'),
       '#required' => TRUE,
       '#size' => 30,
@@ -84,7 +83,7 @@ class NodeTypeForm extends EntityForm {
       '#maxlength' => EntityTypeInterface::BUNDLE_MAX_LENGTH,
       '#disabled' => $type->isLocked(),
       '#machine_name' => array(
-        'exists' => 'node_type_load',
+        'exists' => ['Drupal\node\Entity\NodeType', 'load'],
         'source' => array('name'),
       ),
       '#description' => t('A unique machine-readable name for this content type. It must only contain lowercase letters, numbers, and underscores. This name will be used for constructing the URL of the %node-add page, in which underscores will be converted into hyphens.', array(
@@ -95,8 +94,8 @@ class NodeTypeForm extends EntityForm {
     $form['description'] = array(
       '#title' => t('Description'),
       '#type' => 'textarea',
-      '#default_value' => $type->description,
-      '#description' => t('Describe this content type. The text will be displayed on the <em>Add content</em> page.'),
+      '#default_value' => $type->getDescription(),
+      '#description' => t('This text will be displayed on the <em>Add new content</em> page.'),
     );
 
     $form['additional_settings'] = array(
@@ -131,7 +130,7 @@ class NodeTypeForm extends EntityForm {
     $form['submission']['help']  = array(
       '#type' => 'textarea',
       '#title' => t('Explanation or submission guidelines'),
-      '#default_value' => $type->help,
+      '#default_value' => $type->getHelp(),
       '#description' => t('This text will be displayed at the top of the page when creating or editing content of this type.'),
     );
     $form['workflow'] = array(
@@ -148,7 +147,8 @@ class NodeTypeForm extends EntityForm {
     // Prepare workflow options to be used for 'checkboxes' form element.
     $keys = array_keys(array_filter($workflow_options));
     $workflow_options = array_combine($keys, $keys);
-    $form['workflow']['options'] = array('#type' => 'checkboxes',
+    $form['workflow']['options'] = array(
+      '#type' => 'checkboxes',
       '#title' => t('Default options'),
       '#default_value' => $workflow_options,
       '#options' => array(
@@ -166,7 +166,7 @@ class NodeTypeForm extends EntityForm {
         '#group' => 'additional_settings',
       );
 
-      $language_configuration = language_get_default_configuration('node', $type->id());
+      $language_configuration = ContentLanguageSettings::loadByEntityTypeBundle('node', $type->id());
       $form['language']['language_configuration'] = array(
         '#type' => 'language_configuration',
         '#entity_information' => array(
@@ -187,7 +187,8 @@ class NodeTypeForm extends EntityForm {
       '#default_value' => $type->displaySubmitted(),
       '#description' => t('Author username and publish date will be displayed.'),
     );
-    return $form;
+
+    return $this->protectBundleIdElement($form);
   }
 
   /**
@@ -203,8 +204,8 @@ class NodeTypeForm extends EntityForm {
   /**
    * {@inheritdoc}
    */
-  public function validate(array $form, FormStateInterface $form_state) {
-    parent::validate($form, $form_state);
+  public function validateForm(array &$form, FormStateInterface $form_state) {
+    parent::validateForm($form, $form_state);
 
     $id = trim($form_state->getValue('type'));
     // '0' is invalid, since elsewhere we check it using empty().
@@ -219,8 +220,8 @@ class NodeTypeForm extends EntityForm {
   public function save(array $form, FormStateInterface $form_state) {
     $type = $this->entity;
     $type->setNewRevision($form_state->getValue(array('options', 'revision')));
-    $type->type = trim($type->id());
-    $type->name = trim($type->name);
+    $type->set('type', trim($type->id()));
+    $type->set('name', trim($type->label()));
 
     $status = $type->save();
 
@@ -230,8 +231,9 @@ class NodeTypeForm extends EntityForm {
       drupal_set_message(t('The content type %name has been updated.', $t_args));
     }
     elseif ($status == SAVED_NEW) {
+      node_add_body_field($type);
       drupal_set_message(t('The content type %name has been added.', $t_args));
-      $context = array_merge($t_args, array('link' => $this->l(t('View'), new Url('node.overview_types'))));
+      $context = array_merge($t_args, array('link' => $type->link($this->t('View'), 'collection')));
       $this->logger('node')->notice('Added content type %name.', $context);
     }
 
@@ -246,7 +248,7 @@ class NodeTypeForm extends EntityForm {
     // @todo Make it possible to get default values without an entity.
     //   https://www.drupal.org/node/2318187
     $node = $this->entityManager->getStorage('node')->create(array('type' => $type->id()));
-    foreach (array('status', 'promote', 'sticky')  as $field_name) {
+    foreach (array('status', 'promote', 'sticky') as $field_name) {
       $value = (bool) $form_state->getValue(['options', $field_name]);
       if ($node->$field_name->value != $value) {
         $fields[$field_name]->getConfig($type->id())->setDefaultValue($value)->save();
@@ -254,7 +256,7 @@ class NodeTypeForm extends EntityForm {
     }
 
     $this->entityManager->clearCachedFieldDefinitions();
-    $form_state->setRedirect('node.overview_types');
+    $form_state->setRedirectUrl($type->urlInfo('collection'));
   }
 
 }

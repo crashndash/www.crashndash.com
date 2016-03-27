@@ -108,7 +108,11 @@ class MenuLinkDefaultForm implements MenuLinkFormInterface, ContainerInjectionIn
     $provider = $this->menuLink->getProvider();
     $form['info'] = array(
       '#type' => 'item',
-      '#title' => $this->t('This link is provided by the @name module. The title and path cannot be edited.', array('@name' => $this->getModuleName($provider))),
+      '#title' => $this->t('This link is provided by the @name module. The title and path cannot be edited.', array('@name' => $this->moduleHandler->getName($provider))),
+    );
+    $form['id'] = array(
+      '#type' => 'value',
+      '#value' => $this->menuLink->getPluginId(),
     );
     $link = array(
       '#type' => 'link',
@@ -158,7 +162,11 @@ class MenuLinkDefaultForm implements MenuLinkFormInterface, ContainerInjectionIn
    * {@inheritdoc}
    */
   public function extractFormValues(array &$form, FormStateInterface $form_state) {
-    $new_definition = array();
+    // Start from the complete, original, definition.
+    $new_definition = $this->menuLink->getPluginDefinition();
+    // Since the ID may not be present in the definition used to construct the
+    // plugin, add it here so it's available to any consumers of this method.
+    $new_definition['id'] = $form_state->getValue('id');
     $new_definition['enabled'] = $form_state->getValue('enabled') ? 1 : 0;
     $new_definition['weight'] = (int) $form_state->getValue('weight');
     $new_definition['expanded'] = $form_state->getValue('expanded') ? 1 : 0;
@@ -185,33 +193,6 @@ class MenuLinkDefaultForm implements MenuLinkFormInterface, ContainerInjectionIn
     $new_definition = $this->extractFormValues($form, $form_state);
 
     return $this->menuLinkManager->updateDefinition($this->menuLink->getPluginId(), $new_definition);
-  }
-
-  /**
-   * Gets the name of the module.
-   *
-   * @param string $module
-   *   The machine name of a module.
-   *
-   * @todo This function is horrible, but core has nothing better until we add a
-   * a method to the ModuleHandler that handles this nicely.
-   * https://drupal.org/node/2281989
-   *
-   * @return string
-   *   The human-readable, localized module name, or the machine name passed in
-   *   if no matching module is found.
-   */
-  protected function getModuleName($module) {
-    // Gather module data.
-    if (!isset($this->moduleData)) {
-      $this->moduleData = system_get_info('module');
-    }
-    // If the module exists, return its human-readable name.
-    if (isset($this->moduleData[$module])) {
-      return $this->t($this->moduleData[$module]['name']);
-    }
-    // Otherwise, return the machine name.
-    return $module;
   }
 
 }

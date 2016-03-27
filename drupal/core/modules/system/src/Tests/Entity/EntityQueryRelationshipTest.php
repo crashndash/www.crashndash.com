@@ -2,10 +2,12 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Entity\Tests\EntityQueryRelationshipTest.
+ * Contains \Drupal\system\Tests\Entity\EntityQueryRelationshipTest.
  */
 
 namespace Drupal\system\Tests\Entity;
+use Drupal\Component\Utility\Unicode;
+use Drupal\field\Tests\EntityReference\EntityReferenceTestTrait;
 
 /**
  * Tests the Entity Query relationship API.
@@ -13,6 +15,8 @@ namespace Drupal\system\Tests\Entity;
  * @group Entity
  */
 class EntityQueryRelationshipTest extends EntityUnitTestBase  {
+
+  use EntityReferenceTestTrait;
 
   /**
    * Modules to enable.
@@ -66,31 +70,24 @@ class EntityQueryRelationshipTest extends EntityUnitTestBase  {
 
     $this->installEntitySchema('taxonomy_term');
 
-    // We want a taxonomy term reference field. It needs a vocabulary, terms,
-    // a field storage and a field. First, create the vocabulary.
+    // We want an entity reference field. It needs a vocabulary, terms, a field
+    // storage and a field. First, create the vocabulary.
     $vocabulary = entity_create('taxonomy_vocabulary', array(
-      'vid' => drupal_strtolower($this->randomMachineName()),
+      'vid' => Unicode::strtolower($this->randomMachineName()),
     ));
     $vocabulary->save();
+
     // Second, create the field.
-    $this->fieldName = strtolower($this->randomMachineName());
-    entity_create('field_storage_config', array(
-      'field_name' => $this->fieldName,
-      'entity_type' => 'entity_test',
-      'type' => 'taxonomy_term_reference',
-      'settings' => array(
-        'allowed_values' => array(
-          'vocabulary' => $vocabulary->id(),
-        ),
-      ),
-    ))->save();
     entity_test_create_bundle('test_bundle');
-    // Third, create the instance.
-    entity_create('field_config', array(
-      'entity_type' => 'entity_test',
-      'field_name' => $this->fieldName,
-      'bundle' => 'test_bundle',
-    ))->save();
+    $this->fieldName = strtolower($this->randomMachineName());
+    $handler_settings = array(
+      'target_bundles' => array(
+        $vocabulary->id() => $vocabulary->id(),
+       ),
+      'auto_create' => TRUE,
+    );
+    $this->createEntityReferenceField('entity_test', 'test_bundle', $this->fieldName, NULL, 'taxonomy_term', 'default', $handler_settings);
+
     // Create two terms and also two accounts.
     for ($i = 0; $i <= 1; $i++) {
       $term = entity_create('taxonomy_term', array(

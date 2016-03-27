@@ -2,14 +2,13 @@
 
 /**
  * @file
- * Contains Drupal\Core\KeyValueStore\KeyValueDatabaseFactory.
+ * Contains \Drupal\Core\KeyValueStore\KeyValueDatabaseFactory.
  */
 
 namespace Drupal\Core\KeyValueStore;
 
 use Drupal\Component\Serialization\SerializationInterface;
 use Drupal\Core\Database\Connection;
-use Drupal\Core\Database\Database;
 
 /**
  * Defines the key/value store factory for the database backend.

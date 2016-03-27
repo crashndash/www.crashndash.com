@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\field_test\Plugin\field\formatter\TestFieldDefaultFormatter.
+ * Contains \Drupal\field_test\Plugin\Field\FieldFormatter\TestFieldDefaultFormatter.
  */
 
 namespace Drupal\field_test\Plugin\Field\FieldFormatter;
@@ -19,7 +19,8 @@ use Drupal\Core\Form\FormStateInterface;
  *   label = @Translation("Default"),
  *   description = @Translation("Default formatter"),
  *   field_types = {
- *     "test_field"
+ *     "test_field",
+ *     "test_field_with_preconfigured_options"
  *   },
  *   weight = 1
  * )
@@ -61,7 +62,7 @@ class TestFieldDefaultFormatter extends FormatterBase {
   /**
    * {@inheritdoc}
    */
-  public function viewElements(FieldItemListInterface $items) {
+  public function viewElements(FieldItemListInterface $items, $langcode) {
     $elements = array();
 
     foreach ($items as $delta => $item) {

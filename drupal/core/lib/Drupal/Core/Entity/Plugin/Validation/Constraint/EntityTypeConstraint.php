@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\Core\Entity\Constraint\EntityTypeConstraint.
+ * Contains \Drupal\Core\Entity\Plugin\Validation\Constraint\EntityTypeConstraint.
  */
 
 namespace Drupal\Core\Entity\Plugin\Validation\Constraint;
@@ -12,7 +12,7 @@ use Symfony\Component\Validator\Constraint;
 /**
  * Checks if a value is a valid entity type.
  *
- * @Plugin(
+ * @Constraint(
  *   id = "EntityType",
  *   label = @Translation("Entity type", context = "Validation"),
  *   type = { "entity", "entity_reference" }
@@ -35,14 +35,14 @@ class EntityTypeConstraint extends Constraint {
   public $type;
 
   /**
-   * Overrides Constraint::getDefaultOption().
+   * {@inheritdoc}
    */
   public function getDefaultOption() {
     return 'type';
   }
 
   /**
-   * Overrides Constraint::getRequiredOptions().
+   * {@inheritdoc}
    */
   public function getRequiredOptions() {
     return array('type');

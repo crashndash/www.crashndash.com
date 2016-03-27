@@ -1,6 +1,5 @@
 <?php
 
-use Drupal\Core\Entity\EntityInterface;
 use Drupal\comment\CommentInterface;
 use Drupal\Core\Url;
 
@@ -39,7 +38,6 @@ function hook_comment_links_alter(array &$links, CommentInterface $entity, array
       'comment-report' => array(
         'title' => t('Report'),
         'url' => Url::fromRoute('comment_test.report', ['comment' => $entity->id()], ['query' => ['token' => \Drupal::getContainer()->get('csrf_token')->get("comment/{$entity->id()}/report")]]),
-        'html' => TRUE,
       ),
     ),
   );

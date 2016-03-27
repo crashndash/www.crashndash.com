@@ -7,7 +7,6 @@
 
 namespace Drupal\views\Plugin\views\display;
 
-use Drupal\Component\Utility\String;
 use Drupal\Core\Entity\EntityManagerInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\views\Plugin\Block\ViewsBlock;
@@ -85,7 +84,7 @@ class Block extends DisplayPluginBase {
     $options = parent::defineOptions();
 
     $options['block_description'] = array('default' => '');
-    $options['block_category'] = array('default' => 'Lists (Views)');
+    $options['block_category'] = array('default' => $this->t('Lists (Views)'));
     $options['block_hide_empty'] = array('default' => FALSE);
 
     $options['allow'] = array(
@@ -149,7 +148,7 @@ class Block extends DisplayPluginBase {
     if (empty($block_description)) {
       $block_description = $this->t('None');
     }
-    $block_category = String::checkPlain($this->getOption('block_category'));
+    $block_category = $this->getOption('block_category');
 
     $options['block_description'] = array(
       'category' => 'block',
@@ -173,7 +172,7 @@ class Block extends DisplayPluginBase {
     $options['block_hide_empty'] = array(
       'category' => 'other',
       'title' => $this->t('Hide block if the view output is empty'),
-      'value' => $this->getOption('block_hide_empty') ? $this->t('Hide') : $this->t('Show'),
+      'value' => $this->getOption('block_hide_empty') ? $this->t('Yes') : $this->t('No'),
     );
   }
 
@@ -197,7 +196,7 @@ class Block extends DisplayPluginBase {
         $form['block_category'] = array(
           '#type' => 'textfield',
           '#autocomplete_route_name' => 'block.category_autocomplete',
-          '#description' => $this->t('The category this block will appear under on the <a href="@href">blocks placement page</a>.', array('@href' => \Drupal::url('block.admin_display'))),
+          '#description' => $this->t('The category this block will appear under on the <a href=":href">blocks placement page</a>.', array(':href' => \Drupal::url('block.admin_display'))),
           '#default_value' => $this->getOption('block_category'),
         );
         break;
@@ -332,6 +331,7 @@ class Block extends DisplayPluginBase {
     if ($items_per_page = $form_state->getValue(array('override', 'items_per_page'))) {
       $block->setConfigurationValue('items_per_page', $items_per_page);
     }
+    $form_state->unsetValue(array('override', 'items_per_page'));
   }
 
   /**

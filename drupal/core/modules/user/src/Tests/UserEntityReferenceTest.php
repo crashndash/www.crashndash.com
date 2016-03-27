@@ -1,4 +1,5 @@
 <?php
+
 /**
  * @file
  * Contains \Drupal\user\Tests\UserEntityReferenceTest.
@@ -6,6 +7,7 @@
 
 namespace Drupal\user\Tests;
 
+use Drupal\field\Tests\EntityReference\EntityReferenceTestTrait;
 use Drupal\field\Entity\FieldConfig;
 use Drupal\system\Tests\Entity\EntityUnitTestBase;
 
@@ -16,22 +18,21 @@ use Drupal\system\Tests\Entity\EntityUnitTestBase;
  */
 class UserEntityReferenceTest extends EntityUnitTestBase {
 
+  use EntityReferenceTestTrait;
+
   /**
-   * @var \Drupal\user\Entity\Role
+   * A randomly-generated role for testing purposes.
+   *
+   * @var \Drupal\user\Entity\RoleInterface
    */
   protected $role1;
 
   /**
-   * @var \Drupal\user\Entity\Role
+   * A randomly-generated role for testing purposes.
+   *
+   * @var \Drupal\user\Entity\RoleInterface
    */
   protected $role2;
-
-  /**
-   * Modules to enable.
-   *
-   * @var array
-   */
-  public static $modules = array('entity_reference', 'user');
 
   /**
    * {@inheritdoc}
@@ -51,7 +52,7 @@ class UserEntityReferenceTest extends EntityUnitTestBase {
     ));
     $this->role2->save();
 
-    entity_reference_create_field('user', 'user', 'user_reference', 'User reference', 'user');
+    $this->createEntityReferenceField('user', 'user', 'user_reference', 'User reference', 'user');
   }
 
   /**
@@ -59,11 +60,13 @@ class UserEntityReferenceTest extends EntityUnitTestBase {
    */
   function testUserSelectionByRole() {
     $field_definition = FieldConfig::loadByName('user', 'user', 'user_reference');
-    $field_definition->settings['handler_settings']['filter']['role'] = array(
+    $handler_settings = $field_definition->getSetting('handler_settings');
+    $handler_settings['filter']['role'] = array(
       $this->role1->id() => $this->role1->id(),
       $this->role2->id() => 0,
     );
-    $field_definition->settings['handler_settings']['filter']['type'] = 'role';
+    $handler_settings['filter']['type'] = 'role';
+    $field_definition->setSetting('handler_settings', $handler_settings);
     $field_definition->save();
 
     $user1 = $this->createUser(array('name' => 'aabb'));
@@ -78,10 +81,11 @@ class UserEntityReferenceTest extends EntityUnitTestBase {
     $user3->addRole($this->role2->id());
     $user3->save();
 
-    /** @var \Drupal\entity_reference\EntityReferenceAutocomplete $autocomplete */
-    $autocomplete = \Drupal::service('entity_reference.autocomplete');
 
-    $matches = $autocomplete->getMatches($field_definition, 'user', 'user', 'NULL', '', 'aabb');
+    /** @var \Drupal\Core\Entity\EntityAutocompleteMatcher $autocomplete */
+    $autocomplete = \Drupal::service('entity.autocomplete_matcher');
+
+    $matches = $autocomplete->getMatches('user', 'default', $field_definition->getSetting('handler_settings'), 'aabb');
     $this->assertEqual(count($matches), 2);
     $users = array();
     foreach ($matches as $match) {
@@ -91,7 +95,7 @@ class UserEntityReferenceTest extends EntityUnitTestBase {
     $this->assertTrue(in_array($user2->label(), $users));
     $this->assertFalse(in_array($user3->label(), $users));
 
-    $matches = $autocomplete->getMatches($field_definition, 'user', 'user', 'NULL', '', 'aabbbb');
+    $matches = $autocomplete->getMatches('user', 'default', $field_definition->getSetting('handler_settings'), 'aabbbb');
     $this->assertEqual(count($matches), 0, '');
   }
 }

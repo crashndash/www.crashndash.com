@@ -61,7 +61,7 @@ class EditorManager extends DefaultPluginManager {
    * @return array
    *   An array of attachments, for use with #attached.
    *
-   * @see drupal_process_attached()
+   * @see \Drupal\Core\Render\AttachmentsResponseProcessorInterface::processAttachments()
    */
   public function getAttachments(array $format_ids) {
     $attachments = array('library' => array());
@@ -96,10 +96,7 @@ class EditorManager extends DefaultPluginManager {
       return array();
     }
 
-    $attachments['js'][] = array(
-      'type' => 'setting',
-      'data' => $settings,
-    );
+    $attachments['drupalSettings'] = $settings;
 
     return $attachments;
   }

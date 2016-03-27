@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\system\Tests\Update\DependencyOrderingTest.
+ * Contains \Drupal\system\Tests\Update\DependencyOrderingTest.
  */
 
 namespace Drupal\system\Tests\Update;
@@ -25,7 +25,7 @@ class DependencyOrderingTest extends WebTestBase {
 
   protected function setUp() {
     parent::setUp();
-    require_once DRUPAL_ROOT . '/core/includes/update.inc';
+    require_once \Drupal::root() . '/core/includes/update.inc';
   }
 
   /**

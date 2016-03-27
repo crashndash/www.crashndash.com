@@ -8,12 +8,14 @@
 namespace Drupal\Tests\Component\Utility;
 
 use Drupal\Component\Utility\Random;
-use Drupal\Component\Utility\String;
 use Drupal\Tests\UnitTestCase;
 
 /**
- * @coversDefaultClass \Drupal\Component\Utility\Random
+ * Tests random data generation.
+ *
  * @group Utility
+ *
+ * @coversDefaultClass \Drupal\Component\Utility\Random
  */
 class RandomTest extends UnitTestCase {
 
@@ -29,14 +31,14 @@ class RandomTest extends UnitTestCase {
   /**
    * Tests unique random string generation.
    *
-   * @see \Drupal\Component\Utility\Random::string()
+   * @covers ::string
    */
   public function testRandomStringUniqueness() {
     $strings = array();
     $random = new Random();
     for ($i = 0; $i <= 50; $i++) {
       $str = $random->string(1, TRUE);
-      $this->assertFalse(isset($strings[$str]), String::format('Generated duplicate random string !string', array('!string' => $str)));
+      $this->assertFalse(isset($strings[$str]), 'Generated duplicate random string ' . $str);
       $strings[$str] = TRUE;
     }
   }
@@ -44,14 +46,14 @@ class RandomTest extends UnitTestCase {
   /**
    * Tests unique random name generation.
    *
-   * @see \Drupal\Component\Utility\Random::name()
+   * @covers ::name
    */
   public function testRandomNamesUniqueness() {
     $names = array();
     $random = new Random();
     for ($i = 0; $i <= 10; $i++) {
       $str = $random->name(1, TRUE);
-      $this->assertFalse(isset($names[$str]), String::format('Generated duplicate random name !name', array('!name' => $str)));
+      $this->assertFalse(isset($names[$str]), 'Generated duplicate random name ' . $str);
       $names[$str] = TRUE;
     }
   }
@@ -59,9 +61,8 @@ class RandomTest extends UnitTestCase {
   /**
    * Tests infinite loop prevention whilst generating random names.
    *
-   * @see \Drupal\Component\Utility\Random::name()
-   *
-   * @expectedException RuntimeException
+   * @covers ::name
+   * @expectedException \RuntimeException
    */
   public function testRandomNameException() {
     // There are fewer than 100 possibilities so an exception should occur to
@@ -76,9 +77,8 @@ class RandomTest extends UnitTestCase {
   /**
    * Tests infinite loop prevention whilst generating random strings.
    *
-   * @see \Drupal\Component\Utility\Random::string()
-   *
-   * @expectedException RuntimeException
+   * @covers ::string
+   * @expectedException \RuntimeException
    */
   public function testRandomStringException() {
     // There are fewer than 100 possibilities so an exception should occur to
@@ -93,7 +93,7 @@ class RandomTest extends UnitTestCase {
   /**
    * Tests random name generation if uniqueness is not enforced.
    *
-   * @see \Drupal\Component\Utility\Random::name()
+   * @covers ::name
    */
   public function testRandomNameNonUnique() {
     // There are fewer than 100 possibilities if we were forcing uniqueness so
@@ -108,7 +108,7 @@ class RandomTest extends UnitTestCase {
   /**
    * Tests random string if uniqueness is not enforced.
    *
-   * @see \Drupal\Component\Utility\Random::string()
+   * @covers ::string
    */
   public function testRandomStringNonUnique() {
     // There are fewer than 100 possibilities if we were forcing uniqueness so
@@ -123,7 +123,7 @@ class RandomTest extends UnitTestCase {
   /**
    * Tests random object generation to ensure the expected number of properties.
    *
-   * @see \Drupal\Component\Utility\Random::object()
+   * @covers ::object
    */
   public function testRandomObject() {
     // For values of 0 and 1 \Drupal\Component\Utility\Random::object() will
@@ -138,7 +138,7 @@ class RandomTest extends UnitTestCase {
   /**
    * Tests random string validation callbacks.
    *
-   * @see \Drupal\Component\Utility\Random::name()
+   * @covers ::string
    */
   public function testRandomStringValidator() {
     $random = new Random();

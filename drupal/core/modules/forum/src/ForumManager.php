@@ -205,7 +205,7 @@ class ForumManager implements ForumManagerInterface {
       $query
         ->orderBy('f.sticky', 'DESC')
         ->orderByHeader($header)
-        ->condition('n.nid', $nids)
+        ->condition('n.nid', $nids, 'IN')
         // @todo This should be actually filtering on the desired node language
         //   and just fall back to the default language.
         ->condition('n.default_langcode', 1);
@@ -405,7 +405,7 @@ class ForumManager implements ForumManagerInterface {
       return $this->forumChildren[$tid];
     }
     $forums = array();
-    $_forums = taxonomy_get_tree($vid, $tid, NULL, TRUE);
+    $_forums = $this->entityManager->getStorage('taxonomy_term')->loadTree($vid, $tid, NULL, TRUE);
     foreach ($_forums as $forum) {
       // Merge in the topic and post counters.
       if (($count = $this->getForumStatistics($forum->id()))) {

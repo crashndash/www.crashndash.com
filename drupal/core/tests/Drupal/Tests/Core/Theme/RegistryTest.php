@@ -7,7 +7,7 @@
 
 namespace Drupal\Tests\Core\Theme;
 
-use Drupal\Core\Extension\Extension;
+use Drupal\Core\Theme\ActiveTheme;
 use Drupal\Core\Theme\Registry;
 use Drupal\Tests\UnitTestCase;
 
@@ -46,12 +46,38 @@ class RegistryTest extends UnitTestCase {
   protected $moduleHandler;
 
   /**
+   * The mocked theme handler.
+   *
+   * @var \Drupal\Core\Extension\ThemeHandlerInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $themeHandler;
+
+  /**
+   * The mocked theme initialization.
+   *
+   * @var \Drupal\Core\Theme\ThemeInitializationInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $themeInitialization;
+
+  /**
+   * The theme manager.
+   *
+   * @var \Drupal\Core\Theme\ThemeManagerInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $themeManager;
+
+  /**
    * {@inheritdoc}
    */
   protected function setUp() {
+    parent::setUp();
+
     $this->cache = $this->getMock('Drupal\Core\Cache\CacheBackendInterface');
     $this->lock = $this->getMock('Drupal\Core\Lock\LockBackendInterface');
     $this->moduleHandler = $this->getMock('Drupal\Core\Extension\ModuleHandlerInterface');
+    $this->themeHandler = $this->getMock('Drupal\Core\Extension\ThemeHandlerInterface');
+    $this->themeInitialization = $this->getMock('Drupal\Core\Theme\ThemeInitializationInterface');
+    $this->themeManager = $this->getMock('Drupal\Core\Theme\ThemeManagerInterface');
 
     $this->setupTheme();
   }
@@ -60,16 +86,46 @@ class RegistryTest extends UnitTestCase {
    * Tests getting the theme registry defined by a module.
    */
   public function testGetRegistryForModule() {
-    $this->setupTheme('test_theme');
-    $this->registry->setTheme(new Extension('theme', 'core/modules/system/tests/themes/test_theme/test_theme.info.yml', 'test_theme.theme'));
-    $this->registry->setBaseThemes(array());
+    $test_theme = new ActiveTheme([
+      'name' => 'test_theme',
+      'path' => 'core/modules/system/tests/themes/test_theme/test_theme.info.yml',
+      'engine' => 'twig',
+      'owner' => 'twig',
+      'stylesheets_remove' => [],
+      'libraries_override' => [],
+      'libraries_extend' => [],
+      'libraries' => [],
+      'extension' => '.twig',
+      'base_themes' => [],
+    ]);
 
-    // Include the module so that hook_theme can be called.
-    include_once DRUPAL_ROOT . '/core/modules/system/tests/modules/theme_test/theme_test.module';
-    $this->moduleHandler->expects($this->once())
+    $test_stable = new ActiveTheme([
+      'name' => 'test_stable',
+      'path' => 'core/modules/system/tests/themes/test_stable/test_stable.info.yml',
+      'engine' => 'twig',
+      'owner' => 'twig',
+      'stylesheets_remove' => [],
+      'libraries_override' => [],
+      'libraries_extend' => [],
+      'libraries' => [],
+      'extension' => '.twig',
+      'base_themes' => [],
+    ]);
+
+    $this->themeManager->expects($this->exactly(2))
+      ->method('getActiveTheme')
+      ->willReturnOnConsecutiveCalls($test_theme, $test_stable);
+
+    // Include the module and theme files so that hook_theme can be called.
+    include_once $this->root . '/core/modules/system/tests/modules/theme_test/theme_test.module';
+    include_once $this->root . '/core/modules/system/tests/themes/test_stable/test_stable.theme';
+    $this->moduleHandler->expects($this->exactly(2))
       ->method('getImplementations')
       ->with('theme')
       ->will($this->returnValue(array('theme_test')));
+    $this->moduleHandler->expects($this->atLeastOnce())
+      ->method('getModuleList')
+      ->willReturn([]);
 
     $registry = $this->registry->get();
 
@@ -87,43 +143,35 @@ class RegistryTest extends UnitTestCase {
     $this->assertArrayHasKey('theme_test_function_template_override', $registry);
 
     $this->assertArrayNotHasKey('test_theme_not_existing_function', $registry);
+    $this->assertFalse(in_array('test_stable_preprocess_theme_test_render_element', $registry['theme_test_render_element']['preprocess functions']));
 
     $info = $registry['theme_test_function_suggestions'];
     $this->assertEquals('module', $info['type']);
     $this->assertEquals('core/modules/system/tests/modules/theme_test', $info['theme path']);
     $this->assertEquals('theme_theme_test_function_suggestions', $info['function']);
     $this->assertEquals(array(), $info['variables']);
+
+    // The second call will initialize with the second theme. Ensure that this
+    // returns a different object and the discovery for the second theme's
+    // preprocess function worked.
+    $other_registry = $this->registry->get();
+    $this->assertNotSame($registry, $other_registry);
+    $this->assertTrue(in_array('test_stable_preprocess_theme_test_render_element', $other_registry['theme_test_render_element']['preprocess functions']));
   }
 
-  protected function setupTheme($theme_name = NULL) {
-    $this->registry = new TestRegistry($this->cache, $this->lock, $this->moduleHandler, $theme_name);
+  protected function setupTheme() {
+    $this->registry = new TestRegistry($this->root, $this->cache, $this->lock, $this->moduleHandler, $this->themeHandler, $this->themeInitialization);
+    $this->registry->setThemeManager($this->themeManager);
   }
 
 }
 
 class TestRegistry extends Registry {
 
-  public function setTheme(Extension $theme) {
-    $this->theme = $theme;
-  }
-
-  public function setBaseThemes(array $base_themes) {
-    $this->baseThemes = $base_themes;
-  }
-
-  protected function init($theme_name = NULL) {
-  }
-
   protected function getPath($module) {
     if ($module == 'theme_test') {
       return 'core/modules/system/tests/modules/theme_test';
     }
-  }
-
-  protected function listThemes() {
-  }
-
-  protected function initializeTheme() {
   }
 
 }

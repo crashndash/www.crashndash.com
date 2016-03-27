@@ -58,7 +58,6 @@ class ViewDuplicateForm extends ViewFormBase {
     $actions['submit'] = array(
       '#type' => 'submit',
       '#value' => $this->t('Duplicate'),
-      '#submit' => array('::submitForm'),
     );
     return $actions;
   }
@@ -73,6 +72,7 @@ class ViewDuplicateForm extends ViewFormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $this->entity = $this->entity->createDuplicate();
+    $this->entity->set('label', $form_state->getValue('label'));
     $this->entity->set('id', $form_state->getValue('id'));
     $this->entity->save();
 

@@ -6,7 +6,7 @@ entity.shortcut_set.delete_form:
   requirements:
     _entity_access: 'shortcut_set.delete'
 
-shortcut.set_admin:
+entity.shortcut_set.collection:
   path: '/admin/config/user-interface/shortcut'
   defaults:
     _entity_list: 'shortcut_set'
@@ -49,7 +49,7 @@ entity.shortcut_set.customize_form:
 shortcut.link_add:
   path: '/admin/config/user-interface/shortcut/manage/{shortcut_set}/add-link'
   defaults:
-    _content: '\Drupal\shortcut\Controller\ShortcutController::addForm'
+    _controller: '\Drupal\shortcut\Controller\ShortcutController::addForm'
     _title: 'Add link'
   requirements:
     _entity_create_access: 'shortcut:{shortcut_set}'
@@ -61,6 +61,16 @@ entity.shortcut.canonical:
     _title: 'Edit'
   requirements:
     _entity_access: 'shortcut.update'
+    shortcut: \d+
+
+entity.shortcut.edit_form:
+  path: '/admin/config/user-interface/shortcut/link/{shortcut}'
+  defaults:
+    _entity_form: 'shortcut.default'
+    _title: 'Edit'
+  requirements:
+    _entity_access: 'shortcut.update'
+    shortcut: \d+
 
 entity.shortcut.link_delete_inline:
   path: '/admin/config/user-interface/shortcut/link/{shortcut}/delete-inline'
@@ -69,6 +79,7 @@ entity.shortcut.link_delete_inline:
   requirements:
     _entity_access: 'shortcut.delete'
     _csrf_token: 'TRUE'
+    shortcut: \d+
 
 entity.shortcut.delete_form:
   path: '/admin/config/user-interface/shortcut/link/{shortcut}/delete'
@@ -77,6 +88,7 @@ entity.shortcut.delete_form:
     _title: 'Delete'
   requirements:
     _entity_access: 'shortcut.delete'
+    shortcut: \d+
 
 shortcut.set_switch:
   path: '/user/{user}/shortcuts'
@@ -87,3 +99,4 @@ shortcut.set_switch:
     _custom_access: 'Drupal\shortcut\Form\SwitchShortcutSet::checkAccess'
   options:
     _admin_route: TRUE
+    user: \d+

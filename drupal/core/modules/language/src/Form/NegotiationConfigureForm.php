@@ -2,19 +2,17 @@
 
 /**
  * @file
- * Contains \Drupal\Language\Form\NegotiationConfigureForm.
+ * Contains \Drupal\language\Form\NegotiationConfigureForm.
  */
 
 namespace Drupal\language\Form;
 
 use Drupal\Core\Block\BlockManagerInterface;
-use Drupal\Component\Utility\String;
 use Drupal\Component\Utility\Unicode;
-use Drupal\Component\Utility\Xss;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Extension\ThemeHandlerInterface;
-use Drupal\Core\Form\FormBase;
+use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
 use Drupal\language\ConfigurableLanguageManagerInterface;
@@ -25,7 +23,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 /**
  * Configure the selected language negotiation method for this site.
  */
-class NegotiationConfigureForm extends FormBase {
+class NegotiationConfigureForm extends ConfigFormBase {
 
   /**
    * Stores the configuration object for language.types.
@@ -86,7 +84,8 @@ class NegotiationConfigureForm extends FormBase {
    *   The block storage, or NULL if not available.
    */
   public function __construct(ConfigFactoryInterface $config_factory, ConfigurableLanguageManagerInterface $language_manager, LanguageNegotiatorInterface $negotiator, BlockManagerInterface $block_manager, ThemeHandlerInterface $theme_handler, EntityStorageInterface $block_storage = NULL) {
-    $this->languageTypes = $config_factory->get('language.types');
+    parent::__construct($config_factory);
+    $this->languageTypes = $this->config('language.types');
     $this->languageManager = $language_manager;
     $this->negotiator = $negotiator;
     $this->blockManager = $block_manager;
@@ -113,8 +112,15 @@ class NegotiationConfigureForm extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function getFormID() {
+  public function getFormId() {
     return 'language_negotiation_configure_form';
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function getEditableConfigNames() {
+    return ['language.types'];
   }
 
   /**
@@ -201,7 +207,7 @@ class NegotiationConfigureForm extends FormBase {
     $this->blockManager->clearCachedDefinitions();
 
     $form_state->setRedirect('language.negotiation');
-    drupal_set_message($this->t('Language negotiation configuration saved.'));
+    drupal_set_message($this->t('Language detection configuration saved.'));
   }
 
   /**
@@ -228,7 +234,7 @@ class NegotiationConfigureForm extends FormBase {
       $configurable = $this->languageTypes->get('configurable');
       $table_form['configurable'] = array(
         '#type' => 'checkbox',
-        '#title' => $this->t('Customize %language_name language detection to differ from User interface text language detection settings', array('%language_name' => $info['name'])),
+        '#title' => $this->t('Customize %language_name language detection to differ from Interface text language detection settings', array('%language_name' => $info['name'])),
         '#default_value' => in_array($type, $configurable),
         '#attributes' => array('class' => array('language-customization-checkbox')),
         '#attached' => array(
@@ -269,22 +275,22 @@ class NegotiationConfigureForm extends FormBase {
 
       if (isset($types[$type])) {
         $table_form['#language_negotiation_info'][$method_id] = $method;
-        $method_name = String::checkPlain($method['name']);
+        $method_name = $method['name'];
 
         $table_form['weight'][$method_id] = array(
           '#type' => 'weight',
-          '#title' => $this->t('Weight for !title language detection method', array('!title' => Unicode::strtolower($method_name))),
+          '#title' => $this->t('Weight for @title language detection method', array('@title' => Unicode::strtolower($method_name))),
           '#title_display' => 'invisible',
           '#default_value' => $weight,
           '#attributes' => array('class' => array("language-method-weight-$type")),
           '#delta' => 20,
         );
 
-        $table_form['title'][$method_id] = array('#markup' => $method_name);
+        $table_form['title'][$method_id] = array('#plain_text' => $method_name);
 
         $table_form['enabled'][$method_id] = array(
           '#type' => 'checkbox',
-          '#title' => $this->t('Enable !title language detection method', array('!title' => Unicode::strtolower($method_name))),
+          '#title' => $this->t('Enable @title language detection method', array('@title' => Unicode::strtolower($method_name))),
           '#title_display' => 'invisible',
           '#default_value' => $enabled,
         );
@@ -293,7 +299,7 @@ class NegotiationConfigureForm extends FormBase {
           $table_form['enabled'][$method_id]['#attributes'] = array('disabled' => 'disabled');
         }
 
-        $table_form['description'][$method_id] = array('#markup' => Xss::filterAdmin($method['description']));
+        $table_form['description'][$method_id] = array('#markup' => $method['description']);
 
         $config_op = array();
         if (isset($method['config_route_name'])) {
@@ -326,7 +332,7 @@ class NegotiationConfigureForm extends FormBase {
     $blocks = $this->blockStorage->loadByProperties(array('theme' => $theme));
     foreach ($language_types as $language_type) {
       foreach ($blocks as $block) {
-        if (strpos($block->id, 'language_switcher_' . substr($language_type, 9)) !== FALSE) {
+        if ($block->getPluginId() == 'language_block:' . $language_type) {
           $block->delete();
         }
       }

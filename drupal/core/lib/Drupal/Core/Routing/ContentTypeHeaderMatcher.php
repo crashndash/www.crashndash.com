@@ -2,14 +2,14 @@
 
 /**
  * @file
- * Contains Drupal\Core\Routing\ContentTypeHeaderMatcher.
+ * Contains \Drupal\Core\Routing\ContentTypeHeaderMatcher.
  */
 
 namespace Drupal\Core\Routing;
 
-use Symfony\Cmf\Component\Routing\NestedMatcher\RouteFilterInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\UnsupportedMediaTypeHttpException;
+use Symfony\Component\Routing\Route;
 use Symfony\Component\Routing\RouteCollection;
 
 /**
@@ -47,7 +47,14 @@ class ContentTypeHeaderMatcher implements RouteFilterInterface {
     // We do not throw a
     // \Symfony\Component\Routing\Exception\ResourceNotFoundException here
     // because we don't want to return a 404 status code, but rather a 415.
-    throw new UnsupportedMediaTypeHttpException('No route found that matches the Content-Type header.');
+    throw new UnsupportedMediaTypeHttpException('No route found that matches "Content-Type: ' . $request->headers->get('Content-Type') . '"');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function applies(Route $route) {
+    return TRUE;
   }
 
 }

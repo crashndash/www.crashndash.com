@@ -2,12 +2,10 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Ajax\RestripeCommand.
+ * Contains \Drupal\Core\Ajax\RestripeCommand.
  */
 
 namespace Drupal\Core\Ajax;
-
-use Drupal\Core\Ajax\CommandInterface;
 
 /**
  * AJAX command for resetting the striping on a table.

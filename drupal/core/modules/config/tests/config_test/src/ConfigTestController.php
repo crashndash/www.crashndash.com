@@ -9,7 +9,6 @@ namespace Drupal\config_test;
 
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\config_test\Entity\ConfigTest;
-use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 
 /**
@@ -41,7 +40,7 @@ class ConfigTestController extends ControllerBase {
    */
   function enable(ConfigTest $config_test) {
     $config_test->enable()->save();
-    return new RedirectResponse($this->url('config_test.list_page', array(), array('absolute' => TRUE)));
+    return new RedirectResponse($config_test->url('collection', array('absolute' => TRUE)));
   }
 
   /**
@@ -55,7 +54,7 @@ class ConfigTestController extends ControllerBase {
    */
   function disable(ConfigTest $config_test) {
     $config_test->disable()->save();
-    return new RedirectResponse(\Drupal::url('config_test.list_page', array(), array('absolute' => TRUE)));
+    return new RedirectResponse($config_test->url('collection', array('absolute' => TRUE)));
   }
 
 }

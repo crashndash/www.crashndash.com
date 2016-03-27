@@ -10,7 +10,6 @@ namespace Drupal\shortcut;
 use Drupal\Component\Uuid\UuidInterface;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Config\Entity\ConfigEntityStorage;
-use Drupal\Core\Config\StorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Language\LanguageManagerInterface;
@@ -36,8 +35,6 @@ class ShortcutSetStorage extends ConfigEntityStorage implements ShortcutSetStora
    *   The entity info for the entity type.
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The config factory service.
-   * @param \Drupal\Core\Config\StorageInterface $config_storage
-   *   The config storage service.
    * @param \Drupal\Component\Uuid\UuidInterface $uuid_service
    *   The UUID service.
    * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler

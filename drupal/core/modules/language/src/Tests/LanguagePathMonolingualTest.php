@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\language\Tests\LanguagePathMonolingualTest.
+ * Contains \Drupal\language\Tests\LanguagePathMonolingualTest.
  */
 
 namespace Drupal\language\Tests;
@@ -21,7 +21,7 @@ class LanguagePathMonolingualTest extends WebTestBase {
    *
    * @var array
    */
-  public static $modules = array('language', 'path');
+  public static $modules = ['block', 'language', 'path'];
 
   protected function setUp() {
     parent::setUp();
@@ -39,7 +39,7 @@ class LanguagePathMonolingualTest extends WebTestBase {
     $edit = array(
       'site_default_language' => 'fr',
     );
-    $this->drupalPostForm('admin/config/regional/settings', $edit, t('Save configuration'));
+    $this->drupalPostForm('admin/config/regional/language', $edit, t('Save configuration'));
 
     // Delete English.
     $this->drupalPostForm('admin/config/regional/language/delete/en', array(), t('Delete'));
@@ -56,6 +56,7 @@ class LanguagePathMonolingualTest extends WebTestBase {
     // Set language detection to URL.
     $edit = array('language_interface[enabled][language-url]' => TRUE);
     $this->drupalPostForm('admin/config/regional/language/detection', $edit, t('Save settings'));
+    $this->drupalPlaceBlock('local_actions_block');
   }
 
   /**

@@ -9,15 +9,13 @@
  */
 
 use Drupal\Component\Graph\Graph;
-use Drupal\Component\Utility\String;
-use Drupal\Core\Entity\EntityStorageException;
 use Drupal\Core\Utility\Error;
 
 /**
  * Disables any extensions that are incompatible with the current core version.
  */
 function update_fix_compatibility() {
-  $extension_config = \Drupal::config('core.extension');
+  $extension_config = \Drupal::configFactory()->getEditable('core.extension');
   $save = FALSE;
   foreach (array('module', 'theme') as $type) {
     foreach ($extension_config->get($type) as $name => $weight) {
@@ -44,7 +42,7 @@ function update_check_incompatibility($name, $type = 'module') {
     // We need to do a full rebuild here to make sure the database reflects any
     // code changes that were made in the filesystem before the update script
     // was initiated.
-    $themes = system_rebuild_theme_data();
+    $themes = \Drupal::service('theme_handler')->rebuildThemeData();
     $modules = system_rebuild_module_data();
   }
 
@@ -61,34 +59,6 @@ function update_check_incompatibility($name, $type = 'module') {
     return TRUE;
   }
   return FALSE;
-}
-
-/**
- * Returns whether the settings file requirement has been satisfied.
- *
- * @return array
- *  A requirements info array.
- */
-function update_settings_file_requirements() {
-  $requirements = array();
-
-  // Check whether settings.php needs to be rewritten.
-  $settings_file = conf_path() . '/settings.php';
-  $writable = drupal_verify_install_file($settings_file, FILE_EXIST | FILE_READABLE | FILE_WRITABLE);
-  $requirements['settings file']['title'] = 'Settings file';
-  if ($writable) {
-    $requirements['settings file'] += array(
-      'value' => 'settings.php is writable.',
-    );
-  }
-  else {
-    $requirements['settings file'] += array(
-      'value' => 'settings.php is not writable.',
-      'severity' => REQUIREMENT_ERROR,
-      'description' => 'Drupal requires write permissions to <em>' . $settings_file . '</em> during the update process. If you are unsure how to grant file permissions, consult the <a href="http://drupal.org/server-permissions">online handbook</a>.',
-    );
-  }
-  return $requirements;
 }
 
 /**
@@ -113,7 +83,7 @@ function update_system_schema_requirements() {
     $requirements['minimum schema'] += array(
       'value' => 'The installed schema version does not meet the minimum.',
       'severity' => REQUIREMENT_ERROR,
-      'description' => 'Your system schema version is ' . $system_schema . '. Updating directly from a schema version prior to 8000 is not supported. You must <a href="https://drupal.org/node/2179269">migrate your site to Drupal 8</a> first.',
+      'description' => 'Your system schema version is ' . $system_schema . '. Updating directly from a schema version prior to 8000 is not supported. You must <a href="https://www.drupal.org/node/2179269">migrate your site to Drupal 8</a> first.',
     );
   }
 
@@ -127,7 +97,6 @@ function update_check_requirements() {
   // Check requirements of all loaded modules.
   $requirements = \Drupal::moduleHandler()->invokeAll('requirements', array('update'));
   $requirements += update_system_schema_requirements();
-  $requirements += update_settings_file_requirements();
   return $requirements;
 }
 
@@ -150,6 +119,8 @@ function update_set_schema($module, $schema_version) {
 }
 
 /**
+ * Implements callback_batch_operation().
+ *
  * Performs one update and stores the results for display on the results page.
  *
  * If an update function completes successfully, it should return a message
@@ -210,15 +181,13 @@ function update_do_one($module, $number, $dependency_map, &$context) {
     // @TODO We may want to do different error handling for different
     // exception types, but for now we'll just log the exception and
     // return the message for printing.
+    // @see https://www.drupal.org/node/2564311
     catch (Exception $e) {
       watchdog_exception('update', $e);
 
       $variables = Error::decodeException($e);
       unset($variables['backtrace']);
-      // The exception message is run through
-      // \Drupal\Component\Utility\String::checkPlain() by
-      // \Drupal\Core\Utility\Error::decodeException().
-      $ret['#abort'] = array('success' => FALSE, 'query' => t('%type: !message in %function (line %line of %file).', $variables));
+      $ret['#abort'] = array('success' => FALSE, 'query' => t('%type: @message in %function (line %line of %file).', $variables));
     }
   }
 
@@ -245,34 +214,68 @@ function update_do_one($module, $number, $dependency_map, &$context) {
     drupal_set_installed_schema_version($module, $number);
   }
 
-  $context['message'] = 'Updating ' . String::checkPlain($module) . ' module';
+  $context['message'] = t('Updating @module', ['@module' => $module]);
 }
 
 /**
- * Performs entity definition updates, which can trigger schema updates.
+ * Executes a single hook_post_update_NAME().
  *
- * @param $module
- *   The module whose update will be run.
- * @param $number
- *   The update number to run.
- * @param $context
+ * @param string $function
+ *   The function name, that should be executed.
+ * @param array $context
  *   The batch context array.
  */
-function update_entity_definitions($module, $number, &$context) {
-  try {
-    \Drupal::service('entity.definition_update_manager')->applyUpdates();
+function update_invoke_post_update($function, &$context) {
+  $ret = [];
+
+  // If this update was aborted in a previous step, or has a dependency that was
+  // aborted in a previous step, go no further.
+  if (!empty($context['results']['#abort'])) {
+    return;
   }
-  catch (EntityStorageException $e) {
-    watchdog_exception('update', $e);
-    $variables = Error::decodeException($e);
-    unset($variables['backtrace']);
-    // The exception message is run through
-    // \Drupal\Component\Utility\String::checkPlain() by
-    // \Drupal\Core\Utility\Error::decodeException().
-    $ret['#abort'] = array('success' => FALSE, 'query' => t('%type: !message in %function (line %line of %file).', $variables));
-    $context['results'][$module][$number] = $ret;
-    $context['results']['#abort'][] = 'update_entity_definitions';
+
+  list($module, $name) = explode('_post_update_', $function, 2);
+  module_load_include('php', $module, $module . '.post_update');
+  if (function_exists($function)) {
+    try {
+      $ret['results']['query'] = $function($context['sandbox']);
+      $ret['results']['success'] = TRUE;
+
+      if (!isset($context['sandbox']['#finished']) || (isset($context['sandbox']['#finished']) && $context['sandbox']['#finished'] >= 1)) {
+        \Drupal::service('update.post_update_registry')->registerInvokedUpdates([$function]);
+      }
+    }
+    // @TODO We may want to do different error handling for different exception
+    // types, but for now we'll just log the exception and return the message
+    // for printing.
+    // @see https://www.drupal.org/node/2564311
+    catch (Exception $e) {
+      watchdog_exception('update', $e);
+
+      $variables = Error::decodeException($e);
+      unset($variables['backtrace']);
+      $ret['#abort'] = [
+        'success' => FALSE,
+        'query' => t('%type: @message in %function (line %line of %file).', $variables),
+      ];
+    }
   }
+
+  if (isset($context['sandbox']['#finished'])) {
+    $context['finished'] = $context['sandbox']['#finished'];
+    unset($context['sandbox']['#finished']);
+  }
+  if (!isset($context['results'][$module][$name])) {
+    $context['results'][$module][$name] = array();
+  }
+  $context['results'][$module][$name] = array_merge($context['results'][$module][$name], $ret);
+
+  if (!empty($ret['#abort'])) {
+    // Record this function in the list of updates that were aborted.
+    $context['results']['#abort'][] = $function;
+  }
+
+  $context['message'] = t('Post updating @module', ['@module' => $module]);
 }
 
 /**
@@ -306,7 +309,7 @@ function update_get_update_list() {
     // Display a requirements error if the user somehow has a schema version
     // from the previous Drupal major version.
     if ($schema_version < \Drupal::CORE_MINIMUM_SCHEMA_VERSION) {
-      $ret[$module]['warning'] = '<em>' . $module . '</em> module cannot be updated. Its schema version is ' . $schema_version . ', which is from an earlier major release of Drupal. You will need to <a href="https://drupal.org/node/2127611">migrate the data for this module</a> instead.';
+      $ret[$module]['warning'] = '<em>' . $module . '</em> module cannot be updated. Its schema version is ' . $schema_version . ', which is from an earlier major release of Drupal. You will need to <a href="https://www.drupal.org/node/2127611">migrate the data for this module</a> instead.';
       continue;
     }
     // Otherwise, get the list of updates defined by this module.
@@ -316,7 +319,7 @@ function update_get_update_list() {
       // so if no updates are removed, it will == 0.
       $last_removed = \Drupal::moduleHandler()->invoke($module, 'update_last_removed');
       if ($schema_version < $last_removed) {
-        $ret[$module]['warning'] = '<em>' . $module . '</em> module cannot be updated. Its schema version is ' . $schema_version . '. Updates up to and including ' . $last_removed . ' have been removed in this release. In order to update <em>' . $module . '</em> module, you will first <a href="http://drupal.org/upgrade">need to upgrade</a> to the last version in which these updates were available.';
+        $ret[$module]['warning'] = '<em>' . $module . '</em> module cannot be updated. Its schema version is ' . $schema_version . '. Updates up to and including ' . $last_removed . ' have been removed in this release. In order to update <em>' . $module . '</em> module, you will first <a href="https://www.drupal.org/upgrade">need to upgrade</a> to the last version in which these updates were available.';
         continue;
       }
 
@@ -609,7 +612,7 @@ function update_retrieve_dependencies() {
     // Ensure install file is loaded.
     module_load_install($module);
     if (function_exists($function)) {
-      $result = $function();
+      $updated_dependencies = $function();
       // Each implementation of hook_update_dependencies() returns a
       // multidimensional, associative array containing some keys that
       // represent module names (which are strings) and other keys that
@@ -618,9 +621,9 @@ function update_retrieve_dependencies() {
       // treats strings and integers differently. Therefore, we have to
       // explicitly loop through the expected array structure here and perform
       // the merge manually.
-      if (isset($result) && is_array($result)) {
-        foreach ($result as $module => $module_data) {
-          foreach ($module_data as $update => $update_data) {
+      if (isset($updated_dependencies) && is_array($updated_dependencies)) {
+        foreach ($updated_dependencies as $module_name => $module_data) {
+          foreach ($module_data as $update_version => $update_data) {
             foreach ($update_data as $module_dependency => $update_dependency) {
               // If there are redundant dependencies declared for the same
               // update function (so that it is declared to depend on more than
@@ -641,8 +644,8 @@ function update_retrieve_dependencies() {
               // guaranteed to run before system_update_8003() anyway (within
               // an individual module, updates are always run in numerical
               // order).
-              if (!isset($return[$module][$update][$module_dependency]) || $update_dependency > $return[$module][$update][$module_dependency]) {
-                $return[$module][$update][$module_dependency] = $update_dependency;
+              if (!isset($return[$module_name][$update_version][$module_dependency]) || $update_dependency > $return[$module_name][$update_version][$module_dependency]) {
+                $return[$module_name][$update_version][$module_dependency] = $update_dependency;
               }
             }
           }
@@ -693,7 +696,7 @@ function update_replace_permissions($replace) {
  *   It can be: LanguageInterface::STATE_CONFIGURABLE,
  *   LanguageInterface::STATE_LOCKED, or LanguageInterface::STATE_ALL.
  *
- * @return array
+ * @return \Drupal\Core\Language\LanguageInterface[]
  *   An associative array of languages, keyed by the language code, ordered by
  *   weight ascending and name ascending.
  */
@@ -744,9 +747,9 @@ function update_language_list($flags = LanguageInterface::STATE_CONFIGURABLE) {
 
   // Add the site's default language if flagged as allowed value.
   if ($flags & LanguageInterface::STATE_SITE_DEFAULT) {
-    $default = isset($default) ? $default : \Drupal::languageManager()->getDefaultLanguage();
+    $default = \Drupal::languageManager()->getDefaultLanguage();
     // Rename the default language.
-    $default->name = t("Site's default language (@lang_name)", array('@lang_name' => $default->name));
+    $default->setName(t("Site's default language (@lang_name)", array('@lang_name' => $default->getName())));
     $filtered_languages[LanguageInterface::LANGCODE_SITE_DEFAULT] = $default;
   }
 

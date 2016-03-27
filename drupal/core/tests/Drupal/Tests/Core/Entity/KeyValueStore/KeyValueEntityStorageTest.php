@@ -68,11 +68,11 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   protected $entityManager;
 
   /**
-   * The mocked cache backend.
+   * The mocked cache tags invalidator.
    *
-   * @var \Drupal\Core\Cache\CacheBackendInterface|\PHPUnit_Framework_MockObject_MockObject
+   * @var \Drupal\Core\Cache\CacheTagsInvalidatorInterface|\PHPUnit_Framework_MockObject_MockObject
    */
-  protected $cacheBackend;
+  protected $cacheTagsInvalidator;
 
   /**
    * {@inheritdoc}
@@ -85,7 +85,7 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   /**
    * Prepares the key value entity storage.
    *
-   * @covers ::__construct()
+   * @covers ::__construct
    *
    * @param string $uuid_key
    *   (optional) The entity key used for the UUID. Defaults to 'uuid'.
@@ -96,6 +96,7 @@ class KeyValueEntityStorageTest extends UnitTestCase {
       ->will($this->returnValueMap(array(
         array('id', 'id'),
         array('uuid', $uuid_key),
+        array('langcode', 'langcode'),
       )));
     $this->entityType->expects($this->atLeastOnce())
       ->method('id')
@@ -110,7 +111,7 @@ class KeyValueEntityStorageTest extends UnitTestCase {
       ->with('test_entity_type')
       ->will($this->returnValue($this->entityType));
 
-    $this->cacheBackend = $this->getMock('Drupal\Core\Cache\CacheBackendInterface');
+    $this->cacheTagsInvalidator = $this->getMock('Drupal\Core\Cache\CacheTagsInvalidatorInterface');
 
     $this->keyValueStore = $this->getMock('Drupal\Core\KeyValueStore\KeyValueStoreInterface');
     $this->moduleHandler = $this->getMock('Drupal\Core\Extension\ModuleHandlerInterface');
@@ -130,14 +131,13 @@ class KeyValueEntityStorageTest extends UnitTestCase {
     $container = new ContainerBuilder();
     $container->set('entity.manager', $this->entityManager);
     $container->set('language_manager', $this->languageManager);
-    $container->set('cache.test', $this->cacheBackend);
-    $container->setParameter('cache_bins', array('cache.test' => 'test'));
+    $container->set('cache_tags.invalidator', $this->cacheTagsInvalidator);
     \Drupal::setContainer($container);
   }
 
   /**
-   * @covers ::create()
-   * @covers ::doCreate()
+   * @covers ::create
+   * @covers ::doCreate
    */
   public function testCreateWithPredefinedUuid() {
     $this->entityType->expects($this->once())
@@ -161,8 +161,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::create()
-   * @covers ::doCreate()
+   * @covers ::create
+   * @covers ::doCreate
    */
   public function testCreateWithoutUuidKey() {
     // Set up the entity storage to expect no UUID key.
@@ -187,8 +187,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::create()
-   * @covers ::doCreate()
+   * @covers ::create
+   * @covers ::doCreate
    *
    * @return \Drupal\Core\Entity\EntityInterface
    */
@@ -217,8 +217,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::save()
-   * @covers ::doSave()
+   * @covers ::save
+   * @covers ::doSave
    *
    * @param \Drupal\Core\Entity\EntityInterface $entity
    *
@@ -267,8 +267,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::save()
-   * @covers ::doSave()
+   * @covers ::save
+   * @covers ::doSave
    *
    * @param \Drupal\Core\Entity\EntityInterface $entity
    *
@@ -323,8 +323,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::save()
-   * @covers ::doSave()
+   * @covers ::save
+   * @covers ::doSave
    */
   public function testSaveConfigEntity() {
     $this->setUpKeyValueEntityStorage();
@@ -358,8 +358,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::save()
-   * @covers ::doSave()
+   * @covers ::save
+   * @covers ::doSave
    *
    * @depends testSaveConfigEntity
    */
@@ -407,8 +407,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::save()
-   * @covers ::doSave()
+   * @covers ::save
+   * @covers ::doSave
    */
   public function testSaveContentEntity() {
     $this->entityType->expects($this->any())
@@ -442,8 +442,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::save()
-   * @covers ::doSave()
+   * @covers ::save
+   * @covers ::doSave
    *
    * @expectedException \Drupal\Core\Entity\EntityMalformedException
    * @expectedExceptionMessage The entity does not have an ID.
@@ -462,11 +462,11 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::save()
-   * @covers ::doSave()
+   * @covers ::save
+   * @covers ::doSave
    *
    * @expectedException \Drupal\Core\Entity\EntityStorageException
-   * @expectedExceptionMessage test_entity_type entity with ID foo already exists
+   * @expectedExceptionMessage 'test_entity_type' entity with ID 'foo' already exists
    */
   public function testSaveDuplicate() {
     $this->setUpKeyValueEntityStorage();
@@ -484,8 +484,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::load()
-   * @covers ::postLoad()
+   * @covers ::load
+   * @covers ::postLoad
    */
   public function testLoad() {
     $entity = $this->getMockEntity();
@@ -512,7 +512,7 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::load()
+   * @covers ::load
    */
   public function testLoadMissingEntity() {
     $this->entityType->expects($this->once())
@@ -530,10 +530,10 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::loadMultiple()
-   * @covers ::postLoad()
-   * @covers ::mapFromStorageRecords()
-   * @covers ::doLoadMultiple()
+   * @covers ::loadMultiple
+   * @covers ::postLoad
+   * @covers ::mapFromStorageRecords
+   * @covers ::doLoadMultiple
    */
   public function testLoadMultipleAll() {
     $expected['foo'] = $this->getMockEntity('Drupal\Core\Entity\Entity', array(array('id' => 'foo')));
@@ -563,10 +563,10 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::loadMultiple()
-   * @covers ::postLoad()
-   * @covers ::mapFromStorageRecords()
-   * @covers ::doLoadMultiple()
+   * @covers ::loadMultiple
+   * @covers ::postLoad
+   * @covers ::mapFromStorageRecords
+   * @covers ::doLoadMultiple
    */
   public function testLoadMultipleIds() {
     $entity = $this->getMockEntity('Drupal\Core\Entity\Entity', array(array('id' => 'foo')));
@@ -596,7 +596,7 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::loadRevision()
+   * @covers ::loadRevision
    */
   public function testLoadRevision() {
     $this->setUpKeyValueEntityStorage();
@@ -605,7 +605,7 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::deleteRevision()
+   * @covers ::deleteRevision
    */
   public function testDeleteRevision() {
     $this->setUpKeyValueEntityStorage();
@@ -614,8 +614,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::delete()
-   * @covers ::doDelete()
+   * @covers ::delete
+   * @covers ::doDelete
    */
   public function testDelete() {
     $entities['foo'] = $this->getMockEntity('Drupal\Core\Entity\Entity', array(array('id' => 'foo')));
@@ -657,8 +657,8 @@ class KeyValueEntityStorageTest extends UnitTestCase {
   }
 
   /**
-   * @covers ::delete()
-   * @covers ::doDelete()
+   * @covers ::delete
+   * @covers ::doDelete
    */
   public function testDeleteNothing() {
     $this->setUpKeyValueEntityStorage();

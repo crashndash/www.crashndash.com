@@ -41,18 +41,29 @@ class EntityReference extends DataReferenceBase {
   /**
    * The entity ID.
    *
-   * @var integer|string
+   * @var int|string
    */
   protected $id;
 
   /**
-   * Returns the definition of the referenced entity.
+   * Gets the definition of the referenced entity.
    *
    * @return \Drupal\Core\Entity\TypedData\EntityDataDefinitionInterface
    *   The reference target's definition.
    */
   public function getTargetDefinition() {
     return $this->definition->getTargetDefinition();
+  }
+
+  /**
+   * Checks whether the target entity has not been saved yet.
+   *
+   * @return bool
+   *   TRUE if the entity is new, FALSE otherwise.
+   */
+  public function isTargetNew() {
+    // If only an ID is given, the reference cannot be a new entity.
+    return !isset($this->id) && isset($this->target) && $this->target->getValue()->isNew();
   }
 
   /**

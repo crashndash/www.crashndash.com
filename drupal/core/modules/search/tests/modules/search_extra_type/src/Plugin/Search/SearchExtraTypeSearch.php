@@ -9,6 +9,8 @@ namespace Drupal\search_extra_type\Plugin\Search;
 
 use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\UrlGeneratorTrait;
+use Drupal\Core\Url;
 use Drupal\search\Plugin\ConfigurableSearchPluginBase;
 
 /**
@@ -20,6 +22,8 @@ use Drupal\search\Plugin\ConfigurableSearchPluginBase;
  * )
  */
 class SearchExtraTypeSearch extends ConfigurableSearchPluginBase {
+
+  use UrlGeneratorTrait;
 
   /**
    * {@inheritdoc}
@@ -57,10 +61,10 @@ class SearchExtraTypeSearch extends ConfigurableSearchPluginBase {
     }
     return array(
       array(
-        'link' => _url('node'),
+        'link' => Url::fromRoute('test_page_test.test_page')->toString(),
         'type' => 'Dummy result type',
         'title' => 'Dummy title',
-        'snippet' => SafeMarkup::set("Dummy search snippet to display. Keywords: {$this->keywords}\n\nConditions: " . print_r($this->searchParameters, TRUE)),
+        'snippet' => SafeMarkup::format("Dummy search snippet to display. Keywords: @keywords\n\nConditions: @search_parameters", ['@keywords' => $this->keywords, '@search_parameters' => print_r($this->searchParameters, TRUE)]),
       ),
     );
   }
@@ -80,7 +84,7 @@ class SearchExtraTypeSearch extends ConfigurableSearchPluginBase {
       );
     }
     $pager = array(
-      '#theme' => 'pager',
+      '#type' => 'pager',
     );
     $output['suffix']['#markup'] = '</ol>' . drupal_render($pager);
 

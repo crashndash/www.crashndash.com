@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\system\Tests\Update\DependencyHookInvocationTest.
+ * Contains \Drupal\system\Tests\Update\DependencyHookInvocationTest.
  */
 
 namespace Drupal\system\Tests\Update;
@@ -26,7 +26,7 @@ class DependencyHookInvocationTest extends WebTestBase {
 
   protected function setUp() {
     parent::setUp();
-    require_once DRUPAL_ROOT . '/core/includes/update.inc';
+    require_once \Drupal::root() . '/core/includes/update.inc';
   }
 
   /**

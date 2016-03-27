@@ -2,16 +2,10 @@
 
 /**
  * @file
- * Definition of Drupal\Component\Gettext\PoStreamWriter.
+ * Contains \Drupal\Component\Gettext\PoStreamWriter.
  */
 
 namespace Drupal\Component\Gettext;
-
-use Drupal\Component\Gettext\PoHeader;
-use Drupal\Component\Gettext\PoItem;
-use Drupal\Component\Gettext\PoReaderInterface;
-use Drupal\Component\Gettext\PoWriterInterface;
-use Drupal\Component\Gettext\PoStreamInterface;
 
 /**
  * Defines a Gettext PO stream writer.
@@ -40,7 +34,7 @@ class PoStreamWriter implements PoWriterInterface, PoStreamInterface {
   private $_fd;
 
   /**
-   * Get the PO header of the current stream.
+   * Gets the PO header of the current stream.
    *
    * @return \Drupal\Component\Gettext\PoHeader
    *   The Gettext PO header.
@@ -60,7 +54,7 @@ class PoStreamWriter implements PoWriterInterface, PoStreamInterface {
   }
 
   /**
-   * Get the current language code used.
+   * Gets the current language code used.
    *
    * @return string
    *   The language code.
@@ -80,7 +74,7 @@ class PoStreamWriter implements PoWriterInterface, PoStreamInterface {
   }
 
   /**
-   * Implements Drupal\Component\Gettext\PoStreamInterface::open().
+   * {@inheritdoc}
    */
   public function open() {
     // Open in write mode. Will overwrite the stream if it already exists.
@@ -129,14 +123,14 @@ class PoStreamWriter implements PoWriterInterface, PoStreamInterface {
   }
 
   /**
-   * Implements Drupal\Component\Gettext\PoWriterInterface::writeItem().
+   * {@inheritdoc}
    */
   public function writeItem(PoItem $item) {
     $this->write($item);
   }
 
   /**
-   * Implements Drupal\Component\Gettext\PoWriterInterface::writeItems().
+   * {@inheritdoc}
    */
   public function writeItems(PoReaderInterface $reader, $count = -1) {
     $forever = $count == -1;
@@ -159,7 +153,7 @@ class PoStreamWriter implements PoWriterInterface, PoStreamInterface {
   }
 
   /**
-   * Implements Drupal\Component\Gettext\PoStreamInterface::setURI().
+   * {@inheritdoc}
    */
   public function setURI($uri) {
     $this->_uri = $uri;

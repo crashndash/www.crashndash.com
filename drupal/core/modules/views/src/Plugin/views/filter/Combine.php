@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\filter\Combine.
+ * Contains \Drupal\views\Plugin\views\filter\Combine.
  */
 
 namespace Drupal\views\Plugin\views\filter;
@@ -16,7 +16,7 @@ use Drupal\Core\Form\FormStateInterface;
  *
  * @ViewsFilter("combine")
  */
-class Combine extends String {
+class Combine extends StringFilter {
 
   /**
    * @var views_plugin_query_default
@@ -38,7 +38,11 @@ class Combine extends String {
     if ($this->view->style_plugin->usesFields()) {
       $options = array();
       foreach ($this->view->display_handler->getHandlers('field') as $name => $field) {
-        $options[$name] = $field->adminLabel(TRUE);
+        // Only allow clickSortable fields. Fields without clickSorting will
+        // probably break in the Combine filter.
+        if ($field->clickSortable()) {
+          $options[$name] = $field->adminLabel(TRUE);
+        }
       }
       if ($options) {
         $form['fields'] = array(
@@ -61,6 +65,14 @@ class Combine extends String {
     $fields = array();
     // Only add the fields if they have a proper field and table alias.
     foreach ($this->options['fields'] as $id) {
+      // Overridden fields can lead to fields missing from a display that are
+      // still set in the non-overridden combined filter.
+      if (!isset($this->view->field[$id])) {
+        // If fields are no longer available that are needed to filter by, make
+        // sure no results are shown to prevent displaying more then intended.
+        $this->view->build_info['fail'] = TRUE;
+        continue;
+      }
       $field = $this->view->field[$id];
       // Always add the table of the selected fields to be sure a table alias exists.
       $field->ensureMyTable();
@@ -85,6 +97,30 @@ class Combine extends String {
         $this->{$info[$this->operator]['method']}($expression);
       }
     }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function validate() {
+    $errors = parent::validate();
+    $fields = $this->view->display_handler->getHandlers('field');
+    foreach ($this->options['fields'] as $id) {
+      if (!isset($fields[$id])) {
+        // Combined field filter only works with fields that are in the field
+        // settings.
+        $errors[] = $this->t('Field %field set in %filter is not set in this display.', array('%field' => $id, '%filter' => $this->adminLabel()));
+        break;
+      }
+      elseif (!$fields[$id]->clickSortable()) {
+        // Combined field filter only works with simple fields. If the field is
+        // not click sortable we can assume it is not a simple field.
+        // @todo change this check to isComputed. See
+        // https://www.drupal.org/node/2349465
+        $errors[] = $this->t('Field %field set in %filter is not usable for this filter type. Combined field filter only works for simple fields.', array('%field' => $fields[$id]->adminLabel(), '%filter' => $this->adminLabel()));
+      }
+    }
+    return $errors;
   }
 
   // By default things like opEqual uses add_where, that doesn't support

@@ -12,6 +12,7 @@ use Drupal\Core\Config\Entity\DraggableListBuilder;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Form\ConfigFormBaseTrait;
 use Drupal\Core\Form\FormInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
@@ -23,6 +24,7 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  * @see \Drupal\search\Entity\SearchPage
  */
 class SearchPageListBuilder extends DraggableListBuilder implements FormInterface {
+  use ConfigFormBaseTrait;
 
   /**
    * The entities being listed.
@@ -78,8 +80,15 @@ class SearchPageListBuilder extends DraggableListBuilder implements FormInterfac
   /**
    * {@inheritdoc}
    */
-  public function getFormID() {
+  public function getFormId() {
     return 'search_admin_settings';
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function getEditableConfigNames() {
+    return ['search.settings'];
   }
 
   /**
@@ -112,7 +121,7 @@ class SearchPageListBuilder extends DraggableListBuilder implements FormInterfac
    */
   public function buildRow(EntityInterface $entity) {
     /** @var $entity \Drupal\search\SearchPageInterface */
-    $row['label'] = $this->getLabel($entity);
+    $row['label'] = $entity->label();
     $row['url']['#markup'] = 'search/' . $entity->getPath();
     // If the search page is active, link to it.
     if ($entity->status()) {
@@ -156,9 +165,7 @@ class SearchPageListBuilder extends DraggableListBuilder implements FormInterfac
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form = parent::buildForm($form, $form_state);
-    $old_state = $this->configFactory->getOverrideState();
-    $search_settings = $this->configFactory->setOverrideState(FALSE)->get('search.settings');
-    $this->configFactory->setOverrideState($old_state);
+    $search_settings = $this->config('search.settings');
     // Collect some stats.
     $remaining = 0;
     $total = 0;
@@ -170,7 +177,7 @@ class SearchPageListBuilder extends DraggableListBuilder implements FormInterfac
     }
 
     $this->moduleHandler->loadAllIncludes('admin.inc');
-    $count = format_plural($remaining, 'There is 1 item left to index.', 'There are @count items left to index.');
+    $count = $this->formatPlural($remaining, 'There is 1 item left to index.', 'There are @count items left to index.');
     $done = $total - $remaining;
     // Use floor() to calculate the percentage, so if it is not quite 100%, it
     // will show as 99%, to indicate "almost done".
@@ -181,6 +188,7 @@ class SearchPageListBuilder extends DraggableListBuilder implements FormInterfac
       '#type' => 'details',
       '#title' => $this->t('Indexing progress'),
       '#open' => TRUE,
+      '#description' => $this->t('Only items in the index will appear in search results. To build and maintain the index, a correctly configured <a href=":cron">cron maintenance task</a> is required.', array(':cron' => \Drupal::url('system.cron_settings'))),
     );
     $form['status']['status'] = array('#markup' => $status);
     $form['status']['wipe'] = array(
@@ -203,16 +211,16 @@ class SearchPageListBuilder extends DraggableListBuilder implements FormInterfac
       '#title' => $this->t('Number of items to index per cron run'),
       '#default_value' => $search_settings->get('index.cron_limit'),
       '#options' => $items,
-      '#description' => $this->t('The maximum number of items indexed in each pass of a <a href="@cron">cron maintenance task</a>. If necessary, reduce the number of items to prevent timeouts and memory errors while indexing.', array('@cron' => \Drupal::url('system.status'))),
+      '#description' => $this->t('The maximum number of items indexed in each run of the <a href=":cron">cron maintenance task</a>. If necessary, reduce the number of items to prevent timeouts and memory errors while indexing. Some search page types may have their own setting for this.', array(':cron' => \Drupal::url('system.cron_settings'))),
     );
     // Indexing settings:
     $form['indexing_settings'] = array(
       '#type' => 'details',
-      '#title' => $this->t('Indexing settings'),
+      '#title' => $this->t('Default indexing settings'),
       '#open' => TRUE,
     );
     $form['indexing_settings']['info'] = array(
-      '#markup' => $this->t('<p><em>Changing the settings below will cause the site index to be rebuilt. The search index is not cleared but systematically updated to reflect the new settings. Searching will continue to work but new content won\'t be indexed until all existing content has been re-indexed.</em></p><p><em>The default settings should be appropriate for the majority of sites.</em></p>')
+      '#markup' => $this->t("<p>Search pages that use an index may use the default index provided by the Search module, or they may use a different indexing mechanism. These settings are for the default index. <em>Changing these settings will cause the default search index to be rebuilt to reflect the new settings. Searching will continue to work, based on the existing index, but new content won't be indexed until all existing content has been re-indexed.</em></p><p><em>The default settings should be appropriate for the majority of sites.</em></p>")
     );
     $form['indexing_settings']['minimum_word_size'] = array(
       '#type' => 'number',
@@ -220,7 +228,7 @@ class SearchPageListBuilder extends DraggableListBuilder implements FormInterfac
       '#default_value' => $search_settings->get('index.minimum_word_size'),
       '#min' => 1,
       '#max' => 1000,
-      '#description' => $this->t('The number of characters a word has to be to be indexed. A lower setting means better search result ranking, but also a larger database. Each search query must contain at least one keyword that is this size (or longer).')
+      '#description' => $this->t('The minimum character length for a word to be added to the index. Searches must include a keyword of at least this length.'),
     );
     $form['indexing_settings']['overlap_cjk'] = array(
       '#type' => 'checkbox',
@@ -252,11 +260,6 @@ class SearchPageListBuilder extends DraggableListBuilder implements FormInterfac
       '#type' => 'container',
       '#attributes' => array(
         'class' => array('container-inline'),
-      ),
-      '#attached' => array(
-        'css' => array(
-          drupal_get_path('module', 'search') . '/css/search.admin.css',
-        ),
       ),
     );
     // In order to prevent validation errors for the parent form, this cannot be
@@ -328,13 +331,15 @@ class SearchPageListBuilder extends DraggableListBuilder implements FormInterfac
   public function submitForm(array &$form, FormStateInterface $form_state) {
     parent::submitForm($form, $form_state);
 
-    $search_settings = $this->configFactory->get('search.settings');
-    // If these settings change, the index needs to be rebuilt.
+    $search_settings = $this->config('search.settings');
+    // If these settings change, the default index needs to be rebuilt.
     if (($search_settings->get('index.minimum_word_size') != $form_state->getValue('minimum_word_size')) || ($search_settings->get('index.overlap_cjk') != $form_state->getValue('overlap_cjk'))) {
       $search_settings->set('index.minimum_word_size', $form_state->getValue('minimum_word_size'));
       $search_settings->set('index.overlap_cjk', $form_state->getValue('overlap_cjk'));
-      drupal_set_message($this->t('The index will be rebuilt.'));
-      search_reindex();
+      // Specifically mark items in the default index for reindexing, since
+      // these settings are used in the search_index() function.
+      drupal_set_message($this->t('The default search index will be rebuilt.'));
+      search_mark_for_reindex();
     }
 
     $search_settings

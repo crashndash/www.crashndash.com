@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of \Drupal\simpletest\Tests\SimpleTestTest.
+ * Contains \Drupal\simpletest\Tests\SimpleTestTest.
  */
 
 namespace Drupal\simpletest\Tests;
@@ -24,7 +24,7 @@ class SimpleTestTest extends WebTestBase {
    *
    * @var array
    */
-  public static $modules = array('simpletest', 'test_page_test');
+  public static $modules = ['simpletest'];
 
   /**
    * The results array that has been parsed by getTestResults().
@@ -38,7 +38,7 @@ class SimpleTestTest extends WebTestBase {
    *
    * Used to ensure they are incrementing.
    */
-  protected $test_ids = array();
+  protected $testIds = array();
 
   /**
    * Translated fail message.
@@ -52,6 +52,20 @@ class SimpleTestTest extends WebTestBase {
    * @var string
    */
   private $passMessage = '';
+
+  /**
+   * A valid and recognized permission.
+   *
+   * @var string
+   */
+  protected $validPermission;
+
+  /**
+   * An invalid or unrecognized permission.
+   *
+   * @var string
+   */
+  protected $invalidPermission;
 
   protected function setUp() {
     if (!$this->isInChildSite()) {
@@ -83,7 +97,7 @@ services:
 EOD;
       file_put_contents($this->siteDirectory . '/testing.services.yml', $yaml);
 
-      $original_container = \Drupal::getContainer();
+      $original_container = $this->originalContainer;
       parent::setUp();
       $this->assertNotIdentical(\Drupal::getContainer(), $original_container, 'WebTestBase test creates a new container.');
       // Create and log in an admin user.
@@ -103,8 +117,8 @@ EOD;
   function testWebTestRunner() {
     $this->passMessage = t('SimpleTest pass.');
     $this->failMessage = t('SimpleTest fail.');
-    $this->valid_permission = 'access administration pages';
-    $this->invalid_permission = 'invalid permission';
+    $this->validPermission = 'access administration pages';
+    $this->invalidPermission = 'invalid permission';
 
     if ($this->isInChildSite()) {
       // Only run following code if this test is running itself through a CURL
@@ -128,7 +142,7 @@ EOD;
 
       // Regression test for #290316.
       // Check that test_id is incrementing.
-      $this->assertTrue($this->test_ids[0] != $this->test_ids[1], 'Test ID is incrementing.');
+      $this->assertTrue($this->testIds[0] != $this->testIds[1], 'Test ID is incrementing.');
     }
   }
 
@@ -143,13 +157,32 @@ EOD;
     // request. This allows the stub test to make requests. The event does not
     // fire here and drupal_generate_test_ua() can not generate a key for a
     // test in a test since the prefix has changed.
-    // @see \Drupal\Core\Test\EventSubscriber\HttpRequestSubscriber::onBeforeSendRequest()
+    // @see \Drupal\Core\Test\HttpClientMiddleware\TestHttpClientMiddleware::onBeforeSendRequest()
     // @see drupal_generate_test_ua();
     $key_file = DRUPAL_ROOT . '/sites/simpletest/' . substr($this->databasePrefix, 10) . '/.htkey';
     $private_key = Crypt::randomBytesBase64(55);
+    $site_path = $this->container->get('site.path');
     file_put_contents($key_file, $private_key);
 
-    // This causes the first of the fifteen passes asserted in
+    // Check to see if runtime assertions are indeed on, if successful this
+    // will be the first of sixteen passes asserted in confirmStubResults()
+    try {
+      // Test with minimum possible arguments to make sure no notice for
+      // missing argument is thrown.
+      assert(FALSE);
+      $this->fail('Runtime assertions are not working.');
+    }
+    catch (\AssertionError $e) {
+      try {
+        // Now test with an error message to ensure it is correctly passed
+        // along by the rethrow.
+        assert(FALSE, 'Lorem Ipsum');
+      }
+      catch ( \AssertionError $e ) {
+        $this->assertEqual($e->getMessage(), 'Lorem Ipsum', 'Runtime assertions Enabled and running.');
+      }
+    }
+    // This causes the second of the sixteen passes asserted in
     // confirmStubResults().
     $this->pass($this->passMessage);
 
@@ -160,25 +193,25 @@ EOD;
     // confirmStubResults().
     $this->fail($this->failMessage);
 
-    // This causes the second to fourth of the fifteen passes asserted in
+    // This causes the third to fifth of the sixteen passes asserted in
     // confirmStubResults().
-    $user = $this->drupalCreateUser(array($this->valid_permission), 'SimpleTestTest');
+    $user = $this->drupalCreateUser(array($this->validPermission), 'SimpleTestTest');
 
     // This causes the fifth of the five fails asserted in confirmStubResults().
-    $this->drupalCreateUser(array($this->invalid_permission));
+    $this->drupalCreateUser(array($this->invalidPermission));
 
     // Test logging in as a user.
-    // This causes the fifth to ninth of the fifteen passes asserted in
+    // This causes the sixth to tenth of the sixteen passes asserted in
     // confirmStubResults().
     $this->drupalLogin($user);
 
-    // This causes the tenth of the fifteen passes asserted in
+    // This causes the eleventh of the sixteen passes asserted in
     // confirmStubResults().
     $this->pass(t('Test ID is @id.', array('@id' => $this->testId)));
 
-    // These cause the eleventh to fourteenth of the fifteen passes asserted in
+    // These cause the twelfth to fifteenth of the sixteen passes asserted in
     // confirmStubResults().
-    $this->assertTrue(file_exists(conf_path() . '/settings.testing.php'));
+    $this->assertTrue(file_exists($site_path . '/settings.testing.php'));
     // Check the settings.testing.php file got included.
     $this->assertTrue(function_exists('simpletest_test_stub_settings_function'));
     // Check that the test-specific service file got loaded.
@@ -191,12 +224,12 @@ EOD;
     // Generates a warning inside a PHP function.
     array_key_exists(NULL, NULL);
 
-    // This causes the fifteenth of the fifteen passes asserted in
+    // This causes the sixteenth of the sixteen passes asserted in
     // confirmStubResults().
     $this->assertNothing();
 
     // This causes the debug message asserted in confirmStubResults().
-    debug('Foo', 'Debug');
+    debug('Foo', 'Debug', FALSE);
   }
 
   /**
@@ -210,13 +243,13 @@ EOD;
    * Confirm that the stub test produced the desired results.
    */
   function confirmStubTestResults() {
-    $this->assertAssertion(t('Enabled modules: %modules', array('%modules' => 'non_existent_module')), 'Other', 'Fail', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->setUp()');
+    $this->assertAssertion(t('Unable to install modules %modules due to missing modules %missing.', array('%modules' => 'non_existent_module', '%missing' => 'non_existent_module')), 'Other', 'Fail', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->setUp()');
 
     $this->assertAssertion($this->passMessage, 'Other', 'Pass', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->stubTest()');
     $this->assertAssertion($this->failMessage, 'Other', 'Fail', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->stubTest()');
 
-    $this->assertAssertion(t('Created permissions: @perms', array('@perms' => $this->valid_permission)), 'Role', 'Pass', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->stubTest()');
-    $this->assertAssertion(t('Invalid permission %permission.', array('%permission' => $this->invalid_permission)), 'Role', 'Fail', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->stubTest()');
+    $this->assertAssertion(t('Created permissions: @perms', array('@perms' => $this->validPermission)), 'Role', 'Pass', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->stubTest()');
+    $this->assertAssertion(t('Invalid permission %permission.', array('%permission' => $this->invalidPermission)), 'Role', 'Fail', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->stubTest()');
 
     // Check that the user was logged in successfully.
     $this->assertAssertion('User SimpleTestTest successfully logged in.', 'User login', 'Pass', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->stubTest()');
@@ -235,9 +268,9 @@ EOD;
 
     $this->assertAssertion("Debug: 'Foo'", 'Debug', 'Fail', 'SimpleTestTest.php', 'Drupal\simpletest\Tests\SimpleTestTest->stubTest()');
 
-    $this->assertEqual('15 passes, 3 fails, 2 exceptions, 3 debug messages', $this->childTestResults['summary']);
+    $this->assertEqual('16 passes, 3 fails, 2 exceptions, 3 debug messages', $this->childTestResults['summary']);
 
-    $this->test_ids[] = $test_id = $this->getTestIdFromResults();
+    $this->testIds[] = $test_id = $this->getTestIdFromResults();
     $this->assertTrue($test_id, 'Found test ID in results.');
   }
 
@@ -260,7 +293,7 @@ EOD;
    * @param string $type Assertion type.
    * @param string $status Assertion status.
    * @param string $file File where the assertion originated.
-   * @param string $functuion Function where the assertion originated.
+   * @param string $function Function where the assertion originated.
    *
    * @return Assertion result.
    */
@@ -300,7 +333,7 @@ EOD;
           $assertion['file'] = $this->asText($row->td[2]);
           $assertion['line'] = $this->asText($row->td[3]);
           $assertion['function'] = $this->asText($row->td[4]);
-          $ok_url = file_create_url('core/misc/icons/73b355/check.svg');
+          $ok_url = file_url_transform_relative(file_create_url('core/misc/icons/73b355/check.svg'));
           $assertion['status'] = ($row->td[5]->img['src'] == $ok_url) ? 'Pass' : 'Fail';
           $results['assertions'][] = $assertion;
         }

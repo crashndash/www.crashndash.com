@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\user\Tests\UserCreateTest.
+ * Contains \Drupal\user\Tests\UserCreateTest.
  */
 
 namespace Drupal\user\Tests;
@@ -27,7 +27,7 @@ class UserCreateTest extends WebTestBase {
    * Create a user through the administration interface and ensure that it
    * displays in the user list.
    */
-  protected function testUserAdd() {
+  public function testUserAdd() {
     $user = $this->drupalCreateUser(array('administer users'));
     $this->drupalLogin($user);
 
@@ -77,7 +77,7 @@ class UserCreateTest extends WebTestBase {
     $this->assertNoRaw('data-user-info-from-browser', 'Ensure form attribute, data-user-info-from-browser, does not exist.');
 
     // Test that the password strength indicator displays.
-    $config = \Drupal::config('user.settings');
+    $config = $this->config('user.settings');
 
     $config->set('password_strength', TRUE)->save();
     $this->drupalGet('admin/people/create');
@@ -114,5 +114,19 @@ class UserCreateTest extends WebTestBase {
       $user = user_load_by_name($name);
       $this->assertEqual($user->isActive(), 'User is not blocked');
     }
+
+    // Test that the password '0' is considered a password.
+    // @see https://www.drupal.org/node/2563751.
+    $name = $this->randomMachineName();
+    $edit = array(
+      'name' => $name,
+      'mail' => $this->randomMachineName() . '@example.com',
+      'pass[pass1]' => 0,
+      'pass[pass2]' => 0,
+      'notify' => FALSE,
+    );
+    $this->drupalPostForm('admin/people/create', $edit, t('Create new account'));
+    $this->assertText("Created a new user account for $name. No email has been sent");
+    $this->assertNoText('Password field is required');
   }
 }

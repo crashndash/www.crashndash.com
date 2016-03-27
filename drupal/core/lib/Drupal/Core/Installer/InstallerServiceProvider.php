@@ -47,15 +47,23 @@ class InstallerServiceProvider implements ServiceProviderInterface, ServiceModif
       ->register('url_generator', 'Drupal\Core\Routing\NullGenerator')
       ->addArgument(new Reference('request_stack'));
     $container
+      ->register('path_processor_manager', 'Drupal\Core\PathProcessor\NullPathProcessorManager');
+    $container
       ->register('router.dumper', 'Drupal\Core\Routing\NullMatcherDumper');
+
+    // Remove the cache tags invalidator tag from the cache tags storage, so
+    // that we don't call it when cache tags are invalidated very early in the
+    // installer.
+    $container->getDefinition('cache_tags.invalidator.checksum')
+      ->clearTag('cache_tags_invalidator');
 
     // Replace the route builder with an empty implementation.
     // @todo Convert installer steps into routes; add an installer.routing.yml.
     $definition = $container->getDefinition('router.builder');
-    $definition->setClass('Drupal\Core\Installer\InstallerRouteBuilder');
-
-    // Remove dependencies on Drupal's default session handling.
-    $container->removeDefinition('authentication.cookie');
+    $definition->setClass('Drupal\Core\Installer\InstallerRouteBuilder')
+      // The core router builder, but there is no reason here to be lazy, so
+      // we don't need to ship with a custom proxy class.
+      ->setLazy(FALSE);
   }
 
   /**
@@ -66,11 +74,6 @@ class InstallerServiceProvider implements ServiceProviderInterface, ServiceModif
     $twig_config = $container->getParameter('twig.config');
     $twig_config['cache'] = FALSE;
     $container->setParameter('twig.config', $twig_config);
-
-    // Disable configuration overrides.
-    // ConfigFactory would to try to load language overrides and InstallStorage
-    // throws an exception upon trying to load a non-existing file.
-    $container->get('config.factory')->setOverrideState(FALSE);
 
     // No service may persist when the early installer kernel is rebooted into
     // the production environment.

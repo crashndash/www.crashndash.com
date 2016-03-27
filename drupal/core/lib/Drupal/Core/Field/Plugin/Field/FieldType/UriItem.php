@@ -2,11 +2,13 @@
 
 /**
  * @file
- * Contains \Drupal\Core\Entity\Plugin\Field\FieldType\UriItem.
+ * Contains \Drupal\Core\Field\Plugin\Field\FieldType\UriItem.
  */
 
 namespace Drupal\Core\Field\Plugin\Field\FieldType;
 
+use Drupal\Component\Utility\Unicode;
+use Drupal\Core\Field\FieldDefinitionInterface;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\TypedData\DataDefinition;
 
@@ -23,6 +25,7 @@ use Drupal\Core\TypedData\DataDefinition;
  *   description = @Translation("An entity field containing a URI."),
  *   no_ui = TRUE,
  *   default_formatter = "uri_link",
+ *   default_widget = "uri",
  * )
  */
 class UriItem extends StringItem {
@@ -31,9 +34,11 @@ class UriItem extends StringItem {
    * {@inheritdoc}
    */
   public static function defaultStorageSettings() {
-    return array(
-      'max_length' => 2048,
-    ) + parent::defaultStorageSettings();
+    $storage_settings = parent::defaultStorageSettings();
+    // is_ascii doesn't make sense for URIs.
+    unset($storage_settings['is_ascii']);
+    $storage_settings['max_length'] = 2048;
+    return $storage_settings;
   }
 
   /**
@@ -41,7 +46,9 @@ class UriItem extends StringItem {
    */
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
     $properties['value'] = DataDefinition::create('uri')
-      ->setLabel(t('URI value'));
+      ->setLabel(t('URI value'))
+      ->setSetting('case_sensitive', $field_definition->getSetting('case_sensitive'))
+      ->setRequired(TRUE);
 
     return $properties;
   }
@@ -55,7 +62,7 @@ class UriItem extends StringItem {
         'value' => array(
           'type' => 'varchar',
           'length' => (int) $field_definition->getSetting('max_length'),
-          'not null' => TRUE,
+          'binary' => $field_definition->getSetting('case_sensitive'),
         ),
       ),
     );
@@ -70,6 +77,18 @@ class UriItem extends StringItem {
       return TRUE;
     }
     return parent::isEmpty();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function generateSampleValue(FieldDefinitionInterface $field_definition) {
+    $values = parent::generateSampleValue($field_definition);
+    $suffix_length = $field_definition->getSetting('max_length') - 7;
+    foreach ($values as $key => $value) {
+      $values[$key] = 'http://' . Unicode::substr($value, 0, $suffix_length);
+    }
+    return $values;
   }
 
 }

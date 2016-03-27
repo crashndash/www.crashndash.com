@@ -7,7 +7,10 @@
 
 namespace Drupal\field_ui\Tests;
 
+use Drupal\Core\Entity\Entity\EntityFormDisplay;
 use Drupal\Core\Entity\Entity\EntityFormMode;
+use Drupal\field\Entity\FieldConfig;
+use Drupal\field\Entity\FieldStorageConfig;
 use Drupal\simpletest\KernelTestBase;
 
 /**
@@ -17,11 +20,15 @@ use Drupal\simpletest\KernelTestBase;
  */
 class EntityFormDisplayTest extends KernelTestBase {
 
-  public static $modules = array('field_ui', 'field', 'entity_test', 'field_test', 'user', 'text');
+  /**
+   * Modules to install.
+   *
+   * @var string[]
+   */
+  public static $modules = ['field_ui', 'field', 'entity_test', 'field_test', 'user', 'text'];
 
   protected function setUp() {
     parent::setUp();
-    $this->installConfig(array('field'));
   }
 
   /**
@@ -40,8 +47,8 @@ class EntityFormDisplayTest extends KernelTestBase {
     // Check that entity_get_form_display() returns the correct object.
     $form_display = entity_get_form_display('entity_test', 'entity_test', 'default');
     $this->assertFalse($form_display->isNew());
-    $this->assertEqual($form_display->id, 'entity_test.entity_test.default');
-    $this->assertEqual($form_display->getComponent('component_1'), array('weight' => 10));
+    $this->assertEqual($form_display->id(), 'entity_test.entity_test.default');
+    $this->assertEqual($form_display->getComponent('component_1'), array('weight' => 10, 'settings' => array(), 'third_party_settings' => array()));
   }
 
   /**
@@ -50,19 +57,19 @@ class EntityFormDisplayTest extends KernelTestBase {
   public function testFieldComponent() {
     // Create a field storage and a field.
     $field_name = 'test_field';
-    $field_storage = entity_create('field_storage_config', array(
+    $field_storage = FieldStorageConfig::create(array(
       'field_name' => $field_name,
       'entity_type' => 'entity_test',
       'type' => 'test_field'
     ));
     $field_storage->save();
-    $field = entity_create('field_config', array(
+    $field = FieldConfig::create(array(
       'field_storage' => $field_storage,
       'bundle' => 'entity_test',
     ));
     $field->save();
 
-    $form_display = entity_create('entity_form_display', array(
+    $form_display = EntityFormDisplay::create(array(
       'targetEntityType' => 'entity_test',
       'bundle' => 'entity_test',
       'mode' => 'default',
@@ -70,7 +77,7 @@ class EntityFormDisplayTest extends KernelTestBase {
 
     // Check that providing no options results in default values being used.
     $form_display->setComponent($field_name);
-    $field_type_info = \Drupal::service('plugin.manager.field.field_type')->getDefinition($field_storage->type);
+    $field_type_info = \Drupal::service('plugin.manager.field.field_type')->getDefinition($field_storage->getType());
     $default_widget = $field_type_info['default_widget'];
     $widget_settings = \Drupal::service('plugin.manager.field.widget')->getDefaultSettings($default_widget);
     $expected = array(
@@ -117,7 +124,7 @@ class EntityFormDisplayTest extends KernelTestBase {
    * Tests the behavior of a field component for a base field.
    */
   public function testBaseFieldComponent() {
-    $display = entity_create('entity_form_display', array(
+    $display = EntityFormDisplay::create(array(
       'targetEntityType' => 'entity_test_base_field_display',
       'bundle' => 'entity_test_base_field_display',
       'mode' => 'default',
@@ -147,7 +154,7 @@ class EntityFormDisplayTest extends KernelTestBase {
     // Check that saving the display only writes data for fields whose display
     // is configurable.
     $display->save();
-    $config = \Drupal::config('core.entity_form_display.' . $display->id());
+    $config = $this->config('core.entity_form_display.' . $display->id());
     $data = $config->get();
     $this->assertFalse(isset($data['content']['test_no_display']));
     $this->assertFalse(isset($data['hidden']['test_no_display']));
@@ -178,13 +185,13 @@ class EntityFormDisplayTest extends KernelTestBase {
   public function testDeleteField() {
     $field_name = 'test_field';
     // Create a field storage and a field.
-    $field_storage = entity_create('field_storage_config', array(
+    $field_storage = FieldStorageConfig::create(array(
       'field_name' => $field_name,
       'entity_type' => 'entity_test',
       'type' => 'test_field'
     ));
     $field_storage->save();
-    $field = entity_create('field_config', array(
+    $field = FieldConfig::create(array(
       'field_storage' => $field_storage,
       'bundle' => 'entity_test',
     ));
@@ -192,12 +199,12 @@ class EntityFormDisplayTest extends KernelTestBase {
 
     // Create default and compact entity display.
     EntityFormMode::create(array('id' =>  'entity_test.compact', 'targetEntityType' => 'entity_test'))->save();
-    entity_create('entity_form_display', array(
+    EntityFormDisplay::create(array(
       'targetEntityType' => 'entity_test',
       'bundle' => 'entity_test',
       'mode' => 'default',
     ))->setComponent($field_name)->save();
-    entity_create('entity_form_display', array(
+    EntityFormDisplay::create(array(
       'targetEntityType' => 'entity_test',
       'bundle' => 'entity_test',
       'mode' => 'compact',
@@ -220,26 +227,26 @@ class EntityFormDisplayTest extends KernelTestBase {
   }
 
   /**
-   * Tests \Drupal\entity\EntityDisplayBase::onDependencyRemoval().
+   * Tests \Drupal\Core\Entity\EntityDisplayBase::onDependencyRemoval().
    */
   public function testOnDependencyRemoval() {
     $this->enableModules(array('field_plugins_test'));
 
     $field_name = 'test_field';
     // Create a field.
-    $field_storage = entity_create('field_storage_config', array(
+    $field_storage = FieldStorageConfig::create(array(
       'field_name' => $field_name,
       'entity_type' => 'entity_test',
       'type' => 'text'
     ));
     $field_storage->save();
-    $field = entity_create('field_config', array(
+    $field = FieldConfig::create(array(
       'field_storage' => $field_storage,
       'bundle' => 'entity_test',
     ));
     $field->save();
 
-    entity_create('entity_form_display', array(
+    EntityFormDisplay::create(array(
       'targetEntityType' => 'entity_test',
       'bundle' => 'entity_test',
       'mode' => 'default',

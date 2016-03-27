@@ -2,12 +2,10 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Ajax\InvokeCommand.
+ * Contains \Drupal\Core\Ajax\InvokeCommand.
  */
 
 namespace Drupal\Core\Ajax;
-
-use Drupal\Core\Ajax\CommandInterface;
 
 /**
  * AJAX command for invoking an arbitrary jQuery method.

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\Tests\path\Unit\Plugin\Field\FieldType\PathFieldDefinitionTest.
+ * Contains \Drupal\Tests\path\Unit\Field\PathFieldDefinitionTest.
  */
 
 namespace Drupal\Tests\path\Unit\Field;
@@ -30,10 +30,8 @@ class PathFieldDefinitionTest extends BaseFieldDefinitionTestBase {
   }
 
   /**
-   * Tests BaseFieldDefinition::getColumns().
-   *
-   * @covers \Drupal\Core\Field\BaseFieldDefinition::getColumns
-   * @covers \Drupal\path\Plugin\Field\FieldType\PathItem::schema
+   * @covers ::getColumns
+   * @covers ::getSchema
    */
   public function testGetColumns() {
     $this->assertSame(array(), $this->definition->getColumns());

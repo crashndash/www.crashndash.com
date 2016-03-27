@@ -7,6 +7,10 @@
 
 namespace Drupal\views_ui\Tests;
 
+use Drupal\Core\Url;
+use Drupal\user\Entity\Role;
+use Drupal\user\RoleInterface;
+
 /**
  * Tests enabling, disabling, and reverting default views via the listing page.
  *
@@ -20,6 +24,13 @@ class DefaultViewsTest extends UITestBase {
    * @var array
    */
   public static $testViews = array('test_view_status', 'test_page_display_menu', 'test_page_display_arguments');
+
+
+  protected function setUp() {
+    parent::setUp();
+
+    $this->drupalPlaceBlock('page_title_block');
+  }
 
   /**
    * Tests default views.
@@ -64,6 +75,8 @@ class DefaultViewsTest extends UITestBase {
     // editing.
     $this->drupalGet('admin/structure/views');
     $this->assertLinkByHref('admin/structure/views/view/archive/enable');
+    // Enable it again so it can be tested for access permissions.
+    $this->clickViewsOperationLink(t('Enable'), '/archive/');
 
     // It should now be possible to revert the view. Do that, and make sure the
     // view title we added above no longer is displayed.
@@ -80,7 +93,7 @@ class DefaultViewsTest extends UITestBase {
     $edit = array(
       'id' => 'duplicate_of_glossary',
     );
-    $this->assertTitle(t('Duplicate of @label | @site-name', array('@label' => 'Glossary', '@site-name' => \Drupal::config('system.site')->get('name'))));
+    $this->assertTitle(t('Duplicate of @label | @site-name', array('@label' => 'Glossary', '@site-name' => $this->config('system.site')->get('name'))));
     $this->drupalPostForm(NULL, $edit, t('Duplicate'));
     $this->assertUrl('admin/structure/views/view/duplicate_of_glossary', array(), 'The normal duplicating name schema is applied.');
 
@@ -106,7 +119,18 @@ class DefaultViewsTest extends UITestBase {
     $this->assertUrl('admin/structure/views');
     $this->assertLinkByHref($edit_href);
 
+    // Clear permissions for anonymous users to check access for default views.
+    Role::load(RoleInterface::ANONYMOUS_ID)->revokePermission('access content')->save();
+
+    // Test the default views disclose no data by default.
+    $this->drupalLogout();
+    $this->drupalGet('glossary');
+    $this->assertResponse(403);
+    $this->drupalGet('archive');
+    $this->assertResponse(403);
+
     // Test deleting a view.
+    $this->drupalLogin($this->fullAdminUser);
     $this->drupalGet('admin/structure/views');
     $this->clickViewsOperationLink(t('Delete'), '/glossary/');
     // Submit the confirmation form.
@@ -116,6 +140,23 @@ class DefaultViewsTest extends UITestBase {
     $this->assertNoLinkByHref($edit_href);
     // Ensure the view is no longer available.
     $this->drupalGet($edit_href);
+    $this->assertResponse(404);
+    $this->assertText('Page not found');
+
+    // Delete all duplicated Glossary views.
+    $this->drupalGet('admin/structure/views');
+    $this->clickViewsOperationLink(t('Delete'), 'duplicate_of_glossary');
+    // Submit the confirmation form.
+    $this->drupalPostForm(NULL, array(), t('Delete'));
+
+    $this->drupalGet('glossary');
+    $this->assertResponse(200);
+
+    $this->drupalGet('admin/structure/views');
+    $this->clickViewsOperationLink(t('Delete'), $random_name);
+    // Submit the confirmation form.
+    $this->drupalPostForm(NULL, array(), t('Delete'));
+    $this->drupalGet('glossary');
     $this->assertResponse(404);
     $this->assertText('Page not found');
   }
@@ -168,7 +209,7 @@ class DefaultViewsTest extends UITestBase {
 
     // Check that a dynamic path is shown as text.
     $this->assertRaw('test_route_with_suffix/%/suffix');
-    $this->assertNoLinkByHref(_url('test_route_with_suffix/%/suffix'));
+    $this->assertNoLinkByHref(Url::fromUri('base:test_route_with_suffix/%/suffix')->toString());
   }
 
   /**
@@ -183,7 +224,7 @@ class DefaultViewsTest extends UITestBase {
    * @param $unique_href_part
    *   A unique string that is expected to occur within the href of the desired
    *   link. For example, if the link URL is expected to look like
-   *   "admin/structure/views/view/glossary/...", then "/glossary/" could be
+   *   "admin/structure/views/view/glossary/*", then "/glossary/" could be
    *   passed as the expected unique string.
    *
    * @return

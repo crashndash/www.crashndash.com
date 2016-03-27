@@ -7,7 +7,6 @@
 
 namespace Drupal\Core\Entity;
 
-use Drupal\Component\Utility\String;
 use Drupal\Component\Utility\Unicode;
 use Drupal\Core\Entity\Exception\EntityTypeIdLengthException;
 use Drupal\Core\StringTranslation\StringTranslationTrait;
@@ -111,7 +110,15 @@ class EntityType implements EntityTypeInterface {
   /**
    * The name of a callback that returns the label of the entity.
    *
-   * @var string|null
+   * @var callable|null
+   *
+   * @deprecated in Drupal 8.0.x-dev and will be removed before Drupal 9.0.0.
+   *   Use Drupal\Core\Entity\EntityInterface::label() for complex label
+   *   generation as needed.
+   *
+   * @see \Drupal\Core\Entity\EntityInterface::label()
+   *
+   * @todo Remove usages of label_callback https://www.drupal.org/node/2450793.
    */
   protected $label_callback = NULL;
 
@@ -120,7 +127,7 @@ class EntityType implements EntityTypeInterface {
    *
    * @var string
    */
-  protected $bundle_entity_type = 'bundle';
+  protected $bundle_entity_type = NULL;
 
   /**
    * The name of the entity type for which bundles are provided.
@@ -203,11 +210,42 @@ class EntityType implements EntityTypeInterface {
   protected $field_ui_base_route;
 
   /**
+   * Indicates whether this entity type is commonly used as a reference target.
+   *
+   * This is used by the Entity reference field to promote an entity type in the
+   * add new field select list in Field UI.
+   *
+   * @var bool
+   */
+  protected $common_reference_target = FALSE;
+
+  /**
+   * The list cache contexts for this entity type.
+   *
+   * @var string[]
+   */
+  protected $list_cache_contexts = [];
+
+  /**
    * The list cache tags for this entity type.
+   *
+   * @var string[]
+   */
+  protected $list_cache_tags = [];
+
+  /**
+   * Entity constraint definitions.
+   *
+   * @var array[]
+   */
+  protected $constraints = array();
+
+  /**
+   * Any additional properties and values.
    *
    * @var array
    */
-  protected $list_cache_tags = array();
+  protected $additional = [];
 
   /**
    * Constructs a new EntityType.
@@ -221,26 +259,32 @@ class EntityType implements EntityTypeInterface {
   public function __construct($definition) {
     // Throw an exception if the entity type ID is longer than 32 characters.
     if (Unicode::strlen($definition['id']) > static::ID_MAX_LENGTH) {
-      throw new EntityTypeIdLengthException(String::format(
-        'Attempt to create an entity type with an ID longer than @max characters: @id.', array(
-          '@max' => static::ID_MAX_LENGTH,
-          '@id' => $definition['id'],
-        )
-      ));
+      throw new EntityTypeIdLengthException('Attempt to create an entity type with an ID longer than ' . static::ID_MAX_LENGTH . " characters: {$definition['id']}.");
     }
 
     foreach ($definition as $property => $value) {
-      $this->{$property} = $value;
+      $this->set($property, $value);
     }
 
     // Ensure defaults.
     $this->entity_keys += array(
       'revision' => '',
-      'bundle' => ''
+      'bundle' => '',
+      'langcode' => '',
+      'default_langcode' => 'default_langcode',
     );
     $this->handlers += array(
       'access' => 'Drupal\Core\Entity\EntityAccessControlHandler',
     );
+    if (isset($this->handlers['storage'])) {
+      $this->checkStorageClass($this->handlers['storage']);
+    }
+
+    // Automatically add the EntityChanged constraint if the entity type tracks
+    // the changed time.
+    if ($this->isSubclassOf('Drupal\Core\Entity\EntityChangedInterface') ) {
+      $this->addConstraint('EntityChanged');
+    }
 
     // Ensure a default list cache tag is set.
     if (empty($this->list_cache_tags)) {
@@ -253,14 +297,25 @@ class EntityType implements EntityTypeInterface {
    * {@inheritdoc}
    */
   public function get($property) {
-    return isset($this->{$property}) ? $this->{$property} : NULL;
+    if (property_exists($this, $property)) {
+      $value = isset($this->{$property}) ? $this->{$property} : NULL;
+    }
+    else {
+      $value = isset($this->additional[$property]) ? $this->additional[$property] : NULL;
+    }
+    return $value;
   }
 
   /**
    * {@inheritdoc}
    */
   public function set($property, $value) {
-    $this->{$property} = $value;
+    if (property_exists($this, $property)) {
+      $this->{$property} = $value;
+    }
+    else {
+      $this->additional[$property] = $value;
+    }
     return $this;
   }
 
@@ -407,7 +462,18 @@ class EntityType implements EntityTypeInterface {
    * {@inheritdoc}
    */
   public function setStorageClass($class) {
+    $this->checkStorageClass($class);
     $this->handlers['storage'] = $class;
+  }
+
+  /**
+   * Checks that the provided class is compatible with the current entity type.
+   *
+   * @param string $class
+   *   The class to check.
+   */
+  protected function checkStorageClass($class) {
+    // Nothing to check by default.
   }
 
   /**
@@ -430,6 +496,13 @@ class EntityType implements EntityTypeInterface {
    */
   public function hasFormClasses() {
     return !empty($this->handlers['form']);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function hasRouteProviders() {
+    return !empty($this->handlers['route_provider']);
   }
 
   /**
@@ -474,6 +547,13 @@ class EntityType implements EntityTypeInterface {
    */
   public function hasViewBuilderClass() {
     return $this->hasHandlerClass('view_builder');
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getRouteProviderClasses() {
+    return !empty($this->handlers['route_provider']) ? $this->handlers['route_provider'] : [];
   }
 
   /**
@@ -531,8 +611,12 @@ class EntityType implements EntityTypeInterface {
   /**
    * {@inheritdoc}
    */
-  public function setLinkTemplate($key, $route_name) {
-    $this->links[$key] = $route_name;
+  public function setLinkTemplate($key, $path) {
+    if ($path[0] !== '/') {
+      throw new \InvalidArgumentException('Link templates accepts paths, which have to start with a leading slash.');
+    }
+
+    $this->links[$key] = $path;
     return $this;
   }
 
@@ -604,13 +688,6 @@ class EntityType implements EntityTypeInterface {
   /**
    * {@inheritdoc}
    */
-  public function getConfigPrefix() {
-    return FALSE;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
   public function getRevisionDataTable() {
     return $this->revision_data_table;
   }
@@ -633,7 +710,7 @@ class EntityType implements EntityTypeInterface {
    * {@inheritdoc}
    */
   public function getLabel() {
-    return (string) $this->label;
+    return $this->label;
   }
 
   /**
@@ -670,7 +747,14 @@ class EntityType implements EntityTypeInterface {
    * {@inheritdoc}
    */
   public function getGroupLabel() {
-    return !empty($this->group_label) ? (string) $this->group_label : $this->t('Other', array(), array('context' => 'Entity type group'));
+    return !empty($this->group_label) ? $this->group_label : $this->t('Other', array(), array('context' => 'Entity type group'));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getListCacheContexts() {
+    return $this->list_cache_contexts;
   }
 
   /**
@@ -678,6 +762,72 @@ class EntityType implements EntityTypeInterface {
    */
   public function getListCacheTags() {
     return $this->list_cache_tags;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getConfigDependencyKey() {
+    // Return 'content' for the default implementation as important distinction
+    // is that dependencies on other configuration entities are hard
+    // dependencies and have to exist before creating the dependent entity.
+    return 'content';
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isCommonReferenceTarget() {
+    return $this->common_reference_target;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getConstraints() {
+    return $this->constraints;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setConstraints(array $constraints) {
+    $this->constraints = $constraints;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function addConstraint($constraint_name, $options = NULL) {
+    $this->constraints[$constraint_name] = $options;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getBundleConfigDependency($bundle) {
+    // If this entity type uses entities to manage its bundles then depend on
+    // the bundle entity.
+    if ($bundle_entity_type_id = $this->getBundleEntityType()) {
+      if (!$bundle_entity = \Drupal::entityManager()->getStorage($bundle_entity_type_id)->load($bundle)) {
+        throw new \LogicException(sprintf('Missing bundle entity, entity type %s, entity id %s.', $bundle_entity_type_id, $bundle));
+      }
+      $config_dependency = [
+        'type' => 'config',
+        'name' => $bundle_entity->getConfigDependencyName(),
+      ];
+    }
+    else {
+      // Depend on the provider of the entity type.
+      $config_dependency = [
+        'type' => 'module',
+        'name' => $this->getProvider(),
+      ];
+    }
+
+    return $config_dependency;
   }
 
 }

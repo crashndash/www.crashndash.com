@@ -2,14 +2,13 @@
 
 /**
  * @file
- * Definition of Drupal\config\Tests\Storage\CachedStorageTest.
+ * Contains \Drupal\config\Tests\Storage\CachedStorageTest.
  */
 
 namespace Drupal\config\Tests\Storage;
 
 use Drupal\Core\Config\FileStorage;
 use Drupal\Core\Config\CachedStorage;
-use Drupal\Core\Database\Database;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;
 
@@ -32,12 +31,15 @@ class CachedStorageTest extends ConfigStorageTestBase {
    *
    * @var \Drupal\Core\Config\FileStorage
    */
-  protected $filestorage;
+  protected $fileStorage;
 
   protected function setUp() {
     parent::setUp();
-    $this->filestorage = new FileStorage($this->configDirectories[CONFIG_ACTIVE_DIRECTORY]);
-    $this->storage = new CachedStorage($this->filestorage, \Drupal::service('cache.config'));
+    // Create a directory.
+    $dir = $this->publicFilesDirectory . '/config';
+    mkdir($dir);
+    $this->fileStorage = new FileStorage($dir);
+    $this->storage = new CachedStorage($this->fileStorage, \Drupal::service('cache.config'));
     $this->cache = \Drupal::service('cache_factory')->get('config');
     // ::listAll() verifications require other configuration data to exist.
     $this->storage->write('system.performance', array());
@@ -56,14 +58,14 @@ class CachedStorageTest extends ConfigStorageTestBase {
   protected function read($name) {
     $data = $this->cache->get($name);
     // Cache misses fall through to the underlying storage.
-    return $data ? $data->data : $this->filestorage->read($name);
+    return $data ? $data->data : $this->fileStorage->read($name);
   }
 
   /**
    * {@inheritdoc}
    */
   protected function insert($name, $data) {
-    $this->filestorage->write($name, $data);
+    $this->fileStorage->write($name, $data);
     $this->cache->set($name, $data);
   }
 
@@ -71,7 +73,7 @@ class CachedStorageTest extends ConfigStorageTestBase {
    * {@inheritdoc}
    */
   protected function update($name, $data) {
-    $this->filestorage->write($name, $data);
+    $this->fileStorage->write($name, $data);
     $this->cache->set($name, $data);
   }
 
@@ -80,7 +82,7 @@ class CachedStorageTest extends ConfigStorageTestBase {
    */
   protected function delete($name) {
     $this->cache->delete($name);
-    unlink($this->filestorage->getFilePath($name));
+    unlink($this->fileStorage->getFilePath($name));
   }
 
   /**
@@ -90,7 +92,8 @@ class CachedStorageTest extends ConfigStorageTestBase {
     parent::containerBuild($container);
     // Use the regular database cache backend to aid testing.
     $container->register('cache_factory', 'Drupal\Core\Cache\DatabaseBackendFactory')
-      ->addArgument(new Reference('database'));
+      ->addArgument(new Reference('database'))
+      ->addArgument(new Reference('cache_tags.invalidator.checksum'));
   }
 
 }

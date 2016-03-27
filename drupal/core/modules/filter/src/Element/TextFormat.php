@@ -15,6 +15,27 @@ use Drupal\Core\Url;
 /**
  * Provides a text format render element.
  *
+ * Properties:
+ * - #base_type: The form element #type to use for the 'value' element.
+ *   'textarea' by default.
+ * - #format: (optional) The text format ID to preselect. If omitted, the
+ *   default format for the current user will be used.
+ * - #allowed_formats: (optional) An array of text format IDs that are available
+ *   for this element. If omitted, all text formats that the current user has
+ *   access to will be allowed.
+ *
+ * Usage Example:
+ * @code
+ * $form['body'] = array(
+ *   '#type' => 'text_format',
+ *   '#title' => 'Body',
+ *   '#format' => 'full_html',
+ *   '#default_value' => '<p>The quick brown fox jumped over the lazy dog.</p>',
+ * );
+ * @endcode
+ *
+ * @see \Drupal\Core\Render\Element\Textarea
+ *
  * @RenderElement("text_format")
  */
 class TextFormat extends RenderElement {
@@ -54,14 +75,7 @@ class TextFormat extends RenderElement {
    * @endcode
    *
    * @param array $element
-   *   The form element to process. Properties used:
-   *   - #base_type: The form element #type to use for the 'value' element.
-   *     'textarea' by default.
-   *   - #format: (optional) The text format ID to preselect. If omitted, the
-   *     default format for the current user will be used.
-   *   - #allowed_formats: (optional) An array of text format IDs that are
-   *     available for this element. If omitted, all text formats that the
-   *     current user has access to will be allowed.
+   *   The form element to process. See main class documentation for properties.
    * @param \Drupal\Core\Form\FormStateInterface $form_state
    *   The current state of the form.
    * @param array $complete_form
@@ -83,6 +97,8 @@ class TextFormat extends RenderElement {
       // Do not copy this #process function to prevent
       // \Drupal::formBuilder()->doBuildForm() from recursing infinitely.
       '#process',
+      // Ensure #pre_render functions will be run.
+      '#pre_render',
       // Description is handled by theme_text_format_wrapper().
       '#description',
       // Ensure proper ordering of children.
@@ -131,7 +147,7 @@ class TextFormat extends RenderElement {
     if (!isset($element['#format']) && !empty($formats)) {
       // If no text format was selected, use the allowed format with the highest
       // weight. This is equivalent to calling filter_default_format().
-      $element['#format'] = reset($formats)->format;
+      $element['#format'] = reset($formats)->id();
     }
 
     // If #allowed_formats is set, the list of formats must not be modified in
@@ -176,12 +192,17 @@ class TextFormat extends RenderElement {
       '#parents' => array_merge($element['#parents'], array('format')),
     );
 
-    $element['format']['help'] = array(
+    $element['format']['help'] = [
       '#type' => 'container',
-      '#attributes' => array('class' => array('filter-help')),
-      '#markup' => \Drupal::l(t('About text formats'), new Url('filter.tips_all', array(), array('attributes' => array('target' => '_blank')))),
+      'about' => [
+        '#type' => 'link',
+        '#title' => t('About text formats'),
+        '#url' => new Url('filter.tips_all'),
+        '#attributes' => ['target' => '_blank'],
+      ],
+      '#attributes' => ['class' => ['filter-help']],
       '#weight' => 0,
-    );
+    ];
 
     $all_formats = filter_formats();
     $format_exists = isset($all_formats[$element['#format']]);

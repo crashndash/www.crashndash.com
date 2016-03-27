@@ -7,6 +7,7 @@
 
 namespace Drupal\Core\Field;
 
+use Drupal\Core\Cache\CacheableDependencyInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 
 /**
@@ -27,7 +28,7 @@ use Drupal\Core\Entity\FieldableEntityInterface;
  *
  * @see hook_entity_field_storage_info()
  */
-interface FieldStorageDefinitionInterface {
+interface FieldStorageDefinitionInterface extends CacheableDependencyInterface {
 
   /**
    * Value indicating a field accepts an unlimited number of values.
@@ -56,11 +57,15 @@ interface FieldStorageDefinitionInterface {
   public function getType();
 
   /**
-   * Returns the field settings.
+   * Returns the storage settings.
    *
    * Each field type defines the settings that are meaningful for that type.
    * For example, a text field can define a 'max_length' setting, and an image
    * field can define a 'alt_field_required' setting.
+   *
+   * The method always returns an array of all available settings for this field
+   * type, possibly with the default values merged in if values have not been
+   * provided for all available settings.
    *
    * @return mixed[]
    *   An array of key/value pairs.
@@ -68,7 +73,7 @@ interface FieldStorageDefinitionInterface {
   public function getSettings();
 
   /**
-   * Returns the value of a given field setting.
+   * Returns the value of a given storage setting.
    *
    * @param string $setting_name
    *   The setting name.
@@ -282,7 +287,7 @@ interface FieldStorageDefinitionInterface {
    * details.
    *
    * @param string $constraint_name
-   *   The name of the the constraint, i.e. its plugin id.
+   *   The name of the constraint, i.e. its plugin id.
    *
    * @return array
    *   A validation constraint definition which can be used for instantiating a

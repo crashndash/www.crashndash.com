@@ -2,24 +2,23 @@
 
 /**
  * @file
- * Contains \Drupal\contact\Entity\ContactFormInterface.
+ * Contains \Drupal\contact\ContactFormInterface.
  */
 
 namespace Drupal\contact;
 
 use Drupal\Core\Config\Entity\ConfigEntityInterface;
-use Drupal\Core\Config\Entity\ThirdPartySettingsInterface;
 
 /**
  * Provides an interface defining a contact form entity.
  */
-interface ContactFormInterface extends ConfigEntityInterface, ThirdPartySettingsInterface {
+interface ContactFormInterface extends ConfigEntityInterface {
 
   /**
-   * Returns list of recipient e-mail addresses.
+   * Returns list of recipient email addresses.
    *
    * @return array
-   *   List of recipient e-mail addresses.
+   *   List of recipient email addresses.
    */
   public function getRecipients();
 
@@ -40,10 +39,10 @@ interface ContactFormInterface extends ConfigEntityInterface, ThirdPartySettings
   public function getWeight();
 
   /**
-   * Sets list of recipient e-mail addresses.
+   * Sets list of recipient email addresses.
    *
    * @param array $recipients
-   *   The desired list of e-mail addresses of this category.
+   *   The desired list of email addresses of this category.
    *
    * @return $this
    */

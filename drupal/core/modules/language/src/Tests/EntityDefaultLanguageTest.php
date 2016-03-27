@@ -8,10 +8,13 @@
 namespace Drupal\language\Tests;
 
 use Drupal\Core\Language\LanguageInterface;
+use Drupal\language\Entity\ContentLanguageSettings;
 use Drupal\simpletest\KernelTestBase;
 
 /**
  * Tests default language code is properly generated for entities.
+ *
+ * @group language
  */
 class EntityDefaultLanguageTest extends KernelTestBase {
 
@@ -25,19 +28,10 @@ class EntityDefaultLanguageTest extends KernelTestBase {
   /**
    * {@inheritdoc}
    */
-  public static function getInfo() {
-    return array(
-      'name' => 'Entity default language',
-      'description' => 'Test that entities are created with correct language code.',
-      'group' => 'Entity API',
-    );
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function setUp() {
+  protected function setUp() {
     parent::setUp();
+
+    $this->installEntitySchema('user');
 
     // Activate Spanish language, so there are two languages activated.
     $language = $this->container->get('entity.manager')->getStorage('configurable_language')->create(array(
@@ -106,9 +100,9 @@ class EntityDefaultLanguageTest extends KernelTestBase {
   /**
    * Creates a new node content type.
    *
-   * @param name
+   * @param string $name
    *   The content type name.
-   * @param $langcode
+   * @param string $langcode
    *   Default language code of the nodes of this type.
    */
   protected function createContentType($name, $langcode) {
@@ -119,18 +113,19 @@ class EntityDefaultLanguageTest extends KernelTestBase {
       'create_body' => FALSE,
     ));
     $content_type->save();
-    language_save_default_configuration('node', $name, array(
-      'langcode' => $langcode,
-      'language_show' => FALSE,
-    ));
+    ContentLanguageSettings::loadByEntityTypeBundle('node', $name)
+      ->setLanguageAlterable(FALSE)
+      ->setDefaultLangcode($langcode)
+      ->save();
+
   }
 
   /**
    * Creates a new node of given type and language using Entity API.
    *
-   * @param $type
+   * @param string $type
    *   The node content type.
-   * @param $langcode
+   * @param string $langcode
    *   (optional) Language code to pass to entity create.
    *
    * @return \Drupal\node\NodeInterface

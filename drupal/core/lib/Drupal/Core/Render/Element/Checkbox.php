@@ -13,6 +13,17 @@ use Drupal\Core\Render\Element;
 /**
  * Provides a form element for a single checkbox.
  *
+ * Properties:
+ * - #return_value: The value to return when the checkbox is checked.
+ *
+ * Usage example:
+ * @code
+ * $form['copy'] = array(
+ *   '#type' => 'checkbox',
+ *   '#title' => t('Send me a copy'),
+ * );
+ * @endcode
+ *
  * @see \Drupal\Core\Render\Element\Checkboxes
  *
  * @FormElement("checkbox")
@@ -75,7 +86,7 @@ class Checkbox extends FormElement {
   }
 
   /**
-   * Prepares a #type 'checkbox' render element for theme_input().
+   * Prepares a #type 'checkbox' render element for input.html.twig.
    *
    * @param array $element
    *   An associative array containing the properties of the element.
@@ -83,7 +94,7 @@ class Checkbox extends FormElement {
    *   #attributes, #checked.
    *
    * @return array
-   *   The $element with prepared variables ready for theme_input().
+   *   The $element with prepared variables ready for input.html.twig.
    */
   public static function preRenderCheckbox($element) {
     $element['#attributes']['type'] = 'checkbox';

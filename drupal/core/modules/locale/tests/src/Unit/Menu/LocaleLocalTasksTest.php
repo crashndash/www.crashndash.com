@@ -7,14 +7,14 @@
 
 namespace Drupal\Tests\locale\Unit\Menu;
 
-use Drupal\Tests\Core\Menu\LocalTaskIntegrationTest;
+use Drupal\Tests\Core\Menu\LocalTaskIntegrationTestBase;
 
 /**
  * Tests locale local tasks.
  *
  * @group locale
  */
-class LocaleLocalTasksTest extends LocalTaskIntegrationTest {
+class LocaleLocalTasksTest extends LocalTaskIntegrationTestBase {
 
   /**
    * {@inheritdoc}
@@ -33,7 +33,7 @@ class LocaleLocalTasksTest extends LocalTaskIntegrationTest {
    */
   public function testLocalePageLocalTasks($route) {
     $tasks = array(
-      0 => array('locale.translate_page', 'locale.translate_import', 'locale.translate_export','locale.settings'),
+      0 => array('locale.translate_page', 'locale.translate_import', 'locale.translate_export', 'locale.settings'),
     );
     $this->assertLocalTasks($route, $tasks);
   }

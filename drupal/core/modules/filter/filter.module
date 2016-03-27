@@ -7,14 +7,11 @@
 
 use Drupal\Component\Utility\Html;
 use Drupal\Component\Utility\Unicode;
-use Drupal\Component\Utility\String;
-use Drupal\Component\Utility\Xss;
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Render\Element;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Template\Attribute;
-use Drupal\filter\Entity\FilterFormat;
 use Drupal\filter\FilterFormatInterface;
 
 /**
@@ -25,30 +22,30 @@ function filter_help($route_name, RouteMatchInterface $route_match) {
     case 'help.page.filter':
       $output = '';
       $output .= '<h3>' . t('About') . '</h3>';
-      $output .= '<p>' . t('The Filter module allows administrators to configure text formats. Text formats define the HTML tags, codes, and other input allowed in text entered in the site and they defend your web site against potentially damaging input from malicious users. A visual text editor can be associated with the text formats by using the <a href="!editor_help">Text Editor module</a>. For more information, see <a href="!filter_do">the online documentation for the Filter module</a>.', array('!filter_do' => 'https://drupal.org/documentation/modules/filter/','!editor_help' => \Drupal::url('help.page', array('name' => 'editor')))) . '</p>';
+      $output .= '<p>' . t('The Filter module allows administrators to configure text formats. Text formats change how HTML tags and other text will be <em>processed and displayed</em> in the site. They are used to transform text, and also help to defend your web site against potentially damaging input from malicious users. Visual text editors can be associated with text formats by using the <a href=":editor_help">Text Editor module</a>. For more information, see the <a href=":filter_do">online documentation for the Filter module</a>.', array(':filter_do' => 'https://www.drupal.org/documentation/modules/filter/', ':editor_help' => (\Drupal::moduleHandler()->moduleExists('editor')) ? \Drupal::url('help.page', array('name' => 'editor')) : '#')) . '</p>';
       $output .= '<h3>' . t('Uses') . '</h3>';
       $output .= '<dl>';
       $output .= '<dt>' . t('Managing text formats') . '</dt>';
-      $output .= '<dd>' . t('You can create and edit text formats on the <a href="!formats">Text formats page</a> (if the Text Editor module is enabled, this page is named Text formats and editors). One text format is included by default: Plain text (which removes all HTML tags). Additional text formats may be created during installation. You can create a text format by clicking "<a href="!add_format">Add text format</a>".', array('!formats' => \Drupal::url('filter.admin_overview'),'!add_format' => \Drupal::url('filter.format_add'))) . '</dd>';
+      $output .= '<dd>' . t('You can create and edit text formats on the <a href=":formats">Text formats page</a> (if the Text Editor module is enabled, this page is named Text formats and editors). One text format is included by default: Plain text (which removes all HTML tags). Additional text formats may be created during installation. You can create a text format by clicking "<a href=":add_format">Add text format</a>".', array(':formats' => \Drupal::url('filter.admin_overview'), ':add_format' => \Drupal::url('filter.format_add'))) . '</dd>';
       $output .= '<dt>' . t('Assigning roles to text formats') . '</dt>';
-      $output .= '<dd>' . t('You can define which users will be able to use each text format by selecting roles. To ensure security, anonymous and untrusted users should only have access to text formats that restrict them to either plain text or a safe set of HTML tags. This is because HTML tags can allow embedding malicious links or scripts in text. More trusted registered users may be granted permission to use less restrictive text formats in order to create rich text. <strong>Improper text format configuration is a security risk</strong>.') . '</dd>';
+      $output .= '<dd>' . t('You can define which users will be able to use each text format by selecting roles. To ensure security, anonymous and untrusted users should only have access to text formats that restrict them to either plain text or a safe set of HTML tags. This is because HTML tags can allow embedding malicious links or scripts in text. More trusted registered users may be granted permission to use less restrictive text formats in order to create rich text. <strong>Improper text format configuration is a security risk.</strong>') . '</dd>';
       $output .= '<dt>' . t('Selecting filters') . '</dt>';
-      $output .= '<dd><p>' . t('Each text format uses filters that add, remove, or transform elements within user-entered text. For example, one filter removes unapproved HTML tags, while another transforms URLs into clickable links. Filters are applied in a specific order and do not change the actual content, but instead, modify it temporarily before it is displayed.') . '<p>';
-      $output .= '<p>' . t('Each filter can have additional configuration options. For example, for the "Limit allowed HTML tags" filter you need to define the list of HTML tags that the filter leaves in the text.') . '</p></dd>';
-      $output .= '<dt>' . t('Enabling text formats for field editing') . '</dt>';
-      $output .= '<dd>' . t('In the field settings for a field that supports text formats (such as Long text), you can enable the use of text formats by choosing "Filtered text (user selects text format)"  under "Text processing". See the <a href="!field_help">Field module help</a> and the <a href="!field_ui_help">Field UI help</a> pages for general information on fields and how to create and manage them.', array('!field_help' => \Drupal::url('help.page', array('name' => 'field')), '!field_ui_help' => \Drupal::url('help.page', array('name' => 'field_ui')))) . '</dd>';
+      $output .= '<dd>' . t('Each text format uses filters that add, remove, or transform elements within user-entered text. For example, one filter removes unapproved HTML tags, while another transforms URLs into clickable links. Filters are applied in a specific order. They do not change the <em>stored</em> content: they define how it is processed and displayed.') . '</dd>';
+      $output .= '<dd>' . t('Each filter can have additional configuration options. For example, for the "Limit allowed HTML tags" filter you need to define the list of HTML tags that the filter leaves in the text.') . '</dd>';
+      $output .= '<dt>' . t('Using text fields with text formats') . '</dt>';
+      $output .= '<dd>' . t('Text fields that allow text formats are those with "formatted" in the description. These are <em>Text (formatted, long, with summary)</em>, <em>Text (formatted)</em>, and <em>Text (formatted, long)</em>. You cannot change the type of field once a field has been created.') . '</dd>';
       $output .= '<dt>' . t('Choosing a text format') . '</dt>';
       $output .= '<dd>' . t('When creating or editing data in a field that has text formats enabled, users can select the format under the field from the Text format select list.') . '</dd>';
       $output .= '</dl>';
       return $output;
 
     case 'filter.admin_overview':
-      $output = '<p>' . t('Text formats define the HTML tags, code, and other formatting that can be used when entering text. <strong>Improper text format configuration is a security risk</strong>. Learn more on the <a href="@filterhelp">Filter module help page</a>.', array('@filterhelp' => \Drupal::url('help.page', array('name' => 'filter')))) . '</p>';
+      $output = '<p>' . t('Text formats define how text is filtered for output and how HTML tags and other text is displayed, replaced, or removed. <strong>Improper text format configuration is a security risk.</strong> Learn more on the <a href=":filter_help">Filter module help page</a>.', array(':filter_help' => \Drupal::url('help.page', array('name' => 'filter')))) . '</p>';
       $output .= '<p>' . t('Text formats are presented on content editing pages in the order defined on this page. The first format available to a user will be selected by default.') . '</p>';
       return $output;
 
     case 'entity.filter_format.edit_form':
-      $output = '<p>' . t('A text format contains filters that change the user input, for example stripping out malicious HTML or making URLs clickable. Filters are executed from top to bottom and the order is important, since one filter may prevent another filter from doing its job. For example, when URLs are converted into links before disallowed HTML tags are removed, all links may be removed. When this happens, the order of filters may need to be re-arranged.') . '</p>';
+      $output = '<p>' . t('A text format contains filters that change the display of user input; for example, stripping out malicious HTML or making URLs clickable. Filters are executed from top to bottom and the order is important, since one filter may prevent another filter from doing its job. For example, when URLs are converted into links before disallowed HTML tags are removed, all links may be removed. When this happens, the order of filters may need to be rearranged.') . '</p>';
       return $output;
   }
 }
@@ -123,7 +120,7 @@ function filter_formats(AccountInterface $account = NULL) {
     $formats['user'][$account_id] = array();
     foreach ($formats['all'] as $format) {
       if ($format->access('use', $account)) {
-        $formats['user'][$account_id][$format->format] = $format;
+        $formats['user'][$account_id][$format->id()] = $format;
       }
     }
   }
@@ -162,7 +159,7 @@ function filter_get_roles_by_format(FilterFormatInterface $format) {
 /**
  * Retrieves a list of text formats that are allowed for a given role.
  *
- * @param $rid
+ * @param string $rid
  *   The user role ID to retrieve text formats for.
  *
  * @return \Drupal\filter\FilterFormatInterface[]
@@ -213,7 +210,7 @@ function filter_default_format(AccountInterface $account = NULL) {
   // available is the user's default format.
   $formats = filter_formats($account);
   $format = reset($formats);
-  return $format->format;
+  return $format->id();
 }
 
 /**
@@ -239,7 +236,7 @@ function filter_default_format(AccountInterface $account = NULL) {
  * Any modules implementing a format deletion functionality must not delete this
  * format.
  *
- * @return
+ * @return string|null
  *   The ID of the fallback text format.
  *
  * @see hook_filter_format_disable()
@@ -267,8 +264,8 @@ function filter_fallback_format() {
  * Note: this function should only be used when filtering text for use elsewhere
  * than on a rendered HTML page. If this is part of a HTML page, then a
  * renderable array with a #type 'processed_text' element should be used instead
- * of this, because that will allow cache tags to be set and bubbled up, assets
- * to be loaded and #post_render_cache callbacks to be associated. In other
+ * of this, because that will allow cacheability metadata to be set and bubbled
+ * up and attachments to be associated (assets, placeholders, etc.). In other
  * words: if you are presenting the filtered text in a HTML page, the only way
  * this will be presented correctly, is by using the 'processed_text' element.
  *
@@ -288,7 +285,7 @@ function filter_fallback_format() {
  *   FilterInterface::TYPE_HTML_RESTRICTOR is the only type that cannot be
  *   skipped.
  *
- * @return string
+ * @return \Drupal\Component\Render\MarkupInterface
  *   The filtered text.
  *
  * @see filter_process_text()
@@ -303,7 +300,7 @@ function check_markup($text, $format_id = NULL, $langcode = '', $filter_types_to
     '#filter_types_to_skip' => $filter_types_to_skip,
     '#langcode' => $langcode,
   );
-  return drupal_render($build);
+  return \Drupal::service('renderer')->renderPlain($build);
 }
 
 /**
@@ -353,7 +350,10 @@ function _filter_tips($format_id, $long = FALSE) {
       if ($filter->status) {
         $tip = $filter->tips($long);
         if (isset($tip)) {
-          $tips[$format->label()][$name] = array('tip' => $tip, 'id' => $name);
+          $tips[$format->label()][$name] = array(
+            'tip' => array('#markup' => $tip),
+            'id' => $name,
+          );
         }
       }
     }
@@ -375,7 +375,7 @@ function template_preprocess_filter_guidelines(&$variables) {
   $format = $variables['format'];
   $variables['tips'] = array(
     '#theme' => 'filter_tips',
-    '#tips' => _filter_tips($format->format, FALSE),
+    '#tips' => _filter_tips($format->id(), FALSE),
   );
 }
 
@@ -434,7 +434,7 @@ function template_preprocess_filter_tips(&$variables) {
 
     $variables['tips'][$name] = array(
       'attributes' => new Attribute(),
-      'name' => String::checkPlain($name),
+      'name' => $name,
       'list' => $tiplist,
     );
   }
@@ -447,25 +447,6 @@ function template_preprocess_filter_tips(&$variables) {
  * @{
  * Filters implemented by the Filter module.
  */
-
-/**
- * Provides filtering of input into accepted HTML.
- */
-function _filter_html($text, $filter) {
-  $allowed_tags = preg_split('/\s+|<|>/', $filter->settings['allowed_html'], -1, PREG_SPLIT_NO_EMPTY);
-  $text = Xss::filter($text, $allowed_tags);
-
-  if ($filter->settings['filter_html_nofollow']) {
-    $html_dom = Html::load($text);
-    $links = $html_dom->getElementsByTagName('a');
-    foreach ($links as $link) {
-      $link->setAttribute('rel', 'nofollow');
-    }
-    $text = Html::serialize($html_dom);
-  }
-
-  return trim($text);
-}
 
 /**
  * Converts text into hyperlinks automatically.
@@ -493,12 +474,13 @@ function _filter_url($text, $filter) {
   $tasks = array();
 
   // Prepare protocols pattern for absolute URLs.
-  // check_url() will replace any bad protocols with HTTP, so we need to support
-  // the identical list. While '//' is technically optional for MAILTO only,
-  // we cannot cleanly differ between protocols here without hard-coding MAILTO,
-  // so '//' is optional for all protocols.
-  // @see \Drupal\Component\Utility\UrlHelper::filterBadProtocol()
-  $protocols = \Drupal::config('system.filter')->get('protocols');
+  // \Drupal\Component\Utility\UrlHelper::stripDangerousProtocols() will replace
+  // any bad protocols with HTTP, so we need to support the identical list.
+  // While '//' is technically optional for MAILTO only, we cannot cleanly
+  // differ between protocols here without hard-coding MAILTO, so '//' is
+  // optional for all protocols.
+  // @see \Drupal\Component\Utility\UrlHelper::stripDangerousProtocols()
+  $protocols = \Drupal::getContainer()->getParameter('filter_protocols');
   $protocols = implode(':(?://)?|', $protocols) . ':(?://)?';
 
   $valid_url_path_characters = "[\p{L}\p{M}\p{N}!\*\';:=\+,\.\$\/%#\[\]\-_~@&]";
@@ -508,12 +490,12 @@ function _filter_url($text, $filter) {
   // 2. Used in IIS sessions like /S(dfd346)/
   $valid_url_balanced_parens = '\('. $valid_url_path_characters . '+\)';
 
-  // Valid end-of-path chracters (so /foo. does not gobble the period).
+  // Valid end-of-path characters (so /foo. does not gobble the period).
   // 1. Allow =&# for empty URL parameters and other URL-join artifacts
   $valid_url_ending_characters = '[\p{L}\p{M}\p{N}:_+~#=/]|(?:' . $valid_url_balanced_parens . ')';
 
-  $valid_url_query_chars = '[a-z0-9!?\*\'@\(\);:&=\+\$\/%#\[\]\-_\.,~|]';
-  $valid_url_query_ending_chars = '[a-z0-9_&=#\/]';
+  $valid_url_query_chars = '[a-zA-Z0-9!?\*\'@\(\);:&=\+\$\/%#\[\]\-_\.,~|]';
+  $valid_url_query_ending_chars = '[a-zA-Z0-9_&=#\/]';
 
   //full path
   //and allow @ in a url, but only in the middle. Catch things like http://example.com/@user/
@@ -534,7 +516,7 @@ function _filter_url($text, $filter) {
   $tasks['_filter_url_parse_full_links'] = $pattern;
 
   // Match email addresses.
-  $url_pattern = "[\p{L}\p{M}\p{N}._-]{1,254}@(?:$domain)";
+  $url_pattern = "[\p{L}\p{M}\p{N}._+-]{1,254}@(?:$domain)";
   $pattern = "`($url_pattern)`u";
   $tasks['_filter_url_parse_email_links'] = $pattern;
 
@@ -595,7 +577,7 @@ function _filter_url($text, $filter) {
     }
 
     $text = implode($chunks);
-    // Revert back to the original comment contents
+    // Revert to the original comment contents
     _filter_url_escape_comments('', FALSE);
     $text = preg_replace_callback('`<!--(.*?)-->`', '_filter_url_escape_comments', $text);
   }
@@ -612,9 +594,9 @@ function _filter_url_parse_full_links($match) {
   // The $i:th parenthesis in the regexp contains the URL.
   $i = 1;
 
-  $match[$i] = decode_entities($match[$i]);
-  $caption = String::checkPlain(_filter_url_trim($match[$i]));
-  $match[$i] = String::checkPlain($match[$i]);
+  $match[$i] = Html::decodeEntities($match[$i]);
+  $caption = Html::escape(_filter_url_trim($match[$i]));
+  $match[$i] = Html::escape($match[$i]);
   return '<a href="' . $match[$i] . '">' . $caption . '</a>';
 }
 
@@ -627,9 +609,9 @@ function _filter_url_parse_email_links($match) {
   // The $i:th parenthesis in the regexp contains the URL.
   $i = 0;
 
-  $match[$i] = decode_entities($match[$i]);
-  $caption = String::checkPlain(_filter_url_trim($match[$i]));
-  $match[$i] = String::checkPlain($match[$i]);
+  $match[$i] = Html::decodeEntities($match[$i]);
+  $caption = Html::escape(_filter_url_trim($match[$i]));
+  $match[$i] = Html::escape($match[$i]);
   return '<a href="mailto:' . $match[$i] . '">' . $caption . '</a>';
 }
 
@@ -642,9 +624,9 @@ function _filter_url_parse_partial_links($match) {
   // The $i:th parenthesis in the regexp contains the URL.
   $i = 1;
 
-  $match[$i] = decode_entities($match[$i]);
-  $caption = String::checkPlain(_filter_url_trim($match[$i]));
-  $match[$i] = String::checkPlain($match[$i]);
+  $match[$i] = Html::decodeEntities($match[$i]);
+  $caption = Html::escape(_filter_url_trim($match[$i]));
+  $match[$i] = Html::escape($match[$i]);
   return '<a href="http://' . $match[$i] . '">' . $caption . '</a>';
 }
 
@@ -653,10 +635,10 @@ function _filter_url_parse_partial_links($match) {
  *
  * Callback for preg_replace_callback() within _filter_url().
  *
- * @param $match
+ * @param array $match
  *   An array containing matches to replace from preg_replace_callback(),
  *   whereas $match[1] is expected to contain the content to be filtered.
- * @param $escape
+ * @param bool|null $escape
  *   (optional) A Boolean indicating whether to escape (TRUE) or unescape
  *   comments (FALSE). Defaults to NULL, indicating neither. If TRUE, statically
  *   cached $comments are reset.
@@ -672,7 +654,7 @@ function _filter_url_escape_comments($match, $escape = NULL) {
     return;
   }
 
-  // Replace all HTML coments with a '<!-- [hash] -->' placeholder.
+  // Replace all HTML comments with a '<!-- [hash] -->' placeholder.
   if ($mode) {
     $content = $match[1];
     $hash = hash('sha256', $content);
@@ -775,7 +757,7 @@ function _filter_autop($text) {
  * Escapes all HTML tags, so they will be visible instead of being effective.
  */
 function _filter_html_escape($text) {
-  return trim(String::checkPlain($text));
+  return trim(Html::escape($text));
 }
 
 /**
@@ -784,10 +766,10 @@ function _filter_html_escape($text) {
 function _filter_html_image_secure_process($text) {
   // Find the path (e.g. '/') to Drupal root.
   $base_path = base_path();
-  $base_path_length = drupal_strlen($base_path);
+  $base_path_length = Unicode::strlen($base_path);
 
   // Find the directory on the server where index.php resides.
-  $local_dir = DRUPAL_ROOT . '/';
+  $local_dir = \Drupal::root() . '/';
 
   $html_dom = Html::load($text);
   $images = $html_dom->getElementsByTagName('img');
@@ -800,11 +782,11 @@ function _filter_html_image_secure_process($text) {
     // Verify that $src starts with $base_path.
     // This also ensures that external images cannot be referenced.
     $src = $image->getAttribute('src');
-    if (drupal_substr($src, 0, $base_path_length) === $base_path) {
+    if (Unicode::substr($src, 0, $base_path_length) === $base_path) {
       // Remove the $base_path to get the path relative to the Drupal root.
       // Ensure the path refers to an actual image by prefixing the image source
       // with the Drupal root and running getimagesize() on it.
-      $local_image_path = $local_dir . drupal_substr($src, $base_path_length);
+      $local_image_path = $local_dir . Unicode::substr($src, $base_path_length);
       $local_image_path = rawurldecode($local_image_path);
       if (@getimagesize($local_image_path)) {
         // The image has the right path. Erroneous images are dealt with below.
@@ -831,13 +813,11 @@ function _filter_html_image_secure_process($text) {
  */
 function filter_filter_secure_image_alter(&$image) {
   // Turn an invalid image into an error indicator.
-  $image->setAttribute('src', base_path() . 'core/misc/message-16-error.png');
+  $image->setAttribute('src', base_path() . 'core/misc/icons/e32700/error.svg');
   $image->setAttribute('alt', t('Image removed.'));
   $image->setAttribute('title', t('This image has been removed. For security reasons, only images from the local domain are allowed.'));
-  $image_factory = \Drupal::service('image.factory');
-  $error_image = $image_factory->get('core/misc/message-16-error.png');
-  $image->setAttribute('height', $error_image->getHeight());
-  $image->setAttribute('width',  $error_image->getWidth());
+  $image->setAttribute('height', '16');
+  $image->setAttribute('width', '16');
 
   // Add a CSS class to aid in styling.
   $class = ($image->getAttribute('class') ? trim($image->getAttribute('class')) . ' ' : '');

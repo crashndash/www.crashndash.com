@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\system\Tests\Routing\MockMatcher.
+ * Contains \Drupal\system\Tests\Routing\MockMatcher.
  */
 
 namespace Drupal\system\Tests\Routing;
@@ -31,7 +31,7 @@ class MockMatcher implements RequestMatcherInterface {
   }
 
   /**
-   * Implements \Symfony\Component\Routing\Matcher\RequestMatcherInterface::matchRequest().
+   * {@inheritdoc}
    */
   public function matchRequest(Request $request) {
     $matcher = $this->matcher;

@@ -7,10 +7,12 @@
 
 namespace Drupal\action\Plugin\Action;
 
-use Drupal\Component\Utility\Xss;
+use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Action\ConfigurableActionBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
+use Drupal\Core\Render\RendererInterface;
+use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Utility\Token;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -26,24 +28,45 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
 class MessageAction extends ConfigurableActionBase implements ContainerFactoryPluginInterface {
 
   /**
+   * The token service.
+   *
    * @var \Drupal\Core\Utility\Token
    */
   protected $token;
 
   /**
-   * Constructs a MessageAction object.
+   * The renderer.
+   *
+   * @var \Drupal\Core\Render\RendererInterface
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, Token $token) {
+  protected $renderer;
+
+  /**
+   * Constructs a MessageAction object.
+   *
+   * @param array $configuration
+   *   A configuration array containing information about the plugin instance.
+   * @param string $plugin_id
+   *   The plugin_id for the plugin instance.
+   * @param mixed $plugin_definition
+   *   The plugin implementation definition.
+   * @param \Drupal\Core\Utility\Token $token
+   *   The token service.
+   * @param \Drupal\Core\Render\RendererInterface $renderer
+   *   The renderer.
+   */
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, Token $token, RendererInterface $renderer) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
 
     $this->token = $token;
+    $this->renderer = $renderer;
   }
 
   /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
-    return new static($configuration, $plugin_id, $plugin_definition, $container->get('token'));
+    return new static($configuration, $plugin_id, $plugin_definition, $container->get('token'), $container->get('renderer'));
   }
 
   /**
@@ -53,8 +76,13 @@ class MessageAction extends ConfigurableActionBase implements ContainerFactoryPl
     if (empty($this->configuration['node'])) {
       $this->configuration['node'] = $entity;
     }
-    $message = $this->token->replace(Xss::filterAdmin($this->configuration['message']), $this->configuration);
-    drupal_set_message($message);
+    $message = $this->token->replace($this->configuration['message'], $this->configuration);
+    $build = [
+      '#markup' => $message,
+    ];
+
+    // @todo Fix in https://www.drupal.org/node/2577827
+    drupal_set_message($this->renderer->renderPlain($build));
   }
 
   /**
@@ -76,7 +104,7 @@ class MessageAction extends ConfigurableActionBase implements ContainerFactoryPl
       '#default_value' => $this->configuration['message'],
       '#required' => TRUE,
       '#rows' => '8',
-      '#description' => t('The message to be displayed to the current user. You may include placeholders like [node:title], [user:name], and [comment:body] to represent data that will be different each time message is sent. Not all placeholders will be available in all contexts.'),
+      '#description' => t('The message to be displayed to the current user. You may include placeholders like [node:title], [user:account-name], [user:display-name] and [comment:body] to represent data that will be different each time message is sent. Not all placeholders will be available in all contexts.'),
     );
     return $form;
   }
@@ -87,6 +115,14 @@ class MessageAction extends ConfigurableActionBase implements ContainerFactoryPl
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
     $this->configuration['message'] = $form_state->getValue('message');
     unset($this->configuration['node']);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function access($object, AccountInterface $account = NULL, $return_as_object = FALSE) {
+    $result = AccessResult::allowed();
+    return $return_as_object ? $result : $result->isAllowed();
   }
 
 }

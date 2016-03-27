@@ -53,10 +53,10 @@ class ViewsThemeIntegrationTest extends ViewTestBase {
     \Drupal::service('theme_handler')->install(array('test_basetheme', 'test_subtheme'));
 
     // Make base theme default then test for hook invocations.
-    \Drupal::config('system.theme')
+    $this->config('system.theme')
         ->set('default', 'test_basetheme')
         ->save();
-    $this->assertEqual(\Drupal::config('system.theme')->get('default'), 'test_basetheme');
+    $this->assertEqual($this->config('system.theme')->get('default'), 'test_basetheme');
 
     // Make sure a views rendered page is touched.
     $this->drupalGet('test_page_display_200');
@@ -66,19 +66,21 @@ class ViewsThemeIntegrationTest extends ViewTestBase {
 
     // Make sub theme default to test for hook invocation
     // from both sub and base theme.
-    \Drupal::config('system.theme')
+    $this->config('system.theme')
         ->set('default', 'test_subtheme')
         ->save();
-    $this->assertEqual(\Drupal::config('system.theme')->get('default'), 'test_subtheme');
+    $this->assertEqual($this->config('system.theme')->get('default'), 'test_subtheme');
 
     // Make sure a views rendered page is touched.
     $this->drupalGet('test_page_display_200');
 
-    $this->assertRaw("test_subtheme_views_pre_render", "Views title changed by test_usetheme.test_subtheme_views_pre_render");
-    $this->assertRaw("test_subtheme_views_post_render", "Views title changed by test_usetheme.test_subtheme_views_post_render");
+    $this->assertRaw("test_subtheme_views_pre_render", "Views title changed by test_subtheme.test_subtheme_views_pre_render");
+    $this->assertRaw("test_subtheme_views_post_render", "Views title changed by test_subtheme.test_subtheme_views_post_render");
 
     $this->assertRaw("test_basetheme_views_pre_render", "Views title changed by test_basetheme.test_basetheme_views_pre_render");
     $this->assertRaw("test_basetheme_views_post_render", "Views title changed by test_basetheme.test_basetheme_views_post_render");
+
+    $this->assertRaw('<em class="placeholder">' . count($this->dataSet()) . '</em> items found.', 'Views group title added by test_subtheme.test_subtheme_views_post_render');
   }
 
 }

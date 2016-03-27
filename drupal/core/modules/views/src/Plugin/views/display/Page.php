@@ -8,9 +8,12 @@
 namespace Drupal\views\Plugin\views\display;
 
 use Drupal\Component\Utility\Xss;
+use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Form\FormStateInterface;
-use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
+use Drupal\Core\State\StateInterface;
+use Drupal\Core\Routing\RouteProviderInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Symfony\Component\Routing\Route;
 
 /**
  * The plugin that handles a full page.
@@ -31,6 +34,13 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 class Page extends PathPluginBase {
 
   /**
+   * The current page render array.
+   *
+   * @var array
+   */
+  protected static $pageRenderArray;
+
+  /**
    * Whether the display allows attachments.
    *
    * @var bool
@@ -38,7 +48,77 @@ class Page extends PathPluginBase {
   protected $usesAttachments = TRUE;
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\PathPluginBase::defineOptions().
+   * The menu storage.
+   *
+   * @var \Drupal\Core\Entity\EntityStorageInterface
+   */
+  protected $menuStorage;
+
+  /**
+   * Constructs a Page object.
+   *
+   * @param array $configuration
+   *   A configuration array containing information about the plugin instance.
+   * @param string $plugin_id
+   *   The plugin_id for the plugin instance.
+   * @param mixed $plugin_definition
+   *   The plugin implementation definition.
+   * @param \Drupal\Core\Routing\RouteProviderInterface $route_provider
+   *   The route provider.
+   * @param \Drupal\Core\State\StateInterface $state
+   *   The state key value store.
+   * @param \Drupal\Core\Entity\EntityStorageInterface $menu_storage
+   *   The menu storage.
+   */
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, RouteProviderInterface $route_provider, StateInterface $state, EntityStorageInterface $menu_storage) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition, $route_provider, $state);
+    $this->menuStorage = $menu_storage;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    return new static(
+      $configuration,
+      $plugin_id,
+      $plugin_definition,
+      $container->get('router.route_provider'),
+      $container->get('state'),
+      $container->get('entity.manager')->getStorage('menu')
+    );
+  }
+
+  /**
+   * Sets the current page views render array.
+   *
+   * @param array $element
+   *   (optional) A render array. If not specified the previous element is
+   *   returned.
+   *
+   * @return array
+   *   The page render array.
+   */
+  public static function &setPageRenderArray(array &$element = NULL) {
+    if (isset($element)) {
+      static::$pageRenderArray = &$element;
+    }
+
+    return static::$pageRenderArray;
+  }
+
+  /**
+   * Gets the current views page render array.
+   *
+   * @return array
+   *   The page render array.
+   */
+  public static function &getPageRenderArray() {
+    return static::$pageRenderArray;
+  }
+
+  /**
+   * {@inheritdoc}
    */
   protected function defineOptions() {
     $options = parent::defineOptions();
@@ -52,6 +132,7 @@ class Page extends PathPluginBase {
         'menu_name' => array('default' => 'main'),
         'parent' => array('default' => ''),
         'context' => array('default' => ''),
+        'expanded' => array('default' => FALSE),
       ),
     );
     $options['tab_options'] = array(
@@ -69,27 +150,26 @@ class Page extends PathPluginBase {
   /**
    * {@inheritdoc}
    */
-  protected function getRoute($view_id, $display_id) {
-    $route = parent::getRoute($view_id, $display_id);
+  public static function buildBasicRenderable($view_id, $display_id, array $args = [], Route $route = NULL) {
+    $build = parent::buildBasicRenderable($view_id, $display_id, $args);
 
-    // Move _controller to _content for page displays, which will return a
-    // normal Drupal HTML page.
-    $defaults = $route->getDefaults();
-    $defaults['_content'] = $defaults['_controller'];
-    unset($defaults['_controller']);
-    $route->setDefaults($defaults);
+    if ($route) {
+      $build['#view_id'] = $route->getDefault('view_id');
+      $build['#view_display_plugin_id'] = $route->getOption('_view_display_plugin_id');
+      $build['#view_display_show_admin_links'] = $route->getOption('_view_display_show_admin_links');
+    }
+    else {
+      throw new \BadFunctionCallException('Missing route parameters.');
+    }
 
-    return $route;
+    return $build;
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\PathPluginBase::execute().
+   * {@inheritdoc}
    */
   public function execute() {
     parent::execute();
-
-    // Let the world know that this is the page view we're using.
-    views_set_page_view($this->view);
 
     // And now render the view.
     $render = $this->view->render();
@@ -100,14 +180,14 @@ class Page extends PathPluginBase {
     //   it should be dropped.
     if (is_array($render)) {
       $render += array(
-        '#title' => Xss::filterAdmin($this->view->getTitle()),
+        '#title' => ['#markup' => $this->view->getTitle(), '#allowed_tags' => Xss::getHtmlTagList()],
       );
     }
     return $render;
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\DisplayPluginBase::optionsSummary().
+   * {@inheritdoc}
    */
   public function optionsSummary(&$categories, &$options) {
     parent::optionsSummary($categories, $options);
@@ -145,7 +225,7 @@ class Page extends PathPluginBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\callbackPluginBase::buildOptionsForm().
+   * {@inheritdoc}
    */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
@@ -160,7 +240,7 @@ class Page extends PathPluginBase {
         );
         $menu = $this->getOption('menu');
         if (empty($menu)) {
-          $menu = array('type' => 'none', 'title' => '', 'weight' => 0);
+          $menu = array('type' => 'none', 'title' => '', 'weight' => 0, 'expanded' => FALSE);
         }
         $form['menu']['type'] = array(
           '#prefix' => '<div class="views-left-30">',
@@ -214,11 +294,18 @@ class Page extends PathPluginBase {
             ),
           ),
         );
+        $form['menu']['expanded'] = [
+          '#title' => $this->t('Show as expanded'),
+          '#type' => 'checkbox',
+          '#default_value' => !empty($menu['expanded']),
+          '#description' => $this->t('If selected and this menu link has children, the menu will always appear expanded. '),
+        ];
 
         // Only display the parent selector if Menu UI module is enabled.
         $menu_parent = $menu['menu_name'] . ':' . $menu['parent'];
         if (\Drupal::moduleHandler()->moduleExists('menu_ui')) {
-          $form['menu']['parent'] = \Drupal::service('menu.parent_form_selector')->parentSelectElement($menu_parent);
+          $menu_link = 'views_view:views.' . $form_state->get('view')->id() . '.' . $form_state->get('display_id');
+          $form['menu']['parent'] = \Drupal::service('menu.parent_form_selector')->parentSelectElement($menu_parent, $menu_link);
           $form['menu']['parent'] += array(
             '#title' => $this->t('Parent'),
             '#description' => $this->t('The maximum depth for a link and all its children is fixed. Some menu links may not be available as parents if selecting them would exceed this limit.'),
@@ -284,7 +371,7 @@ class Page extends PathPluginBase {
         }
 
         $form['tab_markup'] = array(
-          '#markup' => '<div class="form-item description">' . $this->t('When providing a menu item as a tab, Drupal needs to know what the parent menu item of that tab will be. Sometimes the parent will already exist, but other times you will need to have one created. The path of a parent item will always be the same path with the last part left off. i.e, if the path to this view is <em>foo/bar/baz</em>, the parent path would be <em>foo/bar</em>.') . '</div>',
+          '#markup' => '<div class="js-form-item form-item description">' . $this->t('When providing a menu item as a tab, Drupal needs to know what the parent menu item of that tab will be. Sometimes the parent will already exist, but other times you will need to have one created. The path of a parent item will always be the same path with the last part left off. i.e, if the path to this view is <em>foo/bar/baz</em>, the parent path would be <em>foo/bar</em>.') . '</div>',
         );
 
         $form['tab_options'] = array(
@@ -351,7 +438,7 @@ class Page extends PathPluginBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\callbackPluginBase::validateOptionsForm().
+   * {@inheritdoc}
    */
   public function validateOptionsForm(&$form, FormStateInterface $form_state) {
     parent::validateOptionsForm($form, $form_state);
@@ -378,7 +465,7 @@ class Page extends PathPluginBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\callbackPluginBase::submitOptionsForm().
+   * {@inheritdoc}
    */
   public function submitOptionsForm(&$form, FormStateInterface $form_state) {
     parent::submitOptionsForm($form, $form_state);
@@ -400,7 +487,7 @@ class Page extends PathPluginBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\DisplayPluginBase::validate().
+   * {@inheritdoc}
    */
   public function validate() {
     $errors = parent::validate();
@@ -421,24 +508,38 @@ class Page extends PathPluginBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\DisplayPluginBase::getArgumentText().
+   * {@inheritdoc}
    */
   public function getArgumentText() {
     return array(
       'filter value not present' => $this->t('When the filter value is <em>NOT</em> in the URL'),
       'filter value present' => $this->t('When the filter value <em>IS</em> in the URL or a default is provided'),
-      'description' => $this->t('The contextual filter values is provided by the URL.'),
+      'description' => $this->t('The contextual filter values are provided by the URL.'),
     );
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\DisplayPluginBase::getPagerText().
+   * {@inheritdoc}
    */
   public function getPagerText() {
     return array(
       'items per page title' => $this->t('Items per page'),
       'items per page description' => $this->t('The number of items to display per page. Enter 0 for no limit.')
     );
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    $dependencies = parent::calculateDependencies();
+
+    $menu = $this->getOption('menu');
+    if ($menu['type'] === 'normal' && ($menu_entity = $this->menuStorage->load($menu['menu_name']))) {
+      $dependencies[$menu_entity->getConfigDependencyKey()][] = $menu_entity->getConfigDependencyName();
+    }
+
+    return $dependencies;
   }
 
 }

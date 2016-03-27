@@ -14,6 +14,25 @@ use Drupal\Component\Utility\Number as NumberUtility;
 /**
  * Provides a form element for numeric input, with special numeric validation.
  *
+ * Properties:
+ * - #default_value: A valid floating point number.
+ * - #min: Minimum value.
+ * - #max: Maximum value.
+ * - #step: Ensures that the number is an even multiple of step, offset by #min
+ *   if specified. A #min of 1 and a #step of 2 would allow values of 1, 3, 5,
+ *   etc.
+ *
+ * Usage example:
+ * @code
+ * $form['quantity'] = array(
+ *   '#type' => 'number',
+ *   '#title' => t('Quantity'),
+ * );
+ * @endcode
+ *
+ * @see \Drupal\Core\Render\Element\Range
+ * @see \Drupal\Core\Render\Element\Textfield
+ *
  * @FormElement("number")
  */
 class Number extends FormElement {
@@ -81,7 +100,7 @@ class Number extends FormElement {
   }
 
   /**
-   * Prepares a #type 'number' render element for theme_input().
+   * Prepares a #type 'number' render element for input.html.twig.
    *
    * @param array $element
    *   An associative array containing the properties of the element.
@@ -89,7 +108,7 @@ class Number extends FormElement {
    *   #required, #attributes, #step, #size.
    *
    * @return array
-   *   The $element with prepared variables ready for theme_input().
+   *   The $element with prepared variables ready for input.html.twig.
    */
   public static function preRenderNumber($element) {
     $element['#attributes']['type'] = 'number';

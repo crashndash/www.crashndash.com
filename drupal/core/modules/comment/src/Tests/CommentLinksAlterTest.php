@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\comment\Tests\CommentLinksAlterTest.
+ * Contains \Drupal\comment\Tests\CommentLinksAlterTest.
  */
 
 namespace Drupal\comment\Tests;
@@ -27,7 +27,7 @@ class CommentLinksAlterTest extends CommentTestBase {
    * Tests comment links altering.
    */
   public function testCommentLinksAlter() {
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     $comment_text = $this->randomMachineName();
     $subject = $this->randomMachineName();
     $comment = $this->postComment($this->node, $comment_text, $subject);

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\field_test\Plugin\field\formatter\TestFieldMultipleFormatter.
+ * Contains \Drupal\field_test\Plugin\Field\FieldFormatter\TestFieldMultipleFormatter.
  */
 
 namespace Drupal\field_test\Plugin\Field\FieldFormatter;
@@ -19,7 +19,8 @@ use Drupal\Core\Form\FormStateInterface;
  *   label = @Translation("Multiple"),
  *   description = @Translation("Multiple formatter"),
  *   field_types = {
- *     "test_field"
+ *     "test_field",
+ *     "test_field_with_preconfigured_options"
  *   },
  *   weight = 5
  * )
@@ -32,6 +33,7 @@ class TestFieldMultipleFormatter extends FormatterBase {
   public static function defaultSettings() {
     return array(
       'test_formatter_setting_multiple' => 'dummy test string',
+      'alter' => FALSE,
     ) + parent::defaultSettings();
   }
 
@@ -61,7 +63,7 @@ class TestFieldMultipleFormatter extends FormatterBase {
   /**
    * {@inheritdoc}
    */
-  public function viewElements(FieldItemListInterface $items) {
+  public function viewElements(FieldItemListInterface $items, $langcode) {
     $elements = array();
 
     if (!empty($items)) {

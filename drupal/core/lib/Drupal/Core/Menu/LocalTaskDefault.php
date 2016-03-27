@@ -7,13 +7,19 @@
 
 namespace Drupal\Core\Menu;
 
-use Drupal\Core\Plugin\PluginBase;
+use Drupal\Component\Plugin\PluginBase;
+use Drupal\Core\Cache\Cache;
+use Drupal\Core\Cache\CacheableDependencyInterface;
+use Drupal\Core\DependencyInjection\DependencySerializationTrait;
+use Drupal\Core\Routing\RouteMatchInterface;
 use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Default object used for LocalTaskPlugins.
  */
-class LocalTaskDefault extends PluginBase implements LocalTaskInterface {
+class LocalTaskDefault extends PluginBase implements LocalTaskInterface, CacheableDependencyInterface {
+
+  use DependencySerializationTrait;
 
   /**
    * The route provider to load routes by name.
@@ -39,7 +45,7 @@ class LocalTaskDefault extends PluginBase implements LocalTaskInterface {
   /**
    * {@inheritdoc}
    */
-  public function getRouteParameters(Request $request) {
+  public function getRouteParameters(RouteMatchInterface $route_match) {
     $parameters = isset($this->pluginDefinition['route_parameters']) ? $this->pluginDefinition['route_parameters'] : array();
     $route = $this->routeProvider()->getRouteByName($this->getRouteName());
     $variables = $route->compile()->getVariables();
@@ -51,7 +57,7 @@ class LocalTaskDefault extends PluginBase implements LocalTaskInterface {
     // /filter/tips/{filter_format} and the path is /filter/tips/plain_text then
     // $raw_variables->get('filter_format') == 'plain_text'.
 
-    $raw_variables = $request->attributes->get('_raw_variables');
+    $raw_variables = $route_match->getRawParameters();
 
     foreach ($variables as $name) {
       if (isset($parameters[$name])) {
@@ -61,8 +67,8 @@ class LocalTaskDefault extends PluginBase implements LocalTaskInterface {
       if ($raw_variables && $raw_variables->has($name)) {
         $parameters[$name] = $raw_variables->get($name);
       }
-      elseif ($request->attributes->has($name)) {
-        $parameters[$name] = $request->attributes->get($name);
+      elseif ($value = $route_match->getRawParameter($name)) {
+        $parameters[$name] = $value;
       }
     }
     // The UrlGenerator will throw an exception if expected parameters are
@@ -74,16 +80,8 @@ class LocalTaskDefault extends PluginBase implements LocalTaskInterface {
    * {@inheritdoc}
    */
   public function getTitle(Request $request = NULL) {
-    // Subclasses may pull in the request or specific attributes as parameters.
-    $options = array();
-    if (!empty($this->pluginDefinition['title_context'])) {
-      $options['context'] = $this->pluginDefinition['title_context'];
-    }
-    $args = array();
-    if (isset($this->pluginDefinition['title_arguments']) && $title_arguments = $this->pluginDefinition['title_arguments']) {
-      $args = (array) $title_arguments;
-    }
-    return $this->t($this->pluginDefinition['title'], $args, $options);
+    // The title from YAML file discovery may be a TranslatableMarkup object.
+    return (string) $this->pluginDefinition['title'];
   }
 
   /**
@@ -109,11 +107,11 @@ class LocalTaskDefault extends PluginBase implements LocalTaskInterface {
   /**
    * {@inheritdoc}
    */
-  public function getOptions(Request $request) {
+  public function getOptions(RouteMatchInterface $route_match) {
     $options = $this->pluginDefinition['options'];
     if ($this->active) {
-      if (empty($options['attributes']['class']) || !in_array('active', $options['attributes']['class'])) {
-        $options['attributes']['class'][] = 'active';
+      if (empty($options['attributes']['class']) || !in_array('is-active', $options['attributes']['class'])) {
+        $options['attributes']['class'][] = 'is-active';
       }
     }
     return (array) $options;
@@ -145,6 +143,36 @@ class LocalTaskDefault extends PluginBase implements LocalTaskInterface {
       $this->routeProvider = \Drupal::service('router.route_provider');
     }
     return $this->routeProvider;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheTags() {
+    if (!isset($this->pluginDefinition['cache_tags'])) {
+      return [];
+    }
+    return $this->pluginDefinition['cache_tags'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheContexts() {
+    if (!isset($this->pluginDefinition['cache_contexts'])) {
+      return [];
+    }
+    return $this->pluginDefinition['cache_contexts'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheMaxAge() {
+    if (!isset($this->pluginDefinition['cache_max_age'])) {
+      return Cache::PERMANENT;
+    }
+    return $this->pluginDefinition['cache_max_age'];
   }
 
 }

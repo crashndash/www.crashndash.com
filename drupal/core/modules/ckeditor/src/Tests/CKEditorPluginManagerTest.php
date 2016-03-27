@@ -2,13 +2,12 @@
 
 /**
  * @file
- * Definition of \Drupal\ckeditor\Tests\CKEditorPluginManagerTest.
+ * Contains \Drupal\ckeditor\Tests\CKEditorPluginManagerTest.
  */
 
 namespace Drupal\ckeditor\Tests;
 
 use Drupal\simpletest\KernelTestBase;
-use Drupal\ckeditor\CKEditorPluginManager;
 
 /**
  * Tests different ways of enabling CKEditor plugins.

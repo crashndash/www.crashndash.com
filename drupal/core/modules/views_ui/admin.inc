@@ -6,10 +6,8 @@
  */
 
 use Drupal\Component\Utility\NestedArray;
-use Drupal\Component\Utility\Tags;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\views\ViewExecutable;
-use Drupal\views\Views;
+use Drupal\Core\Url;
 
 /**
  * Converts a form element in the add view wizard to be AJAX-enabled.
@@ -49,17 +47,19 @@ function views_ui_add_ajax_trigger(&$wrapping_element, $trigger_key, $refresh_pa
   // Add the AJAX behavior to the triggering element.
   $triggering_element = &$wrapping_element[$trigger_key];
   $triggering_element['#ajax']['callback'] = 'views_ui_ajax_update_form';
-  // We do not use drupal_html_id() to get an ID for the AJAX wrapper, because
-  // it remembers IDs across AJAX requests (and won't reuse them), but in our
-  // case we need to use the same ID from request to request so that the
-  // wrapper can be recognized by the AJAX system and its content can be
-  // dynamically updated. So instead, we will keep track of duplicate IDs
-  // (within a single request) on our own, later in this function.
+
+  // We do not use \Drupal\Component\Utility\Html::getUniqueId() to get an ID
+  // for the AJAX wrapper, because it remembers IDs across AJAX requests (and
+  // won't reuse them), but in our case we need to use the same ID from request
+  // to request so that the wrapper can be recognized by the AJAX system and
+  // its content can be dynamically updated. So instead, we will keep track of
+  // duplicate IDs (within a single request) on our own, later in this function.
   $triggering_element['#ajax']['wrapper'] = 'edit-view-' . implode('-', $refresh_parents) . '-wrapper';
 
   // Add a submit button for users who do not have JavaScript enabled. It
   // should be displayed next to the triggering element on the form.
   $button_key = $trigger_key . '_trigger_update';
+  $element_info = \Drupal::service('element_info');
   $wrapping_element[$button_key] = array(
     '#type' => 'submit',
     // Hide this button when JavaScript is enabled.
@@ -70,14 +70,14 @@ function views_ui_add_ajax_trigger(&$wrapping_element, $trigger_key, $refresh_pa
     // form API has added the #parents property to the triggering element for
     // us, we don't have any (easy) way to find out where its submitted values
     // will eventually appear in $form_state->getValues().
-    '#process' => array_merge(array('views_ui_add_limited_validation'), element_info_property('submit', '#process', array())),
+    '#process' => array_merge(array('views_ui_add_limited_validation'), $element_info->getInfoProperty('submit', '#process', array())),
     // Add an after-build function that inserts a wrapper around the region of
     // the form that needs to be refreshed by AJAX (so that the AJAX system can
     // detect and dynamically update it). This is done in #after_build because
     // it's a convenient place where we have automatic access to the complete
     // form array, but also to minimize the chance that the HTML we add will
     // get clobbered by code that runs after we have added it.
-    '#after_build' => array_merge(element_info_property('submit', '#after_build', array()), array('views_ui_add_ajax_wrapper')),
+    '#after_build' => array_merge($element_info->getInfoProperty('submit', '#after_build', array()), array('views_ui_add_ajax_wrapper')),
   );
   // Copy #weight and #access from the triggering element to the button, so
   // that the two elements will be displayed together.
@@ -88,8 +88,9 @@ function views_ui_add_ajax_trigger(&$wrapping_element, $trigger_key, $refresh_pa
   }
   // For easiest integration with the form API and the testing framework, we
   // always give the button a unique #value, rather than playing around with
-  // #name.
-  $button_title = !empty($triggering_element['#title']) ? $triggering_element['#title'] : $trigger_key;
+  // #name. We also cast the #title to string as we will use it as an array
+  // key and it may be a TranslatableMarkup.
+  $button_title = !empty($triggering_element['#title']) ? (string) $triggering_element['#title'] : $trigger_key;
   if (empty($seen_buttons[$button_title])) {
     $wrapping_element[$button_key]['#value'] = t('Update "@title" choice', array(
       '@title' => $button_title,
@@ -109,9 +110,6 @@ function views_ui_add_ajax_trigger(&$wrapping_element, $trigger_key, $refresh_pa
     'wrapper' => $triggering_element['#ajax']['wrapper'],
     'trigger_key' => $trigger_key,
     'refresh_parents' => $refresh_parents,
-    // Keep track of duplicate wrappers so we don't add the same wrapper to the
-    // page more than once.
-    'duplicate_wrapper' => !empty($seen_ids[$triggering_element['#ajax']['wrapper']]),
   );
   $seen_ids[$triggering_element['#ajax']['wrapper']] = TRUE;
   $triggering_element['#views_ui_ajax_data'] = $ajax_data;
@@ -158,29 +156,25 @@ function views_ui_add_limited_validation($element, FormStateInterface $form_stat
  * submit button form element.
  */
 function views_ui_add_ajax_wrapper($element, FormStateInterface $form_state) {
-  // Don't add the wrapper <div> if the same one was already inserted on this
-  // form.
-  if (empty($element['#views_ui_ajax_data']['duplicate_wrapper'])) {
-    // Find the region of the complete form that needs to be refreshed by AJAX.
-    // This was earlier stored in a property on the element.
-    $complete_form = &$form_state->getCompleteForm();
-    $refresh_parents = $element['#views_ui_ajax_data']['refresh_parents'];
-    $refresh_element = NestedArray::getValue($complete_form, $refresh_parents);
+  // Find the region of the complete form that needs to be refreshed by AJAX.
+  // This was earlier stored in a property on the element.
+  $complete_form = &$form_state->getCompleteForm();
+  $refresh_parents = $element['#views_ui_ajax_data']['refresh_parents'];
+  $refresh_element = NestedArray::getValue($complete_form, $refresh_parents);
 
-    // The HTML ID that AJAX expects was also stored in a property on the
-    // element, so use that information to insert the wrapper <div> here.
-    $id = $element['#views_ui_ajax_data']['wrapper'];
-    $refresh_element += array(
-      '#prefix' => '',
-      '#suffix' => '',
-    );
-    $refresh_element['#prefix'] = '<div id="' . $id . '" class="views-ui-ajax-wrapper">' . $refresh_element['#prefix'];
-    $refresh_element['#suffix'] .= '</div>';
+  // The HTML ID that AJAX expects was also stored in a property on the
+  // element, so use that information to insert the wrapper <div> here.
+  $id = $element['#views_ui_ajax_data']['wrapper'];
+  $refresh_element += array(
+    '#prefix' => '',
+    '#suffix' => '',
+  );
+  $refresh_element['#prefix'] = '<div id="' . $id . '" class="views-ui-ajax-wrapper">' . $refresh_element['#prefix'];
+  $refresh_element['#suffix'] .= '</div>';
 
-    // Copy the element that needs to be refreshed back into the form, with our
-    // modifications to it.
-    NestedArray::setValue($complete_form, $refresh_parents, $refresh_element);
-  }
+  // Copy the element that needs to be refreshed back into the form, with our
+  // modifications to it.
+  NestedArray::setValue($complete_form, $refresh_parents, $refresh_element);
 
   return $element;
 }
@@ -206,56 +200,6 @@ function views_ui_nojs_submit($form, FormStateInterface $form_state) {
 }
 
 /**
- * Form element validation handler for a taxonomy autocomplete field.
- *
- * This allows a taxonomy autocomplete field to be validated outside the
- * standard Field API workflow, without passing in a complete field widget.
- * Instead, all that is required is that $element['#field_name'] contain the
- * name of the taxonomy autocomplete field that is being validated.
- *
- * This function is currently not used for validation directly, although it
- * could be. Instead, it is only used to store the term IDs and vocabulary name
- * in the element value, based on the tags that the user typed in.
- *
- * @see taxonomy_autocomplete_validate()
- */
-function views_ui_taxonomy_autocomplete_validate($element, FormStateInterface $form_state) {
-  $value = array();
-  if ($tags = $element['#value']) {
-    // Get the machine names of the vocabularies we will search, keyed by the
-    // vocabulary IDs.
-    $field_storage_definitions = \Drupal::entityManager()->getFieldStorageDefinitions($element['#entity_type']);
-    $field_storage = $field_storage_definitions[$element['#field_name']];
-    $vocabularies = array();
-    $allowed_values = $field_storage->getSetting('allowed_values');
-    if (!empty($allowed_values)) {
-      foreach ($allowed_values as $tree) {
-        if ($vocabulary = entity_load('taxonomy_vocabulary', $tree['vocabulary'])) {
-          $vocabularies[$vocabulary->id()] = $tree['vocabulary'];
-        }
-      }
-    }
-    // Store the term ID of each (valid) tag that the user typed.
-    $typed_terms = Tags::explode($tags);
-    foreach ($typed_terms as $typed_term) {
-      if ($terms = entity_load_multiple_by_properties('taxonomy_term', array('name' => trim($typed_term), 'vid' => array_keys($vocabularies)))) {
-        $term = array_pop($terms);
-        $value['tids'][] = $term->id();
-      }
-    }
-    // Store the term IDs along with the name of the vocabulary. Currently
-    // Views (as well as the Field UI) assumes that there will only be one
-    // vocabulary, although technically the API allows there to be more than
-    // one.
-    if (!empty($value['tids'])) {
-      $value['tids'] = array_unique($value['tids']);
-      $value['vocabulary'] = array_pop($vocabularies);
-    }
-  }
-  form_set_value($element, $value, $form_state);
-}
-
-/**
  * Add a <select> dropdown for a given section, allowing the user to
  * change whether this info is stored on the default display or on
  * the current display.
@@ -270,7 +214,7 @@ function views_ui_standard_display_dropdown(&$form, FormStateInterface $form_sta
   // @todo Move this to a separate function if it's needed on any forms that
   // don't have the display dropdown.
   $form['override'] = array(
-    '#prefix' => '<div class="views-override clearfix container-inline" data-drupal-views-offset="top">',
+    '#prefix' => '<div class="views-override clearfix form--inline views-offset-top" data-drupal-views-offset="top">',
     '#suffix' => '</div>',
     '#weight' => -1000,
     '#tree' => TRUE,
@@ -278,7 +222,7 @@ function views_ui_standard_display_dropdown(&$form, FormStateInterface $form_sta
 
   // Add the "2 of 3" progress indicator.
   if ($form_progress = $view->getFormProgress()) {
-    $form['progress']['#markup'] = '<div id="views-progress-indicator">' . t('@current of @total', array('@current' => $form_progress['current'], '@total' => $form_progress['total'])) . '</div>';
+    $form['progress']['#markup'] = '<div id="views-progress-indicator" class="views-progress-indicator">' . t('@current of @total', array('@current' => $form_progress['current'], '@total' => $form_progress['total'])) . '</div>';
     $form['progress']['#weight'] = -1001;
   }
 
@@ -322,20 +266,31 @@ function views_ui_standard_display_dropdown(&$form, FormStateInterface $form_sta
 /**
  * Create the menu path for one of our standard AJAX forms based upon known
  * information about the form.
+ *
+ * @return \Drupal\Core\Url
+ *   The URL object pointing to the form URL.
  */
-function views_ui_build_form_path(FormStateInterface $form_state) {
+function views_ui_build_form_url(FormStateInterface $form_state) {
   $ajax = !$form_state->get('ajax') ? 'nojs' : 'ajax';
   $name = $form_state->get('view')->id();
   $form_key = $form_state->get('form_key');
   $display_id = $form_state->get('display_id');
-  $path = "admin/structure/views/$ajax/$form_key/$name/$display_id";
+
+  $form_key = str_replace('-', '_', $form_key);
+  $route_name = "views_ui.form_{$form_key}";
+  $route_parameters = [
+    'js' => $ajax,
+    'view' => $name,
+    'display_id' => $display_id
+  ];
+  $url = Url::fromRoute($route_name, $route_parameters);
   if ($type = $form_state->get('type')) {
-    $path .= '/' . $type;
+    $url->setRouteParameter('type', $type);
   }
   if ($id = $form_state->get('id')) {
-    $path .= '/' . $id;
+    $url->setRouteParameter('id', $id);
   }
-  return $path;
+  return $url;
 }
 
 /**
@@ -356,7 +311,7 @@ function views_ui_build_form_path(FormStateInterface $form_state) {
 function views_ui_form_button_was_clicked($element, FormStateInterface $form_state) {
   $user_input = $form_state->getUserInput();
   $process_input = empty($element['#disabled']) && ($form_state->isProgrammed() || ($form_state->isProcessingInput() && (!isset($element['#access']) || $element['#access'])));
-  if ($process_input && !$form_state->getTriggeringElement() && !empty($element['#is_button']) && isset($user_input[$element['#name']]) && isset($element['#values']) && in_array($user_input[$element['#name']], $element['#values'], TRUE)) {
+  if ($process_input && !$form_state->getTriggeringElement() && !empty($element['#is_button']) && isset($user_input[$element['#name']]) && isset($element['#values']) && in_array($user_input[$element['#name']], array_map('strval', $element['#values']), TRUE)) {
     $form_state->setTriggeringElement($element);
   }
   return $element;

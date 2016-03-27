@@ -4,13 +4,10 @@
  * Bartik's theme implementation to display a node.
  *
  * Available variables:
- * - node: Full node entity.
- *   - id: The node ID.
- *   - bundle: The type of the node, for example, "page" or "article".
- *   - authorid: The user ID of the node author.
- *   - createdtime: Formatted creation date. Preprocess functions can
- *     reformat it by calling format_date() with the desired parameters on
- *     $variables['node']->getCreatedTime().
+ * - node: The node entity with limited access to object properties and methods.
+     Only "getter" methods (method names starting with "get", "has", or "is")
+     and a few common methods such as "id" and "label" are available. Calling
+     other methods (such as node.delete) will result in an exception.
  * - label: The title of the node.
  * - content: All node items. Use {{ content }} to print them all,
  *   or print a subset such as {{ content.field_example }}. Use
@@ -54,7 +51,6 @@
  * - page: Flag for the full page state. Will be true if view_mode is 'full'.
  * - readmore: Flag for more state. Will be true if the teaser content of the
  *   node cannot hold the main body content.
- * - is_front: Flag for front. Will be true when presented on the front page.
  * - logged_in: Flag for authenticated user status. Will be true when the
  *   current user is a logged-in member.
  * - is_admin: Flag for admin user status. Will be true when the current user
@@ -74,8 +70,8 @@
     'clearfix',
   ]
 %}
+{{ attach_library('classy/node') }}
 <article{{ attributes.addClass(classes) }}>
-
   <header>
     {{ title_prefix }}
     {% if not page %}
@@ -84,28 +80,17 @@
       </h2>
     {% endif %}
     {{ title_suffix }}
-
     {% if display_submitted %}
       <div class="node__meta">
         {{ author_picture }}
         <span{{ author_attributes }}>
-          {% trans %}Submitted by {{ author_name|passthrough }} on {{ date|passthrough }}{% endtrans %}
+          {% trans %}Submitted by {{ author_name }} on {{ date }}{% endtrans %}
         </span>
         {{ metadata }}
       </div>
     {% endif %}
   </header>
-
   <div{{ content_attributes.addClass('node__content', 'clearfix') }}>
-    {{ content|without('comment', 'links') }}
+    {{ content }}
   </div>
-
-  {% if content.links %}
-    <div class="node__links">
-      {{ content.links }}
-    </div>
-  {% endif %}
-
-  {{ content.comment }}
-
 </article>

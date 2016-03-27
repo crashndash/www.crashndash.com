@@ -9,7 +9,9 @@ namespace Drupal\Tests\Core\Form;
 
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Drupal\Core\Form\FormState;
+use Drupal\Core\Routing\UrlGeneratorInterface;
 use Drupal\Core\Url;
+use Drupal\Core\Utility\UnroutedUrlAssemblerInterface;
 use Drupal\Tests\UnitTestCase;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
@@ -29,11 +31,19 @@ class FormSubmitterTest extends UnitTestCase {
   protected $urlGenerator;
 
   /**
+   * The mocked unrouted URL assembler.
+   *
+   * @var \PHPUnit_Framework_MockObject_MockObject|\Drupal\Core\Utility\UnroutedUrlAssemblerInterface
+   */
+  protected $unroutedUrlAssembler;
+
+  /**
    * {@inheritdoc}
    */
   protected function setUp() {
     parent::setUp();
-    $this->urlGenerator = $this->getMock('Drupal\Core\Routing\UrlGeneratorInterface');
+    $this->urlGenerator = $this->getMock(UrlGeneratorInterface::class);
+    $this->unroutedUrlAssembler = $this->getMock(UnroutedUrlAssemblerInterface::class);
   }
 
   /**
@@ -102,17 +112,20 @@ class FormSubmitterTest extends UnitTestCase {
    */
   public function testRedirectWithNull() {
     $form_submitter = $this->getFormSubmitter();
-    $this->urlGenerator->expects($this->once())
-      ->method('generateFromPath')
-      ->with(NULL, array('query' => array(), 'absolute' => TRUE))
-      ->willReturn('<front>');
 
     $form_state = $this->getMock('Drupal\Core\Form\FormStateInterface');
     $form_state->expects($this->once())
       ->method('getRedirect')
       ->willReturn(NULL);
+
+    $this->urlGenerator->expects($this->once())
+      ->method('generateFromRoute')
+      ->with('<current>', [], ['query' => [], 'absolute' => TRUE])
+      ->willReturn('http://localhost/test-path');
+
     $redirect = $form_submitter->redirectForm($form_state);
-    $this->assertSame('<front>', $redirect->getTargetUrl());
+    // If we have no redirect, we redirect to the current URL.
+    $this->assertSame('http://localhost/test-path', $redirect->getTargetUrl());
     $this->assertSame(303, $redirect->getStatusCode());
   }
 
@@ -131,8 +144,8 @@ class FormSubmitterTest extends UnitTestCase {
     $this->urlGenerator->expects($this->once())
       ->method('generateFromRoute')
       ->will($this->returnValueMap(array(
-          array('test_route_a', array(), array('absolute' => TRUE), 'test-route'),
-          array('test_route_b', array('key' => 'value'), array('absolute' => TRUE), 'test-route/value'),
+          array('test_route_a', array(), array('absolute' => TRUE), FALSE, 'test-route'),
+          array('test_route_b', array('key' => 'value'), array('absolute' => TRUE), FALSE, 'test-route/value'),
         ))
       );
 
@@ -184,9 +197,13 @@ class FormSubmitterTest extends UnitTestCase {
   public function testRedirectWithoutResult() {
     $form_submitter = $this->getFormSubmitter();
     $this->urlGenerator->expects($this->never())
-      ->method('generateFromPath');
-    $this->urlGenerator->expects($this->never())
       ->method('generateFromRoute');
+    $this->unroutedUrlAssembler->expects($this->never())
+      ->method('assemble');
+    $container = new ContainerBuilder();
+    $container->set('url_generator', $this->urlGenerator);
+    $container->set('unrouted_url_assembler', $this->unroutedUrlAssembler);
+    \Drupal::setContainer($container);
     $form_state = $this->getMock('Drupal\Core\Form\FormStateInterface');
     $form_state->expects($this->once())
       ->method('getRedirect')
@@ -234,7 +251,7 @@ class FormSubmitterTest extends UnitTestCase {
    */
   protected function getFormSubmitter() {
     $request_stack = new RequestStack();
-    $request_stack->push(new Request());
+    $request_stack->push(Request::create('/test-path'));
     return $this->getMockBuilder('Drupal\Core\Form\FormSubmitter')
       ->setConstructorArgs(array($request_stack, $this->urlGenerator))
       ->setMethods(array('batchGet', 'drupalInstallationAttempted'))

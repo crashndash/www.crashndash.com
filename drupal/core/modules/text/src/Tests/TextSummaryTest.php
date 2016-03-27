@@ -2,19 +2,19 @@
 
 /**
  * @file
- * Definition of Drupal\text\TextSummaryTest.
+ * Contains \Drupal\text\Tests\TextSummaryTest.
  */
 
 namespace Drupal\text\Tests;
 
-use Drupal\simpletest\DrupalUnitTestBase;
+use Drupal\simpletest\KernelTestBase;
 
 /**
  * Tests text_summary() with different strings and lengths.
  *
  * @group text
  */
-class TextSummaryTest extends DrupalUnitTestBase {
+class TextSummaryTest extends KernelTestBase {
 
   public static $modules = array('system', 'user', 'filter', 'text');
 
@@ -28,7 +28,7 @@ class TextSummaryTest extends DrupalUnitTestBase {
   /**
    * Tests an edge case where the first sentence is a question and
    * subsequent sentences are not. This edge case is documented at
-   * http://drupal.org/node/180425.
+   * https://www.drupal.org/node/180425.
    */
   function testFirstSentenceQuestion() {
     $text = 'A question? A sentence. Another sentence.';

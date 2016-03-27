@@ -2,16 +2,16 @@
 
 /**
  * @file
- * Definition of Drupal\file\Entity\File.
+ * Contains \Drupal\file\Entity\File.
  */
 
 namespace Drupal\file\Entity;
 
 use Drupal\Core\Entity\ContentEntityBase;
+use Drupal\Core\Entity\EntityChangedTrait;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
-use Drupal\Core\Language\LanguageInterface;
 use Drupal\file\FileInterface;
 use Drupal\user\UserInterface;
 
@@ -25,29 +25,20 @@ use Drupal\user\UserInterface;
  *     "storage" = "Drupal\file\FileStorage",
  *     "storage_schema" = "Drupal\file\FileStorageSchema",
  *     "access" = "Drupal\file\FileAccessControlHandler",
- *     "view_builder" = "Drupal\Core\Entity\EntityViewBuilder",
  *     "views_data" = "Drupal\file\FileViewsData",
  *   },
  *   base_table = "file_managed",
  *   entity_keys = {
  *     "id" = "fid",
  *     "label" = "filename",
+ *     "langcode" = "langcode",
  *     "uuid" = "uuid"
  *   }
  * )
  */
 class File extends ContentEntityBase implements FileInterface {
 
-  /**
-   * The plain data values of the contained properties.
-   *
-   * Define default values.
-   *
-   * @var array
-   */
-  protected $values = array(
-    'langcode' => array(LanguageInterface::LANGCODE_DEFAULT => array(0 => array('value' => LanguageInterface::LANGCODE_NOT_SPECIFIED))),
-  );
+  use EntityChangedTrait;
 
   /**
    * {@inheritdoc}
@@ -79,6 +70,8 @@ class File extends ContentEntityBase implements FileInterface {
 
   /**
    * {@inheritdoc}
+   *
+   * @see file_url_transform_relative()
    */
   public function url($rel = 'canonical', $options = array()) {
     return file_create_url($this->getFileUri());
@@ -117,13 +110,6 @@ class File extends ContentEntityBase implements FileInterface {
    */
   public function getCreatedTime() {
     return $this->get('created')->value;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getChangedTime() {
-    return $this->get('changed')->value;
   }
 
   /**
@@ -195,7 +181,7 @@ class File extends ContentEntityBase implements FileInterface {
 
     // Automatically detect filemime if not set.
     if (!isset($values['filemime']) && isset($values['uri'])) {
-      $values['filemime'] = file_get_mimetype($values['uri']);
+      $values['filemime'] = \Drupal::service('file.mime_type.guesser')->guess($values['uri']);
     }
   }
 
@@ -260,10 +246,13 @@ class File extends ContentEntityBase implements FileInterface {
     $fields['uri'] = BaseFieldDefinition::create('uri')
       ->setLabel(t('URI'))
       ->setDescription(t('The URI to access the file (either local or remote).'))
-      ->setSetting('max_length', 255);
+      ->setSetting('max_length', 255)
+      ->setSetting('case_sensitive', TRUE)
+      ->addConstraint('FileUriUnique');
 
     $fields['filemime'] = BaseFieldDefinition::create('string')
       ->setLabel(t('File MIME type'))
+      ->setSetting('is_ascii', TRUE)
       ->setDescription(t("The file's MIME type."));
 
     $fields['filesize'] = BaseFieldDefinition::create('integer')
@@ -274,7 +263,8 @@ class File extends ContentEntityBase implements FileInterface {
 
     $fields['status'] = BaseFieldDefinition::create('boolean')
       ->setLabel(t('Status'))
-      ->setDescription(t('The status of the file, temporary (FALSE) and permanent (TRUE).'));
+      ->setDescription(t('The status of the file, temporary (FALSE) and permanent (TRUE).'))
+      ->setDefaultValue(FALSE);
 
     $fields['created'] = BaseFieldDefinition::create('created')
       ->setLabel(t('Created'))

@@ -1,11 +1,10 @@
 langcode: en
 status: true
 dependencies:
-  entity:
+  config:
     - field.field.node.options_install_test.body
     - node.type.options_install_test
   module:
-    - entity_reference
     - text
 id: node.options_install_test.default
 targetEntityType: node
@@ -25,7 +24,6 @@ content:
     settings:
       match_operator: CONTAINS
       size: 60
-      autocomplete_type: tags
       placeholder: ''
     third_party_settings: {  }
   created:
@@ -36,13 +34,13 @@ content:
   promote:
     type: boolean_checkbox
     settings:
-      display_label: '1'
+      display_label: true
     weight: 15
     third_party_settings: {  }
   sticky:
     type: boolean_checkbox
     settings:
-      display_label: '1'
+      display_label: true
     weight: 16
     third_party_settings: {  }
   body:

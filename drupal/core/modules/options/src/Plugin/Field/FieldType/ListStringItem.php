@@ -2,11 +2,12 @@
 
 /**
  * @file
- * Contains \Drupal\options\Type\ListStringItem.
+ * Contains \Drupal\options\Plugin\Field\FieldType\ListStringItem.
  */
 
 namespace Drupal\options\Plugin\Field\FieldType;
 
+use Drupal\Component\Utility\Unicode;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\TypedData\DataDefinition;
 
@@ -17,6 +18,7 @@ use Drupal\Core\TypedData\DataDefinition;
  *   id = "list_string",
  *   label = @Translation("List (text)"),
  *   description = @Translation("This field stores text values from a list of allowed 'value => label' pairs, i.e. 'US States': IL => Illinois, IA => Iowa, IN => Indiana."),
+ *   category = @Translation("Text"),
  *   default_widget = "options_select",
  *   default_formatter = "list_default",
  * )
@@ -29,7 +31,8 @@ class ListStringItem extends ListItemBase {
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
     $properties['value'] = DataDefinition::create('string')
       ->setLabel(t('Text value'))
-      ->addConstraint('Length', array('max' => 255));
+      ->addConstraint('Length', array('max' => 255))
+      ->setRequired(TRUE);
 
     return $properties;
   }
@@ -43,7 +46,6 @@ class ListStringItem extends ListItemBase {
         'value' => array(
           'type' => 'varchar',
           'length' => 255,
-          'not null' => FALSE,
         ),
       ),
       'indexes' => array(
@@ -68,9 +70,16 @@ class ListStringItem extends ListItemBase {
    * {@inheritdoc}
    */
   protected static function validateAllowedValue($option) {
-    if (drupal_strlen($option) > 255) {
+    if (Unicode::strlen($option) > 255) {
       return t('Allowed values list: each key must be a string at most 255 characters long.');
     }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected static function castAllowedValue($value) {
+    return (string) $value;
   }
 
 }

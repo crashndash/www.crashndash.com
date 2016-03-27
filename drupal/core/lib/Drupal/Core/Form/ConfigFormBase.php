@@ -8,13 +8,13 @@
 namespace Drupal\Core\Form;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
-use Drupal\Core\Form\FormBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Base class for implementing system configuration forms.
  */
 abstract class ConfigFormBase extends FormBase {
+  use ConfigFormBaseTrait;
 
   /**
    * Constructs a \Drupal\system\ConfigFormBase object.
@@ -57,22 +57,6 @@ abstract class ConfigFormBase extends FormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     drupal_set_message($this->t('The configuration options have been saved.'));
-  }
-
-  /**
-   * {@inheritdoc}
-   *
-   * Overrides \Drupal\Core\Form\FormBase::config() so that configuration is
-   * returned override free. This ensures that overrides do not pollute saved
-   * configuration.
-   */
-  protected function config($name) {
-    $config_factory = $this->configFactory();
-    $old_state = $config_factory->getOverrideState();
-    $config_factory->setOverrideState(FALSE);
-    $config = $config_factory->get($name);
-    $config_factory->setOverrideState($old_state);
-    return $config;
   }
 
 }

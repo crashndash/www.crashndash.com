@@ -2,13 +2,18 @@
 
 /**
  * @file
- * Definition of Drupal\filter\Tests\FilterAdminTest.
+ * Contains \Drupal\filter\Tests\FilterAdminTest.
  */
 
 namespace Drupal\filter\Tests;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\Html;
+use Drupal\Component\Utility\Unicode;
+use Drupal\filter\Entity\FilterFormat;
+use Drupal\node\Entity\Node;
+use Drupal\node\Entity\NodeType;
 use Drupal\simpletest\WebTestBase;
+use Drupal\user\RoleInterface;
 
 /**
  * Thoroughly test the administrative interface of the filter module.
@@ -20,7 +25,21 @@ class FilterAdminTest extends WebTestBase {
   /**
    * {@inheritdoc}
    */
-  public static $modules = array('filter', 'node');
+  public static $modules = ['block', 'filter', 'node', 'filter_test_plugin', 'dblog'];
+
+  /**
+   * An user with administration permissions.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $adminUser;
+
+  /**
+   * An user with permissions to create pages.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $webUser;
 
   /**
    * {@inheritdoc}
@@ -78,17 +97,19 @@ class FilterAdminTest extends WebTestBase {
     ));
     $full_html_format->save();
 
-    $this->admin_user = $this->drupalCreateUser(array(
+    $this->adminUser = $this->drupalCreateUser(array(
       'administer filters',
       $basic_html_format->getPermissionName(),
       $restricted_html_format->getPermissionName(),
       $full_html_format->getPermissionName(),
+      'access site reports',
     ));
 
-    $this->web_user = $this->drupalCreateUser(array('create page content', 'edit own page content'));
+    $this->webUser = $this->drupalCreateUser(array('create page content', 'edit own page content'));
     user_role_grant_permissions('authenticated', array($basic_html_format->getPermissionName()));
     user_role_grant_permissions('anonymous', array($restricted_html_format->getPermissionName()));
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
+    $this->drupalPlaceBlock('local_actions_block');
   }
 
   /**
@@ -98,7 +119,7 @@ class FilterAdminTest extends WebTestBase {
     // Add text format.
     $this->drupalGet('admin/config/content/formats');
     $this->clickLink('Add text format');
-    $format_id = drupal_strtolower($this->randomMachineName());
+    $format_id = Unicode::strtolower($this->randomMachineName());
     $name = $this->randomMachineName();
     $edit = array(
       'format' => $format_id,
@@ -122,7 +143,7 @@ class FilterAdminTest extends WebTestBase {
     // Cannot use the assertNoLinkByHref method as it does partial url matching
     // and 'admin/config/content/formats/manage/' . $format_id . '/disable'
     // exists.
-    // @todo: See https://drupal.org/node/2031223 for the above
+    // @todo: See https://www.drupal.org/node/2031223 for the above.
     $edit_link = $this->xpath('//a[@href=:href]', array(
       ':href' => \Drupal::url('entity.filter_format.edit_form', ['filter_format' => $format_id])
     ));
@@ -187,8 +208,8 @@ class FilterAdminTest extends WebTestBase {
 
     // Verify access permissions to Full HTML format.
     $full_format = entity_load('filter_format', $full);
-    $this->assertTrue($full_format->access('use', $this->admin_user), 'Admin user may use Full HTML.');
-    $this->assertFalse($full_format->access('use', $this->web_user), 'Web user may not use Full HTML.');
+    $this->assertTrue($full_format->access('use', $this->adminUser), 'Admin user may use Full HTML.');
+    $this->assertFalse($full_format->access('use', $this->webUser), 'Web user may not use Full HTML.');
 
     // Add an additional tag.
     $edit = array();
@@ -231,9 +252,9 @@ class FilterAdminTest extends WebTestBase {
 
     // Add format.
     $edit = array();
-    $edit['format'] = drupal_strtolower($this->randomMachineName());
+    $edit['format'] = Unicode::strtolower($this->randomMachineName());
     $edit['name'] = $this->randomMachineName();
-    $edit['roles[' . DRUPAL_AUTHENTICATED_RID . ']'] = 1;
+    $edit['roles[' . RoleInterface::AUTHENTICATED_ID . ']'] = 1;
     $edit['filters[' . $second_filter . '][status]'] = TRUE;
     $edit['filters[' . $first_filter . '][status]'] = TRUE;
     $this->drupalPostForm('admin/config/content/formats/add', $edit, t('Save configuration'));
@@ -243,27 +264,27 @@ class FilterAdminTest extends WebTestBase {
     filter_formats_reset();
     $format = entity_load('filter_format', $edit['format']);
     $this->assertNotNull($format, 'Format found in database.');
-    $this->drupalGet('admin/config/content/formats/manage/' . $format->format);
-    $this->assertFieldByName('roles[' . DRUPAL_AUTHENTICATED_RID . ']', '', 'Role found.');
+    $this->drupalGet('admin/config/content/formats/manage/' . $format->id());
+    $this->assertFieldByName('roles[' . RoleInterface::AUTHENTICATED_ID . ']', '', 'Role found.');
     $this->assertFieldByName('filters[' . $second_filter . '][status]', '', 'Line break filter found.');
     $this->assertFieldByName('filters[' . $first_filter . '][status]', '', 'Url filter found.');
 
     // Disable new filter.
-    $this->drupalPostForm('admin/config/content/formats/manage/' . $format->format . '/disable', array(), t('Disable'));
+    $this->drupalPostForm('admin/config/content/formats/manage/' . $format->id() . '/disable', array(), t('Disable'));
     $this->assertUrl('admin/config/content/formats');
     $this->assertRaw(t('Disabled text format %format.', array('%format' => $edit['name'])), 'Format successfully disabled.');
 
     // Allow authenticated users on full HTML.
     $format = entity_load('filter_format', $full);
     $edit = array();
-    $edit['roles[' . DRUPAL_ANONYMOUS_RID . ']'] = 0;
-    $edit['roles[' . DRUPAL_AUTHENTICATED_RID . ']'] = 1;
+    $edit['roles[' . RoleInterface::ANONYMOUS_ID . ']'] = 0;
+    $edit['roles[' . RoleInterface::AUTHENTICATED_ID . ']'] = 1;
     $this->drupalPostForm('admin/config/content/formats/manage/' . $full, $edit, t('Save configuration'));
     $this->assertUrl('admin/config/content/formats');
-    $this->assertRaw(t('The text format %format has been updated.', array('%format' => $format->name)), 'Full HTML format successfully updated.');
+    $this->assertRaw(t('The text format %format has been updated.', array('%format' => $format->label())), 'Full HTML format successfully updated.');
 
     // Switch user.
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
 
     $this->drupalGet('node/add/page');
     $this->assertRaw('<option value="' . $full . '">Full HTML</option>', 'Full HTML filter accessible.');
@@ -289,20 +310,20 @@ class FilterAdminTest extends WebTestBase {
     // Use plain text and see if it escapes all tags, whether allowed or not.
     // In order to test plain text, we have to enable the hidden variable for
     // "show_fallback_format", which displays plain text in the format list.
-    \Drupal::config('filter.settings')
+    $this->config('filter.settings')
       ->set('always_show_fallback_choice', TRUE)
       ->save();
     $edit = array();
     $edit['body[0][format]'] = $plain;
     $this->drupalPostForm('node/' . $node->id() . '/edit', $edit, t('Save'));
     $this->drupalGet('node/' . $node->id());
-    $this->assertText(String::checkPlain($text), 'The "Plain text" text format escapes all HTML tags.');
-    \Drupal::config('filter.settings')
+    $this->assertEscaped($text, 'The "Plain text" text format escapes all HTML tags.');
+    $this->config('filter.settings')
       ->set('always_show_fallback_choice', FALSE)
       ->save();
 
     // Switch user.
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
 
     // Clean up.
     // Allowed tags.
@@ -315,12 +336,12 @@ class FilterAdminTest extends WebTestBase {
 
     // Full HTML.
     $edit = array();
-    $edit['roles[' . DRUPAL_AUTHENTICATED_RID . ']'] = FALSE;
+    $edit['roles[' . RoleInterface::AUTHENTICATED_ID . ']'] = FALSE;
     $this->drupalPostForm('admin/config/content/formats/manage/' . $full, $edit, t('Save configuration'));
     $this->assertUrl('admin/config/content/formats');
-    $this->assertRaw(t('The text format %format has been updated.', array('%format' => $format->name)), 'Full HTML format successfully reverted.');
+    $this->assertRaw(t('The text format %format has been updated.', array('%format' => $format->label())), 'Full HTML format successfully reverted.');
     $this->drupalGet('admin/config/content/formats/manage/' . $full);
-    $this->assertFieldByName('roles[' . DRUPAL_AUTHENTICATED_RID . ']', $edit['roles[' . DRUPAL_AUTHENTICATED_RID . ']'], 'Changes reverted.');
+    $this->assertFieldByName('roles[' . RoleInterface::AUTHENTICATED_ID . ']', $edit['roles[' . RoleInterface::AUTHENTICATED_ID . ']'], 'Changes reverted.');
 
     // Filter order.
     $edit = array();
@@ -343,6 +364,96 @@ class FilterAdminTest extends WebTestBase {
     );
     $this->drupalPostForm('admin/config/content/formats/manage/basic_html', $edit, t('Save configuration'));
     $this->assertNoRaw(t('The text format %format has been updated.', array('%format' => 'Basic HTML')));
+  }
+
+  /**
+   * Tests whether filter tips page is not HTML escaped.
+   */
+  function testFilterTipHtmlEscape() {
+    $this->drupalLogin($this->adminUser);
+    global $base_url;
+
+    $site_name_with_markup = 'Filter test <script>alert(\'here\');</script> site name';
+    $this->config('system.site')->set('name', $site_name_with_markup)->save();
+
+    // It is not possible to test the whole filter tip page.
+    // Therefore we test only some parts.
+    $link = '<a href="' . $base_url . '">' . Html::escape($site_name_with_markup) . '</a>';
+    $ampersand = '&amp;';
+    $link_as_code = '<code>' . Html::escape($link) . '</code>';
+    $ampersand_as_code = '<code>' . Html::escape($ampersand) . '</code>';
+
+    $this->drupalGet('filter/tips');
+
+    $this->assertRaw('<td class="type">' . $link_as_code . '</td>');
+    $this->assertRaw('<td class="get">' . $link . '</td>');
+    $this->assertRaw('<td class="type">' . $ampersand_as_code . '</td>');
+    $this->assertRaw('<td class="get">' . $ampersand . '</td>');
+  }
+
+  /**
+   * Tests whether a field using a disabled format is rendered.
+   */
+  public function testDisabledFormat() {
+    // Create a node type and add a standard body field.
+    $node_type = NodeType::create(['type' => Unicode::strtolower($this->randomMachineName())]);
+    $node_type->save();
+    node_add_body_field($node_type, $this->randomString());
+
+    // Create a text format with a filter that returns a static string.
+    $format = FilterFormat::create([
+      'name' => $this->randomString(),
+      'format' => $format_id = Unicode::strtolower($this->randomMachineName()),
+    ]);
+    $format->setFilterConfig('filter_static_text', ['status' => TRUE]);
+    $format->save();
+
+    // Create a new node of the new node type.
+    $node = Node::create([
+      'type' => $node_type->id(),
+      'title' => $this->randomString(),
+    ]);
+    $body_value = $this->randomString();
+    $node->body->value = $body_value;
+    $node->body->format = $format_id;
+    $node->save();
+
+    // The format is used and we should see the static text instead of the body
+    // value.
+    $this->drupalGet($node->urlInfo());
+    $this->assertText('filtered text');
+
+    // Disable the format.
+    $format->disable()->save();
+
+    $this->drupalGet($node->urlInfo());
+
+    // The format is not used anymore.
+    $this->assertNoText('filtered text');
+    // The text is not displayed unfiltered or escaped.
+    $this->assertNoRaw($body_value);
+    $this->assertNoEscaped($body_value);
+
+    // Visit the dblog report page.
+    $this->drupalLogin($this->adminUser);
+    $this->drupalGet('admin/reports/dblog');
+    // The correct message has been logged.
+    $this->assertRaw(sprintf('Disabled text format: %s.', $format_id));
+
+    // Programmatically change the text format to something random so we trigger
+    // the missing text format message.
+    $format_id = $this->randomMachineName();
+    $node->body->format = $format_id;
+    $node->save();
+    $this->drupalGet($node->urlInfo());
+    // The text is not displayed unfiltered or escaped.
+    $this->assertNoRaw($body_value);
+    $this->assertNoEscaped($body_value);
+
+    // Visit the dblog report page.
+    $this->drupalGet('admin/reports/dblog');
+    // The missing text format message has been logged.
+    $this->assertRaw(sprintf('Missing text format: %s.', $format_id));
   }
 
 }

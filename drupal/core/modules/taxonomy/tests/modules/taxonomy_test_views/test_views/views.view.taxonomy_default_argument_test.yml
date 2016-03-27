@@ -3,12 +3,13 @@ status: true
 dependencies:
   module:
     - taxonomy
+    - user
 id: taxonomy_default_argument_test
 label: taxonomy_default_argument_test
 module: views
 description: ''
 tag: ''
-base_table: taxonomy_term_data
+base_table: taxonomy_term_field_data
 base_field: tid
 core: 8.x
 display:
@@ -17,29 +18,22 @@ display:
     id: default
     display_title: Master
     position: 0
-    provider: views
     display_options:
       access:
         type: perm
         options:
           perm: 'access content'
-        provider: user
-        dependencies: {  }
       cache:
-        type: none
+        type: tag
         options: {  }
-        provider: views
-        dependencies: {  }
       query:
         type: views_query
         options:
           disable_sql_rewrite: false
           distinct: false
           replica: false
-          query_comment: false
+          query_comment: ''
           query_tags: {  }
-        provider: views
-        dependencies: {  }
       exposed_form:
         type: basic
         options:
@@ -50,8 +44,6 @@ display:
           expose_sort_order: true
           sort_asc_label: Asc
           sort_desc_label: Desc
-        provider: views
-        dependencies: {  }
       pager:
         type: full
         options:
@@ -68,13 +60,11 @@ display:
             offset: false
             offset_label: Offset
           tags:
-            previous: '‹ previous'
-            next: 'next ›'
-            first: '« first'
-            last: 'last »'
+            previous: '‹ Previous'
+            next: 'Next ›'
+            first: '« First'
+            last: 'Last »'
           quantity: 9
-        provider: views
-        dependencies: {  }
       style:
         type: default
         options:
@@ -82,21 +72,16 @@ display:
           row_class: ''
           default_row_class: true
           uses_fields: false
-        provider: views
-        dependencies: {  }
       row:
         type: 'entity:taxonomy_term'
         options:
           relationship: none
           view_mode: default
-          rendering_language: translation_language_renderer
-        provider: views
       fields:
         name:
           id: name
-          table: taxonomy_term_data
+          table: taxonomy_term_field_data
           field: name
-          provider: taxonomy
           label: ''
           alter:
             alter_text: false
@@ -109,11 +94,9 @@ display:
             html: false
           hide_empty: false
           empty_zero: false
-          link_to_taxonomy: 1
           relationship: none
           group_type: group
           admin_label: ''
-          dependencies: {  }
           exclude: false
           element_type: ''
           element_class: ''
@@ -125,7 +108,12 @@ display:
           element_default_classes: true
           empty: ''
           hide_alter_empty: true
-          convert_spaces: false
+          plugin_id: field
+          type: string
+          settings:
+            link_to_entity: true
+          entity_type: taxonomy_term
+          entity_field: name
       filters: {  }
       sorts: {  }
       header: {  }
@@ -135,14 +123,11 @@ display:
       arguments:
         tid:
           id: tid
-          table: taxonomy_term_data
+          table: taxonomy_term_field_data
           field: tid
           relationship: none
           group_type: group
           admin_label: ''
-          dependencies:
-            module:
-              - taxonomy
           default_action: default
           exception:
             value: all
@@ -175,6 +160,13 @@ display:
           break_phrase: false
           not: false
           plugin_id: taxonomy
-          provider: taxonomy
-      field_langcode: '***LANGUAGE_site_default***'
-      field_langcode_add_to_query: null
+          entity_type: taxonomy_term
+          entity_field: tid
+      rendering_language: '***LANGUAGE_entity_translation***'
+  page_1:
+    display_plugin: page
+    id: page_1
+    display_title: Page
+    position: null
+    display_options:
+      path: taxonomy_default_argument_test

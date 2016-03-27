@@ -1,13 +1,16 @@
 /**
+ * @file
  * Builds a nested accordion widget.
  *
  * Invoke on an HTML list element with the jQuery plugin pattern.
- * - For example, $('.menu').drupalToolbarMenu();
+ *
+ * @example
+ * $('.toolbar-menu').drupalToolbarMenu();
  */
 
 (function ($, Drupal, drupalSettings) {
 
-  "use strict";
+  'use strict';
 
   /**
    * Store the open menu tray.
@@ -17,8 +20,8 @@
   $.fn.drupalToolbarMenu = function () {
 
     var ui = {
-      'handleOpen': Drupal.t('Extend'),
-      'handleClose': Drupal.t('Collapse')
+      handleOpen: Drupal.t('Extend'),
+      handleClose: Drupal.t('Collapse')
     };
 
     /**
@@ -35,6 +38,26 @@
       // Close open sibling menus.
       var $openItems = $item.siblings().filter('.open');
       toggleList($openItems, false);
+    }
+
+    /**
+     * Handle clicks from a menu item link.
+     *
+     * @param {Object} event
+     *   A jQuery Event object.
+     */
+    function linkClickHandler(event) {
+      // If the toolbar is positioned fixed (and therefore hiding content
+      // underneath), then users expect clicks in the administration menu tray
+      // to take them to that destination but for the menu tray to be closed
+      // after clicking: otherwise the toolbar itself is obstructing the view
+      // of the destination they chose.
+      if (!Drupal.toolbar.models.toolbarModel.get('isFixed')) {
+        Drupal.toolbar.models.toolbarModel.set('activeTab', null);
+      }
+      // Stopping propagation to make sure that once a toolbar-box is clicked
+      // (the whitespace part), the page is not redirected anymore.
+      event.stopPropagation();
     }
 
     /**
@@ -57,7 +80,7 @@
       // Adjust the toggle text.
       $toggle
         .find('.action')
-        // Expand Structure, Collapse Structure
+        // Expand Structure, Collapse Structure.
         .text((switcher) ? ui.handleClose : ui.handleOpen);
     }
 
@@ -74,16 +97,16 @@
      */
     function initItems($menu) {
       var options = {
-        'class': 'toolbar-icon toolbar-handle',
-        'action': ui.handleOpen,
-        'text': ''
+        class: 'toolbar-icon toolbar-handle',
+        action: ui.handleOpen,
+        text: ''
       };
       // Initialize items and their links.
       $menu.find('li > a').wrap('<div class="toolbar-box">');
       // Add a handle to each list item if it has a menu.
       $menu.find('li').each(function (index, element) {
         var $item = $(element);
-        if ($item.children('ul.menu').length) {
+        if ($item.children('ul.toolbar-menu').length) {
           var $box = $item.children('.toolbar-box');
           options.text = Drupal.t('@label', {'@label': $box.find('a').text()});
           $item.children('.toolbar-box')
@@ -101,7 +124,7 @@
      * @param {jQuery} $lists
      *   A jQuery object of ul elements.
      *
-     * @param {Integer} level
+     * @param {number} level
      *   The current level number to be assigned to the list elements.
      */
     function markListLevels($lists, level) {
@@ -117,7 +140,7 @@
      * On page load, open the active menu item.
      *
      * Marks the trail of the active link in the menu back to the root of the
-     * menu with .active-trail.
+     * menu with .menu-item--active-trail.
      *
      * @param {jQuery} $menu
      *   The root of the menu.
@@ -128,19 +151,21 @@
         activeItem = location.pathname;
       }
       if (activeItem) {
-        var $activeItem = $menu.find('a[href="' + activeItem + '"]').addClass('active');
-        var $activeTrail = $activeItem.parentsUntil('.root', 'li').addClass('active-trail');
+        var $activeItem = $menu.find('a[href="' + activeItem + '"]').addClass('menu-item--active');
+        var $activeTrail = $activeItem.parentsUntil('.root', 'li').addClass('menu-item--active-trail');
         toggleList($activeTrail, true);
       }
     }
 
-    // Bind event handlers.
-    $(document)
-      .on('click.toolbar', '.toolbar-handle', toggleClickHandler);
     // Return the jQuery object.
     return this.each(function (selector) {
       var $menu = $(this).once('toolbar-menu');
       if ($menu.length) {
+        // Bind event handlers.
+        $menu
+          .on('click.toolbar', '.toolbar-box', toggleClickHandler)
+          .on('click.toolbar', '.toolbar-box a', linkClickHandler);
+
         $menu.addClass('root');
         initItems($menu);
         markListLevels($menu);
@@ -153,7 +178,16 @@
   /**
    * A toggle is an interactive element often bound to a click handler.
    *
-   * @return {String}
+   * @param {object} options
+   *   Options for the button.
+   * @param {string} options.class
+   *   Class to set on the button.
+   * @param {string} options.action
+   *   Action for the button.
+   * @param {string} options.text
+   *   Used as label for the button.
+   *
+   * @return {string}
    *   A string representing a DOM fragment.
    */
   Drupal.theme.toolbarMenuItemToggle = function (options) {

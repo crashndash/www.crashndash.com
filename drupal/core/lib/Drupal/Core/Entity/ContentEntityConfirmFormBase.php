@@ -19,7 +19,7 @@ abstract class ContentEntityConfirmFormBase extends ContentEntityForm implements
   /**
    * {@inheritdoc}
    */
-  public function getBaseFormID() {
+  public function getBaseFormId() {
     return $this->entity->getEntityTypeId() . '_confirm_form';
   }
 
@@ -86,9 +86,6 @@ abstract class ContentEntityConfirmFormBase extends ContentEntityForm implements
       'submit' => array(
         '#type' => 'submit',
         '#value' => $this->getConfirmText(),
-        '#validate' => array(
-          array($this, 'validate'),
-        ),
         '#submit' => array(
           array($this, 'submitForm'),
         ),
@@ -117,5 +114,14 @@ abstract class ContentEntityConfirmFormBase extends ContentEntityForm implements
    * Confirmation forms should override submitForm() instead for their logic.
    */
   public function delete(array $form, FormStateInterface $form_state) {}
+
+  /**
+   * {@inheritdoc}
+   */
+  public function validateForm(array &$form, FormStateInterface $form_state) {
+    // Override the default validation implementation as it is not necessary
+    // nor possible to validate an entity in a confirmation form.
+    return $this->entity;
+  }
 
 }

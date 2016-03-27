@@ -8,6 +8,7 @@
 namespace Drupal\file\Plugin\Field\FieldType;
 
 use Drupal\Component\Utility\Bytes;
+use Drupal\Component\Render\PlainTextOutput;
 use Drupal\Component\Utility\Random;
 use Drupal\Core\Field\FieldDefinitionInterface;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
@@ -23,10 +24,11 @@ use Drupal\Core\TypedData\DataDefinition;
  *   id = "file",
  *   label = @Translation("File"),
  *   description = @Translation("This field stores the ID of a file as an integer value."),
+ *   category = @Translation("Reference"),
  *   default_widget = "file_generic",
  *   default_formatter = "file_default",
  *   list_class = "\Drupal\file\Plugin\Field\FieldType\FileFieldItemList",
- *   constraints = {"ValidReference" = {}, "ReferenceAccess" = {}}
+ *   constraints = {"ReferenceAccess" = {}, "FileValidation" = {}}
  * )
  */
 class FileItem extends EntityReferenceItem {
@@ -49,7 +51,7 @@ class FileItem extends EntityReferenceItem {
   public static function defaultFieldSettings() {
     return array(
       'file_extensions' => 'txt',
-      'file_directory' => '',
+      'file_directory' => '[date:custom:Y]-[date:custom:m]',
       'max_filesize' => '',
       'description_field' => 0,
     ) + parent::defaultFieldSettings();
@@ -64,7 +66,6 @@ class FileItem extends EntityReferenceItem {
         'target_id' => array(
           'description' => 'The ID of the file entity.',
           'type' => 'int',
-          'not null' => TRUE,
           'unsigned' => TRUE,
         ),
         'display' => array(
@@ -72,13 +73,11 @@ class FileItem extends EntityReferenceItem {
           'type' => 'int',
           'size' => 'tiny',
           'unsigned' => TRUE,
-          'not null' => TRUE,
           'default' => 1,
         ),
         'description' => array(
           'description' => 'A description of the file.',
           'type' => 'text',
-          'not null' => FALSE,
         ),
       ),
       'indexes' => array(
@@ -130,7 +129,7 @@ class FileItem extends EntityReferenceItem {
       '#description' => t('This setting only has an effect if the display option is enabled.'),
       '#states' => array(
         'visible' => array(
-          ':input[name="field_storage[settings][display_field]"]' => array('checked' => TRUE),
+          ':input[name="settings[display_field]"]' => array('checked' => TRUE),
         ),
       ),
     );
@@ -194,7 +193,6 @@ class FileItem extends EntityReferenceItem {
       '#title' => t('Enable <em>Description</em> field'),
       '#default_value' => isset($settings['description_field']) ? $settings['description_field'] : '',
       '#description' => t('The description field allows users to enter a description about the uploaded file.'),
-      '#parents' => array('instance', 'settings', 'description_field'),
       '#weight' => 11,
     );
 
@@ -214,7 +212,7 @@ class FileItem extends EntityReferenceItem {
   public static function validateDirectory($element, FormStateInterface $form_state) {
     // Strip slashes from the beginning and end of $element['file_directory'].
     $value = trim($element['#value'], '\\/');
-    form_set_value($element, $value, $form_state);
+    $form_state->setValueForElement($element, $value);
   }
 
   /**
@@ -236,7 +234,7 @@ class FileItem extends EntityReferenceItem {
         $form_state->setError($element, t('The list of allowed extensions is not valid, be sure to exclude leading dots and to separate extensions with a comma or space.'));
       }
       else {
-        form_set_value($element, $extensions, $form_state);
+        $form_state->setValueForElement($element, $extensions);
       }
     }
   }
@@ -252,35 +250,51 @@ class FileItem extends EntityReferenceItem {
    */
   public static function validateMaxFilesize($element, FormStateInterface $form_state) {
     if (!empty($element['#value']) && !is_numeric(Bytes::toInt($element['#value']))) {
-      $form_state->setError($element, t('The "!name" option must contain a valid value. You may either leave the text field empty or enter a string like "512" (bytes), "80 KB" (kilobytes) or "50 MB" (megabytes).', array('!name' => t($element['title']))));
+      $form_state->setError($element, t('The "@name" option must contain a valid value. You may either leave the text field empty or enter a string like "512" (bytes), "80 KB" (kilobytes) or "50 MB" (megabytes).', array('@name' => $element['title'])));
     }
   }
 
   /**
    * Determines the URI for a file field.
    *
-   * @param $data
+   * @param array $data
    *   An array of token objects to pass to token_replace().
    *
-   * @return
-   *   A file directory URI with tokens replaced.
+   * @return string
+   *   An unsanitized file directory URI with tokens replaced. The result of
+   *   the token replacement is then converted to plain text and returned.
    *
    * @see token_replace()
    */
   public function getUploadLocation($data = array()) {
-    $settings = $this->getSettings();
+    return static::doGetUploadLocation($this->getSettings(), $data);
+  }
+
+  /**
+   * Determines the URI for a file field.
+   *
+   * @param array $settings
+   *   The array of field settings.
+   * @param array $data
+   *   An array of token objects to pass to token_replace().
+   *
+   * @return string
+   *   An unsanitized file directory URI with tokens replaced. The result of
+   *   the token replacement is then converted to plain text and returned.
+   */
+  protected static function doGetUploadLocation(array $settings, $data = []) {
     $destination = trim($settings['file_directory'], '/');
 
-    // Replace tokens.
-    $destination = \Drupal::token()->replace($destination, $data);
-
+    // Replace tokens. As the tokens might contain HTML we convert it to plain
+    // text.
+    $destination = PlainTextOutput::renderFromHtml(\Drupal::token()->replace($destination, $data));
     return $settings['uri_scheme'] . '://' . $destination;
   }
 
   /**
    * Retrieves the upload validators for a file field.
    *
-   * @return
+   * @return array
    *   An array suitable for passing to file_save_upload() or the file field
    *   element's '#upload_validators' property.
    */
@@ -312,8 +326,12 @@ class FileItem extends EntityReferenceItem {
     $random = new Random();
     $settings = $field_definition->getSettings();
 
+    // Prepare destination.
+    $dirname = static::doGetUploadLocation($settings);
+    file_prepare_directory($dirname, FILE_CREATE_DIRECTORY);
+
     // Generate a file entity.
-    $destination = $settings['uri_scheme'] . '://' . $settings['file_directory'] . $random->name(10, TRUE) . '.txt';
+    $destination = $dirname . '/' . $random->name(10, TRUE) . '.txt';
     $data = $random->paragraphs(3);
     $file = file_save_data($data, $destination, FILE_EXISTS_ERROR);
     $values = array(
@@ -335,6 +353,13 @@ class FileItem extends EntityReferenceItem {
       return (bool) $this->display;
     }
     return TRUE;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function getPreconfiguredOptions() {
+    return [];
   }
 
 }

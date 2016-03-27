@@ -5,8 +5,16 @@
 
 (function ($) {
 
-  "use strict";
+  'use strict';
 
+  /**
+   * Adds summaries to the book outline form.
+   *
+   * @type {Drupal~behavior}
+   *
+   * @prop {Drupal~behaviorAttach} attach
+   *   Attaches summary behavior to book outline forms.
+   */
   Drupal.behaviors.bookDetailsSummaries = {
     attach: function (context) {
       $(context).find('.book-outline-form').drupalSetSummary(function (context) {

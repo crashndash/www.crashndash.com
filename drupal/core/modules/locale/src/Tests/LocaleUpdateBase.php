@@ -2,14 +2,14 @@
 
 /**
  * @file
- * Contains Drupal\locale\Tests\LocaleUpdateBase.
+ * Contains \Drupal\locale\Tests\LocaleUpdateBase.
  */
 
 namespace Drupal\locale\Tests;
 
 use Drupal\Core\StreamWrapper\PublicStream;
 use Drupal\simpletest\WebTestBase;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * Base class for testing updates to string translations.
@@ -19,30 +19,37 @@ abstract class LocaleUpdateBase extends WebTestBase {
   /**
    * Timestamp for an old translation.
    *
-   * @var integer
+   * @var int
    */
   protected $timestampOld;
 
   /**
    * Timestamp for a medium aged translation.
    *
-   * @var integer
+   * @var int
    */
   protected $timestampMedium;
 
   /**
    * Timestamp for a new translation.
    *
-   * @var integer
+   * @var int
    */
   protected $timestampNew;
+
+  /**
+   * Timestamp for current time.
+   *
+   * @var int
+   */
+  protected $timestampNow;
 
   /**
    * Modules to enable.
    *
    * @var array
    */
-  public static $modules = array('update', 'update_test', 'locale', 'locale_test');
+  public static $modules = array('locale', 'locale_test');
 
   /**
    * {@inheritdoc}
@@ -50,20 +57,15 @@ abstract class LocaleUpdateBase extends WebTestBase {
   protected function setUp() {
     parent::setUp();
 
-    // Update module should not go out to d.o to check for updates. We override
-    // the url to the default update_test xml path. But without providing
-    // a mock xml file, no update data will be found.
-    \Drupal::config('update.settings')->set('fetch.url', _url('update-test', array('absolute' => TRUE)))->save();
-
     // Setup timestamps to identify old and new translation sources.
     $this->timestampOld = REQUEST_TIME - 300;
     $this->timestampMedium = REQUEST_TIME - 200;
     $this->timestampNew = REQUEST_TIME - 100;
-    $this->timestamp_now = REQUEST_TIME;
+    $this->timestampNow = REQUEST_TIME;
 
     // Enable import of translations. By default this is disabled for automated
     // tests.
-    \Drupal::config('locale.settings')
+    $this->config('locale.settings')
       ->set('translation.import_enabled', TRUE)
       ->save();
   }
@@ -77,20 +79,20 @@ abstract class LocaleUpdateBase extends WebTestBase {
    */
   protected function setTranslationsDirectory($path) {
     file_prepare_directory($path, FILE_CREATE_DIRECTORY);
-    \Drupal::config('locale.settings')->set('translation.path', $path)->save();
+    $this->config('locale.settings')->set('translation.path', $path)->save();
   }
 
   /**
    * Adds a language.
    *
-   * @param $langcode
+   * @param string $langcode
    *   The language code of the language to add.
    */
   protected function addLanguage($langcode) {
     $edit = array('predefined_langcode' => $langcode);
     $this->drupalPostForm('admin/config/regional/language/add', $edit, t('Add language'));
     $this->container->get('language_manager')->reset();
-    $this->assertTrue(\Drupal::languageManager()->getLanguage($langcode), String::format('Language %langcode added.', array('%langcode' => $langcode)));
+    $this->assertTrue(\Drupal::languageManager()->getLanguage($langcode), SafeMarkup::format('Language %langcode added.', array('%langcode' => $langcode)));
   }
 
   /**
@@ -101,13 +103,13 @@ abstract class LocaleUpdateBase extends WebTestBase {
    * @param string $filename
    *   Name of the file to create.
    * @param int $timestamp
-   *   Timestamp to set the file to. Defaults to current time.
+   *   (optional) Timestamp to set the file to. Defaults to current time.
    * @param array $translations
-   *   Array of source/target value translation strings. Only singular strings
-   *   are supported, no plurals. No double quotes are allowed in source and
-   *   translations strings.
+   *   (optional) Array of source/target value translation strings. Only
+   *   singular strings are supported, no plurals. No double quotes are allowed
+   *   in source and translations strings.
    */
-  protected function makePoFile($path, $filename, $timestamp = NULL, $translations = array()) {
+  protected function makePoFile($path, $filename, $timestamp = NULL, array $translations = array()) {
     $timestamp = $timestamp ? $timestamp : REQUEST_TIME;
     $path = 'public://' . $path;
     $text = '';
@@ -173,11 +175,12 @@ EOF;
    * imported.
    */
   protected function setTranslationFiles() {
-    $config = \Drupal::config('locale.settings');
+    $config = $this->config('locale.settings');
 
     // A flag is set to let the locale_test module replace the project data with
     // a set of test projects which match the below project files.
     \Drupal::state()->set('locale.test_projects_alter', TRUE);
+    \Drupal::state()->set('locale.remove_core_project', FALSE);
 
     // Setup the environment.
     $public_path = PublicStream::basePath();

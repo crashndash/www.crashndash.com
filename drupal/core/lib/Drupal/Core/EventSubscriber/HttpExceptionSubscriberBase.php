@@ -7,8 +7,6 @@
 
 namespace Drupal\Core\EventSubscriber;
 
-use Drupal\Core\ContentNegotiation;
-use Symfony\Component\Debug\Exception\FlattenException;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\GetResponseForExceptionEvent;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
@@ -58,7 +56,7 @@ abstract class HttpExceptionSubscriberBase implements EventSubscriberInterface {
    *
    * @return array
    *   An indexed array of the format machine names that this subscriber will
-   *   attempt ot process,such as "html" or "json". Returning an empty array
+   *   attempt to process, such as "html" or "json". Returning an empty array
    *   will apply to all formats.
    *
    * @see \Symfony\Component\HttpFoundation\Request
@@ -88,20 +86,12 @@ abstract class HttpExceptionSubscriberBase implements EventSubscriberInterface {
     $exception = $event->getException();
 
     // Make the exception available for example when rendering a block.
-    $event->getRequest()->attributes->set('exception', FlattenException::create($exception));
+    $request = $event->getRequest();
+    $request->attributes->set('exception', $exception);
 
     $handled_formats = $this->getHandledFormats();
 
-    // @todo Injecting this service would force all implementing classes to also
-    // handle its injection. However, we are trying to switch to a more robust
-    // content negotiation library in https://www.drupal.org/node/1505080 that
-    // will make $request->getRequestFormat() reliable as a better alternative
-    // to this code. We therefore use this style for now on the expectation
-    // that it will get replaced with better code later. That change will NOT
-    // be an API change for any implementing classes.  (Whereas if we injected
-    // this class it would be an API change.  That's why we're not doing it.)
-    $conneg = new ContentNegotiation();
-    $format = $conneg->getContentType($event->getRequest());
+    $format = $request->query->get(MainContentViewSubscriber::WRAPPER_FORMAT, $request->getRequestFormat());
 
     if ($exception instanceof HttpExceptionInterface && (empty($handled_formats) || in_array($format, $handled_formats))) {
       $method = 'on' . $exception->getStatusCode();

@@ -7,7 +7,6 @@
 
 namespace Drupal\Tests\views\Unit\Plugin\field;
 
-use Drupal\Component\Utility\String;
 use Drupal\Tests\UnitTestCase;
 use Drupal\views\Entity\View;
 use Drupal\views\Plugin\views\field\Counter;
@@ -72,7 +71,11 @@ class CounterTest extends UnitTestCase {
 
     $storage = new View($config, 'view');
     $user = $this->getMock('Drupal\Core\Session\AccountInterface');
-    $this->view = $this->getMock('Drupal\views\ViewExecutable', NULL, array($storage, $user));
+    $views_data = $this->getMockBuilder('Drupal\views\ViewsData')
+      ->disableOriginalConstructor()
+      ->getMock();
+    $route_provider = $this->getMock('Drupal\Core\Routing\RouteProviderInterface');
+    $this->view = $this->getMock('Drupal\views\ViewExecutable', NULL, array($storage, $user, $views_data, $route_provider));
 
     $this->display = $this->getMockBuilder('Drupal\views\Plugin\views\display\DisplayPluginBase')
       ->disableOriginalConstructor()
@@ -92,7 +95,6 @@ class CounterTest extends UnitTestCase {
 
     $this->definition = array('title' => 'counter field', 'plugin_type' => 'field');
   }
-
 
   /**
    * Provides some row index to test.
@@ -122,15 +124,9 @@ class CounterTest extends UnitTestCase {
     $expected = $i + 1;
 
     $counter = $counter_handler->getValue($this->testData[$i]);
-    $this->assertEquals($expected, $counter, String::format('The expected number (@expected) patches with the rendered number (@counter) failed', array(
-      '@expected' => $expected,
-      '@counter' => $counter
-    )));
-    $counter = $counter_handler->render($this->testData[$i]);
-    $this->assertEquals($expected, $counter_handler->render($this->testData[$i]), String::format('The expected number (@expected) patches with the rendered number (@counter) failed', array(
-      '@expected' => $expected,
-      '@counter' => $counter
-    )));
+    $this->assertEquals($expected, $counter, 'The expected number matches with the counter number');
+    $counter = $this->renderCounter($counter_handler, $this->testData[$i]);
+    $this->assertEquals($expected, $counter, 'The expected number matches with the rendered number');
   }
 
   /**
@@ -154,15 +150,9 @@ class CounterTest extends UnitTestCase {
     $expected = $rand_start + $i;
 
     $counter = $counter_handler->getValue($this->testData[$i]);
-    $this->assertEquals($expected, $counter, String::format('The expected number (@expected) patches with the rendered number (@counter) failed', array(
-      '@expected' => $expected,
-      '@counter' => $counter
-    )));
-    $counter = $counter_handler->render($this->testData[$i]);
-    $this->assertEquals($expected, $counter_handler->render($this->testData[$i]), String::format('The expected number (@expected) patches with the rendered number (@counter) failed', array(
-      '@expected' => $expected,
-      '@counter' => $counter
-    )));
+    $this->assertEquals($expected, $counter, 'The expected number matches with the counter number');
+    $counter = $this->renderCounter($counter_handler, $this->testData[$i]);
+    $this->assertEquals($expected, $counter, 'The expected number matches with the rendered number');
   }
 
   /**
@@ -189,15 +179,9 @@ class CounterTest extends UnitTestCase {
     $expected = $offset + $rand_start + $i;
 
     $counter = $counter_handler->getValue($this->testData[$i]);
-    $this->assertEquals($expected, $counter, String::format('The expected number (@expected) patches with the rendered number (@counter) failed', array(
-      '@expected' => $expected,
-      '@counter' => $counter
-    )));
-    $counter = $counter_handler->render($this->testData[$i]);
-    $this->assertEquals($expected, $counter_handler->render($this->testData[$i]), String::format('The expected number (@expected) patches with the rendered number (@counter) failed', array(
-      '@expected' => $expected,
-      '@counter' => $counter
-    )));
+    $this->assertEquals($expected, $counter, 'The expected number matches with the counter number');
+    $counter = $this->renderCounter($counter_handler, $this->testData[$i]);
+    $this->assertEquals($expected, $counter, 'The expected number matches with the rendered number');
   }
 
   /**
@@ -228,15 +212,26 @@ class CounterTest extends UnitTestCase {
     $expected = $items_per_page + $offset + $rand_start + $i;
 
     $counter = $counter_handler->getValue($this->testData[$i]);
-    $this->assertEquals($expected, $counter, String::format('The expected number (@expected) patches with the rendered number (@counter) failed', array(
-      '@expected' => $expected,
-      '@counter' => $counter
-    )));
-    $counter = $counter_handler->render($this->testData[$i]);
-    $this->assertEquals($expected, $counter_handler->render($this->testData[$i]), String::format('The expected number (@expected) patches with the rendered number (@counter) failed', array(
-      '@expected' => $expected,
-      '@counter' => $counter
-    )));
+    $this->assertEquals($expected, $counter, 'The expected number matches with the counter number');
+    $counter = $this->renderCounter($counter_handler, $this->testData[$i]);
+    $this->assertEquals($expected, $counter, 'The expected number matches with the rendered number');
+  }
+
+  /**
+   * Renders the counter field handler.
+   *
+   * @param \Drupal\views\Plugin\views\field\Counter $handler
+   *   The counter handler.
+   * @param \Drupal\views\ResultRow $row
+   *   A result row.
+   *
+   * @return string
+   *   The counter rendered markup.
+   */
+  protected function renderCounter(Counter $handler, ResultRow $row) {
+    $markup = $handler->render($row);
+    $handler->postRender($row, $markup);
+    return $handler->last_render;
   }
 
 }

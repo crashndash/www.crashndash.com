@@ -2,12 +2,11 @@
 
 /**
  * @file
- * Contains Drupal\user\Entity\Role.
+ * Contains \Drupal\user\Entity\Role.
  */
 
 namespace Drupal\user\Entity;
 
-use Drupal\Core\Cache\Cache;
 use Drupal\Core\Config\Entity\ConfigEntityBase;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\user\RoleInterface;
@@ -24,7 +23,7 @@ use Drupal\user\RoleInterface;
  *     "list_builder" = "Drupal\user\RoleListBuilder",
  *     "form" = {
  *       "default" = "Drupal\user\RoleForm",
- *       "delete" = "Drupal\user\Form\UserRoleDelete"
+ *       "delete" = "Drupal\Core\Entity\EntityDeleteForm"
  *     }
  *   },
  *   admin_permission = "administer permissions",
@@ -36,9 +35,17 @@ use Drupal\user\RoleInterface;
  *     "label" = "label"
  *   },
  *   links = {
- *     "delete-form" = "entity.user_role.delete_form",
- *     "edit-form" = "entity.user_role.edit_form",
- *     "edit-permissions-form" = "entity.user_role.edit_permissions_form"
+ *     "delete-form" = "/admin/people/roles/manage/{user_role}/delete",
+ *     "edit-form" = "/admin/people/roles/manage/{user_role}",
+ *     "edit-permissions-form" = "/admin/people/permissions/{user_role}",
+ *     "collection" = "/admin/people/roles",
+ *   },
+ *   config_export = {
+ *     "id",
+ *     "label",
+ *     "weight",
+ *     "is_admin",
+ *     "permissions",
  *   }
  * )
  */
@@ -73,9 +80,19 @@ class Role extends ConfigEntityBase implements RoleInterface {
   protected $permissions = array();
 
   /**
+   * An indicator whether the role has all permissions.
+   *
+   * @var bool
+   */
+  protected $is_admin;
+
+  /**
    * {@inheritdoc}
    */
   public function getPermissions() {
+    if ($this->isAdmin()) {
+      return [];
+    }
     return $this->permissions;
   }
 
@@ -98,6 +115,9 @@ class Role extends ConfigEntityBase implements RoleInterface {
    * {@inheritdoc}
    */
   public function hasPermission($permission) {
+    if ($this->isAdmin()) {
+      return TRUE;
+    }
     return in_array($permission, $this->permissions);
   }
 
@@ -105,6 +125,9 @@ class Role extends ConfigEntityBase implements RoleInterface {
    * {@inheritdoc}
    */
   public function grantPermission($permission) {
+    if ($this->isAdmin()) {
+      return $this;
+    }
     if (!$this->hasPermission($permission)) {
       $this->permissions[] = $permission;
     }
@@ -115,7 +138,25 @@ class Role extends ConfigEntityBase implements RoleInterface {
    * {@inheritdoc}
    */
   public function revokePermission($permission) {
+    if ($this->isAdmin()) {
+      return $this;
+    }
     $this->permissions = array_diff($this->permissions, array($permission));
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isAdmin() {
+    return (bool) $this->is_admin;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setIsAdmin($is_admin) {
+    $this->is_admin = $is_admin;
     return $this;
   }
 
@@ -142,16 +183,6 @@ class Role extends ConfigEntityBase implements RoleInterface {
       });
       $this->weight = $max + 1;
     }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function postSave(EntityStorageInterface $storage, $update = TRUE) {
-    parent::postSave($storage, $update);
-
-    // Clear render cache.
-    entity_render_cache_clear();
   }
 
 }

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views_test_data\Plugin\views\access\StaticTest.
+ * Contains \Drupal\views_test_data\Plugin\views\access\StaticTest.
  */
 
 namespace Drupal\views_test_data\Plugin\views\access;
@@ -29,6 +29,9 @@ class StaticTest extends AccessPluginBase {
     return $options;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function access(AccountInterface $account) {
     return !empty($this->options['access']);
   }
@@ -40,6 +43,15 @@ class StaticTest extends AccessPluginBase {
     if (!empty($this->options['access'])) {
       $route->setRequirement('_access', 'TRUE');
     }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    return [
+      'content' => ['StaticTest'],
+    ];
   }
 
 }

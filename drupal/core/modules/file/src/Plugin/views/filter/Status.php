@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\file\Plugin\views\filter\Status.
+ * Contains \Drupal\file\Plugin\views\filter\Status.
  */
 
 namespace Drupal\file\Plugin\views\filter;
@@ -22,6 +22,7 @@ class Status extends InOperator {
     if (!isset($this->valueOptions)) {
       $this->valueOptions = _views_file_status();
     }
+    return $this->valueOptions;
   }
 
 }

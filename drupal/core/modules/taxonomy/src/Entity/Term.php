@@ -8,6 +8,7 @@
 namespace Drupal\taxonomy\Entity;
 
 use Drupal\Core\Entity\ContentEntityBase;
+use Drupal\Core\Entity\EntityChangedTrait;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
@@ -40,19 +41,23 @@ use Drupal\taxonomy\TermInterface;
  *     "id" = "tid",
  *     "bundle" = "vid",
  *     "label" = "name",
+ *     "langcode" = "langcode",
  *     "uuid" = "uuid"
  *   },
  *   bundle_entity_type = "taxonomy_vocabulary",
  *   field_ui_base_route = "entity.taxonomy_vocabulary.overview_form",
+ *   common_reference_target = TRUE,
  *   links = {
- *     "canonical" = "entity.taxonomy_term.canonical",
- *     "delete-form" = "entity.taxonomy_term.delete_form",
- *     "edit-form" = "entity.taxonomy_term.edit_form",
+ *     "canonical" = "/taxonomy/term/{taxonomy_term}",
+ *     "delete-form" = "/taxonomy/term/{taxonomy_term}/delete",
+ *     "edit-form" = "/taxonomy/term/{taxonomy_term}/edit",
  *   },
  *   permission_granularity = "bundle"
  * )
  */
 class Term extends ContentEntityBase implements TermInterface {
+
+  use EntityChangedTrait;
 
   /**
    * {@inheritdoc}
@@ -63,10 +68,10 @@ class Term extends ContentEntityBase implements TermInterface {
     // See if any of the term's children are about to be become orphans.
     $orphans = array();
     foreach (array_keys($entities) as $tid) {
-      if ($children = taxonomy_term_load_children($tid)) {
+      if ($children = $storage->loadChildren($tid)) {
         foreach ($children as $child) {
           // If the term has multiple parents, we don't delete it.
-          $parents = taxonomy_term_load_parents($child->id());
+          $parents = $storage->loadParents($child->id());
           if (empty($parents)) {
             $orphans[] = $child->id();
           }
@@ -118,8 +123,16 @@ class Term extends ContentEntityBase implements TermInterface {
       ->setSetting('target_type', 'taxonomy_vocabulary');
 
     $fields['langcode'] = BaseFieldDefinition::create('language')
-      ->setLabel(t('Language code'))
-      ->setDescription(t('The term language code.'));
+      ->setLabel(t('Language'))
+      ->setDescription(t('The term language code.'))
+      ->setTranslatable(TRUE)
+      ->setDisplayOptions('view', array(
+        'type' => 'hidden',
+      ))
+      ->setDisplayOptions('form', array(
+        'type' => 'language_select',
+        'weight' => 2,
+      ));
 
     $fields['name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Name'))
@@ -168,16 +181,10 @@ class Term extends ContentEntityBase implements TermInterface {
 
     $fields['changed'] = BaseFieldDefinition::create('changed')
       ->setLabel(t('Changed'))
-      ->setDescription(t('The time that the term was last edited.'));
+      ->setDescription(t('The time that the term was last edited.'))
+      ->setTranslatable(TRUE);
 
     return $fields;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getChangedTime() {
-    return $this->get('changed')->value;
   }
 
   /**

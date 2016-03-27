@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\action\ActionEditForm.
+ * Contains \Drupal\action\ActionFormBase.
  */
 
 namespace Drupal\action;
@@ -123,8 +123,8 @@ abstract class ActionFormBase extends EntityForm {
   /**
    * {@inheritdoc}
    */
-  public function validate(array $form, FormStateInterface $form_state) {
-    parent::validate($form, $form_state);
+  public function validateForm(array &$form, FormStateInterface $form_state) {
+    parent::validateForm($form, $form_state);
 
     if ($this->plugin instanceof PluginFormInterface) {
       $this->plugin->validateConfigurationForm($form, $form_state);
@@ -149,7 +149,7 @@ abstract class ActionFormBase extends EntityForm {
     $this->entity->save();
     drupal_set_message($this->t('The action has been successfully saved.'));
 
-    $form_state->setRedirect('action.admin');
+    $form_state->setRedirect('entity.action.collection');
   }
 
 }

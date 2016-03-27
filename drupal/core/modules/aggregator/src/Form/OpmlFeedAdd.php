@@ -87,7 +87,7 @@ class OpmlFeedAdd extends FormBase {
       '#title' => $this->t('Update interval'),
       '#default_value' => 3600,
       '#options' => $period,
-      '#description' => $this->t('The length of time between feed updates. Requires a correctly configured <a href="@cron">cron maintenance task</a>.', array('@cron' => $this->url('system.status'))),
+      '#description' => $this->t('The length of time between feed updates. Requires a correctly configured <a href=":cron">cron maintenance task</a>.', array(':cron' => $this->url('system.status'))),
     );
 
     $form['actions'] = array('#type' => 'actions');
@@ -122,7 +122,7 @@ class OpmlFeedAdd extends FormBase {
       // @todo Move this to a fetcher implementation.
       try {
         $response = $this->httpClient->get($form_state->getValue('remote'));
-        $data = $response->getBody(TRUE);
+        $data = (string) $response->getBody();
       }
       catch (RequestException $e) {
         $this->logger('aggregator')->warning('Failed to download OPML file due to "%error".', array('%error' => $e->getMessage()));
@@ -182,9 +182,7 @@ class OpmlFeedAdd extends FormBase {
    * Feeds are recognized as <outline> elements with the attributes "text" and
    * "xmlurl" set.
    *
-   * @todo Move this functionality to a parser.
-   *
-   * @param $opml
+   * @param string $opml
    *   The complete contents of an OPML document.
    *
    * @return array
@@ -192,6 +190,8 @@ class OpmlFeedAdd extends FormBase {
    *   element, or NULL if the OPML document failed to be parsed. An empty array
    *   will be returned if the document is valid but contains no feeds, as some
    *   OPML documents do.
+   *
+   * @todo Move this to a parser in https://www.drupal.org/node/1963540.
    */
   protected function parseOpml($opml) {
     $feeds = array();

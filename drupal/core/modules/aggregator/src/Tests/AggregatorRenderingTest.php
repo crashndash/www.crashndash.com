@@ -2,12 +2,12 @@
 
 /**
  * @file
- * Definition of Drupal\aggregator\Tests\AggregatorRenderingTest.
+ * Contains \Drupal\aggregator\Tests\AggregatorRenderingTest.
  */
 
 namespace Drupal\aggregator\Tests;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * Tests display of aggregator items on the page.
@@ -17,11 +17,17 @@ use Drupal\Component\Utility\String;
 class AggregatorRenderingTest extends AggregatorTestBase {
 
   /**
-   * Modules to enable.
+   * Modules to install.
    *
    * @var array
    */
   public static $modules = array('block', 'test_page_test');
+
+  protected function setUp() {
+    parent::setUp();
+
+    $this->drupalPlaceBlock('page_title_block');
+  }
 
   /**
    * Adds a feed block to the page and checks its links.
@@ -52,13 +58,17 @@ class AggregatorRenderingTest extends AggregatorTestBase {
     $this->drupalGet('test-page');
     $this->assertText($block->label(), 'Feed block is displayed on the page.');
 
+    // Confirm items appear as links.
+    $items = $this->container->get('entity.manager')->getStorage('aggregator_item')->loadByFeed($feed->id(), 1);
+    $links = $this->xpath('//a[@href = :href]', array(':href' => reset($items)->getLink()));
+    $this->assert(isset($links[0]), 'Item link found.');
+
     // Find the expected read_more link.
     $href = $feed->url();
     $links = $this->xpath('//a[@href = :href]', array(':href' => $href));
     $this->assert(isset($links[0]), format_string('Link to href %href found.', array('%href' => $href)));
     $cache_tags_header = $this->drupalGetHeader('X-Drupal-Cache-Tags');
     $cache_tags = explode(' ', $cache_tags_header);
-    $this->assertTrue(in_array('block_plugin:aggregator_feed_block', $cache_tags));
     $this->assertTrue(in_array('aggregator_feed:' . $feed->id(), $cache_tags));
 
     // Visit that page.
@@ -97,7 +107,7 @@ class AggregatorRenderingTest extends AggregatorTestBase {
 
     // Check for presence of an aggregator pager.
     $this->drupalGet('aggregator');
-    $elements = $this->xpath("//ul[@class=:class]", array(':class' => 'pager__items'));
+    $elements = $this->xpath("//ul[contains(@class, :class)]", array(':class' => 'pager__items'));
     $this->assertTrue(!empty($elements), 'Individual source page contains a pager.');
 
     // Check for sources page title.
@@ -108,12 +118,18 @@ class AggregatorRenderingTest extends AggregatorTestBase {
     // Find the expected read_more link on the sources page.
     $href = $feed->url();
     $links = $this->xpath('//a[@href = :href]', array(':href' => $href));
-    $this->assertTrue(isset($links[0]), String::format('Link to href %href found.', array('%href' => $href)));
+    $this->assertTrue(isset($links[0]), SafeMarkup::format('Link to href %href found.', array('%href' => $href)));
     $cache_tags_header = $this->drupalGetHeader('X-Drupal-Cache-Tags');
     $cache_tags = explode(' ', $cache_tags_header);
     $this->assertTrue(in_array('aggregator_feed:' . $feed->id(), $cache_tags));
 
-    // Check the rss aggregator page.
+    // Check the rss aggregator page as anonymous user.
+    $this->drupalLogout();
+    $this->drupalGet('aggregator/rss');
+    $this->assertResponse(403);
+
+    // Check the rss aggregator page as admin.
+    $this->drupalLogin($this->adminUser);
     $this->drupalGet('aggregator/rss');
     $this->assertResponse(200);
     $this->assertEqual($this->drupalGetHeader('Content-type'), 'application/rss+xml; charset=utf-8');
@@ -127,7 +143,7 @@ class AggregatorRenderingTest extends AggregatorTestBase {
 
     // Check for the presence of a pager.
     $this->drupalGet('aggregator/sources/' . $feed->id());
-    $elements = $this->xpath("//ul[@class=:class]", array(':class' => 'pager__items'));
+    $elements = $this->xpath("//ul[contains(@class, :class)]", array(':class' => 'pager__items'));
     $this->assertTrue(!empty($elements), 'Individual source page contains a pager.');
     $cache_tags = explode(' ', $this->drupalGetHeader('X-Drupal-Cache-Tags'));
     $this->assertTrue(in_array('aggregator_feed:' . $feed->id(), $cache_tags));

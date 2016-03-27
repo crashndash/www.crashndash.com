@@ -5,11 +5,11 @@
  *
  * Available variables
  * - attributes: A list of HTML attributes for the wrapper element.
- * - children: The rendered checkboxes.
+ * - children: The rendered tabs.
  *
  * @see template_preprocess_vertical_tabs()
  *
  * @ingroup themeable
  */
 #}
-<div data-vertical-tabs-panes{{ attributes }}>{{ children }}</div>
+<div{{ attributes.setAttribute('data-vertical-tabs-panes', TRUE) }}>{{ children }}</div>

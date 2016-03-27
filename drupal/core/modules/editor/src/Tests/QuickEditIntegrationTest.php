@@ -8,14 +8,15 @@
 namespace Drupal\editor\Tests;
 
 use Drupal\Component\Serialization\Json;
+use Drupal\Core\EventSubscriber\AjaxResponseSubscriber;
 use Drupal\Core\Language\LanguageInterface;
-use Drupal\quickedit\EditorSelector;
 use Drupal\quickedit\MetadataGenerator;
-use Drupal\quickedit\Plugin\InPlaceEditorManager;
 use Drupal\quickedit\Tests\QuickEditTestBase;
 use Drupal\quickedit_test\MockEditEntityFieldAccessCheck;
 use Drupal\editor\EditorController;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Event\FilterResponseEvent;
+use Symfony\Component\HttpKernel\HttpKernelInterface;
 
 /**
  * Tests Edit module integration (Editor module's inline editing support).
@@ -62,7 +63,7 @@ class QuickEditIntegrationTest extends QuickEditTestBase {
    *
    * @var string
    */
-  protected $field_name;
+  protected $fieldName;
 
   protected function setUp() {
     parent::setUp();
@@ -71,9 +72,9 @@ class QuickEditIntegrationTest extends QuickEditTestBase {
     $this->installSchema('system', 'url_alias');
 
     // Create a field.
-    $this->field_name = 'field_textarea';
+    $this->fieldName = 'field_textarea';
     $this->createFieldWithStorage(
-      $this->field_name, 'text', 1, 'Long text field',
+      $this->fieldName, 'text', 1, 'Long text field',
       // Instance settings.
       array(),
       // Widget type & settings.
@@ -95,7 +96,7 @@ class QuickEditIntegrationTest extends QuickEditTestBase {
 
     // Associate text editor with text format.
     $editor = entity_create('editor', array(
-      'format' => $full_html_format->format,
+      'format' => $full_html_format->id(),
       'editor' => 'unicorn',
     ));
     $editor->save();
@@ -110,11 +111,21 @@ class QuickEditIntegrationTest extends QuickEditTestBase {
   }
 
   /**
-   * Returns the in-place editor that Edit selects.
+   * Returns the in-place editor that quickedit selects.
+   *
+   * @param int $entity_id
+   *   An entity ID.
+   * @param string $field_name
+   *   A field name.
+   * @param string $view_mode
+   *   A view mode.
+   *
+   * @return string
+   *   Returns the selected in-place editor.
    */
   protected function getSelectedEditor($entity_id, $field_name, $view_mode = 'default') {
     $entity = entity_load('entity_test', $entity_id, TRUE);
-    $items = $entity->getTranslation(LanguageInterface::LANGCODE_NOT_SPECIFIED)->get($field_name);
+    $items = $entity->get($field_name);
     $options = entity_get_display('entity_test', 'entity_test', $view_mode)->getComponent($field_name);
     return $this->editorSelector->getEditor($options['type'], $items);
   }
@@ -132,22 +143,22 @@ class QuickEditIntegrationTest extends QuickEditTestBase {
 
     // Create an entity with values for this text field.
     $entity = entity_create('entity_test');
-    $entity->{$this->field_name}->value = 'Hello, world!';
-    $entity->{$this->field_name}->format = 'filtered_html';
+    $entity->{$this->fieldName}->value = 'Hello, world!';
+    $entity->{$this->fieldName}->format = 'filtered_html';
     $entity->save();
 
     // Editor selection w/ cardinality 1, text format w/o associated text editor.
-    $this->assertEqual('form', $this->getSelectedEditor($entity->id(), $this->field_name), "With cardinality 1, and the filtered_html text format, the 'form' editor is selected.");
+    $this->assertEqual('form', $this->getSelectedEditor($entity->id(), $this->fieldName), "With cardinality 1, and the filtered_html text format, the 'form' editor is selected.");
 
     // Editor selection w/ cardinality 1, text format w/ associated text editor.
-    $entity->{$this->field_name}->format = 'full_html';
+    $entity->{$this->fieldName}->format = 'full_html';
     $entity->save();
-    $this->assertEqual('editor', $this->getSelectedEditor($entity->id(), $this->field_name), "With cardinality 1, and the full_html text format, the 'editor' editor is selected.");
+    $this->assertEqual('editor', $this->getSelectedEditor($entity->id(), $this->fieldName), "With cardinality 1, and the full_html text format, the 'editor' editor is selected.");
 
     // Editor selection with text processing, cardinality >1
-    $this->fields->field_textarea_field_storage->cardinality = 2;
+    $this->fields->field_textarea_field_storage->setCardinality(2);
     $this->fields->field_textarea_field_storage->save();
-    $this->assertEqual('form', $this->getSelectedEditor($entity->id(), $this->field_name), "With cardinality >1, and both items using the full_html text format, the 'form' editor is selected.");
+    $this->assertEqual('form', $this->getSelectedEditor($entity->id(), $this->fieldName), "With cardinality >1, and both items using the full_html text format, the 'form' editor is selected.");
   }
 
   /**
@@ -161,19 +172,18 @@ class QuickEditIntegrationTest extends QuickEditTestBase {
 
     // Create an entity with values for the field.
     $entity = entity_create('entity_test');
-    $entity->{$this->field_name}->value = 'Test';
-    $entity->{$this->field_name}->format = 'full_html';
+    $entity->{$this->fieldName}->value = 'Test';
+    $entity->{$this->fieldName}->format = 'full_html';
     $entity->save();
     $entity = entity_load('entity_test', $entity->id());
 
     // Verify metadata.
-    $items = $entity->getTranslation(LanguageInterface::LANGCODE_NOT_SPECIFIED)->get($this->field_name);
+    $items = $entity->get($this->fieldName);
     $metadata = $this->metadataGenerator->generateFieldMetadata($items, 'default');
     $expected = array(
       'access' => TRUE,
       'label' => 'Long text field',
       'editor' => 'editor',
-      'aria' => 'Entity entity_test 1, field Long text field',
       'custom' => array(
         'format' => 'full_html',
         'formatHasTransformations' => FALSE,
@@ -199,22 +209,33 @@ class QuickEditIntegrationTest extends QuickEditTestBase {
   public function testGetUntransformedTextCommand() {
     // Create an entity with values for the field.
     $entity = entity_create('entity_test');
-    $entity->{$this->field_name}->value = 'Test';
-    $entity->{$this->field_name}->format = 'full_html';
+    $entity->{$this->fieldName}->value = 'Test';
+    $entity->{$this->fieldName}->format = 'full_html';
     $entity->save();
     $entity = entity_load('entity_test', $entity->id());
 
     // Verify AJAX response.
     $controller = new EditorController();
     $request = new Request();
-    $response = $controller->getUntransformedText($entity, $this->field_name, LanguageInterface::LANGCODE_NOT_SPECIFIED, 'default');
+    $response = $controller->getUntransformedText($entity, $this->fieldName, LanguageInterface::LANGCODE_DEFAULT, 'default');
     $expected = array(
       array(
         'command' => 'editorGetUntransformedText',
         'data' => 'Test',
       )
     );
-    $this->assertEqual(Json::encode($expected), $response->prepare($request)->getContent(), 'The GetUntransformedTextCommand AJAX command works correctly.');
+
+    $ajax_response_attachments_processor = \Drupal::service('ajax_response.attachments_processor');
+    $subscriber = new AjaxResponseSubscriber($ajax_response_attachments_processor);
+    $event = new FilterResponseEvent(
+      \Drupal::service('http_kernel'),
+      $request,
+      HttpKernelInterface::MASTER_REQUEST,
+      $response
+    );
+    $subscriber->onResponse($event);
+
+    $this->assertEqual(Json::encode($expected), $response->getContent(), 'The GetUntransformedTextCommand AJAX command works correctly.');
   }
 
 }

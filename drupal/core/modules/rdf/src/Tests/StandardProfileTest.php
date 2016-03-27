@@ -7,6 +7,9 @@
 
 namespace Drupal\rdf\Tests;
 
+use Drupal\Core\Url;
+use Drupal\image\Entity\ImageStyle;
+use Drupal\node\Entity\NodeType;
 use Drupal\node\NodeInterface;
 use Drupal\simpletest\WebTestBase;
 
@@ -29,7 +32,7 @@ class StandardProfileTest extends WebTestBase {
   /**
    * @var string
    */
-  protected $base_uri;
+  protected $baseUri;
 
   /**
    * @var \Drupal\user\UserInterface
@@ -104,7 +107,11 @@ class StandardProfileTest extends WebTestBase {
   protected function setUp() {
     parent::setUp();
 
-    $this->base_uri = \Drupal::url('<front>', [], ['absolute' => TRUE]);
+    // Use Classy theme for testing markup output.
+    \Drupal::service('theme_handler')->install(['classy']);
+    $this->config('system.theme')->set('default', 'classy')->save();
+
+    $this->baseUri = \Drupal::url('<front>', [], ['absolute' => TRUE]);
 
     // Create two test users.
     $this->adminUser = $this->drupalCreateUser(array(
@@ -131,7 +138,7 @@ class StandardProfileTest extends WebTestBase {
     $this->term->save();
 
     // Create image.
-    file_unmanaged_copy(DRUPAL_ROOT . '/core/misc/druplicon.png', 'public://example.jpg');
+    file_unmanaged_copy(\Drupal::root() . '/core/misc/druplicon.png', 'public://example.jpg');
     $this->image = entity_create('file', array('uri' => 'public://example.jpg'));
     $this->image->save();
 
@@ -163,7 +170,7 @@ class StandardProfileTest extends WebTestBase {
     // Set URIs.
     // Image.
     $image_file = $this->article->get('field_image')->entity;
-    $this->imageUri = entity_load('image_style', 'large')->buildUrl($image_file->getFileUri());
+    $this->imageUri = ImageStyle::load('large')->buildUrl($image_file->getFileUri());
     // Term.
     $this->termUri = $this->term->url('canonical', array('absolute' => TRUE));
     // Article.
@@ -200,8 +207,7 @@ class StandardProfileTest extends WebTestBase {
    */
   protected function doFrontPageRdfaTests() {
     // Feed the HTML into the parser.
-    $path = 'node';
-    $graph = $this->getRdfGraph($path);
+    $graph = $this->getRdfGraph(Url::fromRoute('<front>'));
 
     // Ensure that both articles are listed.
     $this->assertEqual(2, count($graph->allOfType('http://schema.org/Article')), 'Two articles found on front page.');
@@ -223,7 +229,7 @@ class StandardProfileTest extends WebTestBase {
     // @todo Once the image points to the original instead of the processed
     //   image, move this to testArticleProperties().
     $image_file = $this->article->get('field_image')->entity;
-    $image_uri = entity_load('image_style', 'medium')->buildUrl($image_file->getFileUri());
+    $image_uri = ImageStyle::load('medium')->buildUrl($image_file->getFileUri());
     $expected_value = array(
       'type' => 'uri',
       'value' => $image_uri,
@@ -240,7 +246,7 @@ class StandardProfileTest extends WebTestBase {
    */
   protected function doArticleRdfaTests() {
     // Feed the HTML into the parser.
-    $graph = $this->getRdfGraph($this->article->getSystemPath());
+    $graph = $this->getRdfGraph($this->article->urlInfo());
 
     // Type.
     $this->assertEqual($graph->type($this->articleUri), 'schema:Article', 'Article type was found (schema:Article).');
@@ -272,12 +278,12 @@ class StandardProfileTest extends WebTestBase {
     // The standard profile hides the created date on pages. Revert display to
     // true for testing.
     // @todo Clean-up standard profile defaults.
-    $node_type = entity_load('node_type', 'page');
+    $node_type = NodeType::load('page');
     $node_type->setDisplaySubmitted(TRUE);
     $node_type->save();
 
     // Feed the HTML into the parser.
-    $graph = $this->getRdfGraph($this->page->getSystemPath());
+    $graph = $this->getRdfGraph($this->page->urlInfo());
 
     // Type.
     $this->assertEqual($graph->type($this->pageUri), 'schema:WebPage', 'Page type was found (schema:WebPage).');
@@ -290,10 +296,10 @@ class StandardProfileTest extends WebTestBase {
    * Tests that user data is exposed on user page.
    */
   protected function doUserRdfaTests() {
-    $this->drupalLogin($this->root_user);
+    $this->drupalLogin($this->rootUser);
 
     // Feed the HTML into the parser.
-    $graph = $this->getRdfGraph($this->adminUser->getSystemPath());
+    $graph = $this->getRdfGraph($this->adminUser->urlInfo());
 
     // User type.
     $this->assertEqual($graph->type($this->authorUri), 'schema:Person', "User type was found (schema:Person) on user page.");
@@ -313,7 +319,7 @@ class StandardProfileTest extends WebTestBase {
    */
   protected function doTermRdfaTests() {
     // Feed the HTML into the parser.
-    $graph = $this->getRdfGraph($this->term->getSystemPath());
+    $graph = $this->getRdfGraph($this->term->urlInfo());
 
     // Term type.
     $this->assertEqual($graph->type($this->termUri), 'schema:Thing', "Term type was found (schema:Thing) on term page.");
@@ -327,7 +333,7 @@ class StandardProfileTest extends WebTestBase {
     $this->assertTrue($graph->hasProperty($this->termUri, 'http://schema.org/name', $expected_value), "Term name was found (schema:name) on term page.");
 
     // @todo Add test for term description once it is a field:
-    //   https://drupal.org/node/569434
+    //   https://www.drupal.org/node/569434.
   }
 
   /**
@@ -354,7 +360,7 @@ class StandardProfileTest extends WebTestBase {
     // Created date.
     $expected_value = array(
       'type' => 'literal',
-      'value' => date_iso8601($node->get('created')->value),
+      'value' => format_date($node->get('created')->value, 'custom', 'c', 'UTC'),
       'lang' => 'en',
     );
     $this->assertTrue($graph->hasProperty($uri, 'http://schema.org/dateCreated', $expected_value), "$message_prefix created date was found (schema:dateCreated) in teaser.");
@@ -402,7 +408,7 @@ class StandardProfileTest extends WebTestBase {
     $this->assertTrue($graph->hasProperty($this->articleUri, 'http://schema.org/about', $expected_value), "$message_prefix tag was found (schema:about).");
 
     // Tag type.
-    // @todo enable with https://drupal.org/node/2072791
+    // @todo Enable with https://www.drupal.org/node/2072791.
     //$this->assertEqual($graph->type($this->termUri), 'schema:Thing', 'Tag type was found (schema:Thing).');
 
     // Tag name.
@@ -411,7 +417,7 @@ class StandardProfileTest extends WebTestBase {
       'value' => $this->term->getName(),
       'lang' => 'en',
     );
-    // @todo enable with https://drupal.org/node/2072791
+    // @todo Enable with https://www.drupal.org/node/2072791.
     //$this->assertTrue($graph->hasProperty($this->termUri, 'http://schema.org/name', $expected_value), "$message_prefix name was found (schema:name).");
   }
 
@@ -443,7 +449,7 @@ class StandardProfileTest extends WebTestBase {
     // Comment created date.
     $expected_value = array(
       'type' => 'literal',
-      'value' => date_iso8601($this->articleComment->get('created')->value),
+      'value' => format_date($this->articleComment->get('created')->value, 'custom', 'c', 'UTC'),
       'lang' => 'en',
     );
     $this->assertTrue($graph->hasProperty($this->articleCommentUri, 'http://schema.org/dateCreated', $expected_value), 'Article comment created date was found (schema:dateCreated).');
@@ -517,16 +523,16 @@ class StandardProfileTest extends WebTestBase {
   /**
    * Get the EasyRdf_Graph object for a page.
    *
-   * @param string $path
-   *   The relative path to the page being tested.
+   * @param \Drupal\Core\Url $url
+   *   The URL object for the page.
    *
    * @return \EasyRdf_Graph
    *   The RDF graph object.
    */
-  protected function getRdfGraph($path) {
+  protected function getRdfGraph(Url $url) {
     $parser = new \EasyRdf_Parser_Rdfa();
     $graph = new \EasyRdf_Graph();
-    $parser->parse($graph, $this->drupalGet($path), 'rdfa', $this->base_uri);
+    $parser->parse($graph, $this->drupalGet($url), 'rdfa', $this->baseUri);
     return $graph;
   }
 }

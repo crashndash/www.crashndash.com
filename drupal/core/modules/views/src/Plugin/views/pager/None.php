@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\pager\None.
+ * Contains \Drupal\views\Plugin\views\pager\None.
  */
 
 namespace Drupal\views\Plugin\views\pager;
@@ -26,7 +26,7 @@ use Drupal\views\Plugin\views\display\DisplayPluginBase;
 class None extends PagerPluginBase {
 
   /**
-   * Overrides \Drupal\views\Plugin\views\PluginBase::init().
+   * {@inheritdoc}
    */
   public function init(ViewExecutable $view, DisplayPluginBase $display, array &$options = NULL) {
     parent::init($view, $display, $options);

@@ -2,12 +2,10 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Ajax\HtmlCommand.
+ * Contains \Drupal\Core\Ajax\HtmlCommand.
  */
 
 namespace Drupal\Core\Ajax;
-
-use Drupal\Core\Ajax\InsertCommand;
 
 /**
  * AJAX command for calling the jQuery html() method.
@@ -34,7 +32,7 @@ class HtmlCommand extends InsertCommand {
       'command' => 'insert',
       'method' => 'html',
       'selector' => $this->selector,
-      'data' => $this->html,
+      'data' => $this->getRenderedContent(),
       'settings' => $this->settings,
     );
   }

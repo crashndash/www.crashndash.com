@@ -7,23 +7,23 @@
 
 namespace Drupal\system\Tests\File;
 
-use Drupal\Component\Utility\String;
-use Drupal\simpletest\DrupalUnitTestBase;
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\simpletest\KernelTestBase;
 
 /**
  * Tests .htaccess file saving.
  *
  * @group File
  */
-class HtaccessUnitTest extends DrupalUnitTestBase {
+class HtaccessUnitTest extends KernelTestBase {
 
   /**
    * Tests file_save_htaccess().
    */
   function testHtaccessSave() {
     // Prepare test directories.
-    $public = $this->public_files_directory . '/test/public';
-    $private = $this->public_files_directory . '/test/private';
+    $public = $this->publicFilesDirectory . '/test/public';
+    $private = $this->publicFilesDirectory . '/test/private';
     $stream = 'public://test/stream';
 
     // Verify that file_save_htaccess() returns FALSE if .htaccess cannot be
@@ -40,8 +40,7 @@ class HtaccessUnitTest extends DrupalUnitTestBase {
     $this->assertTrue(strpos($content, "SetHandler Drupal_Security_Do_Not_Remove_See_SA_2006_006") !== FALSE);
     $this->assertFalse(strpos($content, "Require all denied") !== FALSE);
     $this->assertFalse(strpos($content, "Deny from all") !== FALSE);
-    $this->assertTrue(strpos($content, "Options None") !== FALSE);
-    $this->assertTrue(strpos($content, "Options +FollowSymLinks") !== FALSE);
+    $this->assertTrue(strpos($content, "Options -Indexes -ExecCGI -Includes -MultiViews") !== FALSE);
     $this->assertTrue(strpos($content, "SetHandler Drupal_Security_Do_Not_Remove_See_SA_2013_003") !== FALSE);
     $this->assertFilePermissions($public . '/.htaccess', 0444);
 
@@ -54,8 +53,7 @@ class HtaccessUnitTest extends DrupalUnitTestBase {
     $this->assertTrue(strpos($content, "SetHandler Drupal_Security_Do_Not_Remove_See_SA_2006_006") !== FALSE);
     $this->assertTrue(strpos($content, "Require all denied") !== FALSE);
     $this->assertTrue(strpos($content, "Deny from all") !== FALSE);
-    $this->assertTrue(strpos($content, "Options None") !== FALSE);
-    $this->assertTrue(strpos($content, "Options +FollowSymLinks") !== FALSE);
+    $this->assertTrue(strpos($content, "Options -Indexes -ExecCGI -Includes -MultiViews") !== FALSE);
     $this->assertTrue(strpos($content, "SetHandler Drupal_Security_Do_Not_Remove_See_SA_2013_003") !== FALSE);
     $this->assertFilePermissions($private . '/.htaccess', 0444);
 
@@ -65,11 +63,10 @@ class HtaccessUnitTest extends DrupalUnitTestBase {
     mkdir($stream, 0777, TRUE);
     $this->assertTrue(file_save_htaccess($stream));
     $content = file_get_contents($stream . '/.htaccess');
-    $this->assertTrue(strpos($content,"SetHandler Drupal_Security_Do_Not_Remove_See_SA_2006_006") !== FALSE);
+    $this->assertTrue(strpos($content, "SetHandler Drupal_Security_Do_Not_Remove_See_SA_2006_006") !== FALSE);
     $this->assertTrue(strpos($content, "Require all denied") !== FALSE);
-    $this->assertTrue(strpos($content,"Deny from all") !== FALSE);
-    $this->assertTrue(strpos($content,"Options None") !== FALSE);
-    $this->assertTrue(strpos($content,"Options +FollowSymLinks") !== FALSE);
+    $this->assertTrue(strpos($content, "Deny from all") !== FALSE);
+    $this->assertTrue(strpos($content, "Options -Indexes -ExecCGI -Includes -MultiViews") !== FALSE);
     $this->assertTrue(strpos($content, "SetHandler Drupal_Security_Do_Not_Remove_See_SA_2013_003") !== FALSE);
     $this->assertFilePermissions($stream . '/.htaccess', 0444);
 
@@ -89,7 +86,7 @@ class HtaccessUnitTest extends DrupalUnitTestBase {
    */
   protected function assertFilePermissions($uri, $expected) {
     $actual = fileperms($uri) & 0777;
-    return $this->assertIdentical($actual, $expected, String::format('@uri file permissions @actual are identical to @expected.', array(
+    return $this->assertIdentical($actual, $expected, SafeMarkup::format('@uri file permissions @actual are identical to @expected.', array(
       '@uri' => $uri,
       '@actual' => 0 . decoct($actual),
       '@expected' => 0 . decoct($expected),

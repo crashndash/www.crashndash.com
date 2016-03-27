@@ -8,6 +8,7 @@
 namespace Drupal\Core\Entity;
 
 use Drupal\Core\Field\FieldDefinitionInterface;
+use Drupal\Core\Field\FieldDefinitionListenerInterface;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\Field\FieldStorageDefinitionListenerInterface;
 
@@ -20,37 +21,15 @@ use Drupal\Core\Field\FieldStorageDefinitionListenerInterface;
  *
  * For example, configurable fields defined and exposed by field.module.
  */
-interface DynamicallyFieldableEntityStorageInterface extends EntityStorageInterface, FieldStorageDefinitionListenerInterface {
-  /**
-   * Reacts to the creation of a field.
-   *
-   * @param \Drupal\Core\Field\FieldDefinitionInterface $field_definition
-   *   The field definition created.
-   */
-  public function onFieldDefinitionCreate(FieldDefinitionInterface $field_definition);
+interface DynamicallyFieldableEntityStorageInterface extends FieldableEntityStorageInterface, FieldStorageDefinitionListenerInterface, FieldDefinitionListenerInterface {
 
   /**
-   * Reacts to the update of a field.
+   * Determines if the storage contains any data.
    *
-   * @param \Drupal\Core\Field\FieldDefinitionInterface $field_definition
-   *   The field definition being updated.
-   * @param \Drupal\Core\Field\FieldDefinitionInterface $original
-   *   The original field definition; i.e., the definition before the update.
+   * @return bool
+   *   TRUE if the storage contains data, FALSE if not.
    */
-  public function onFieldDefinitionUpdate(FieldDefinitionInterface $field_definition, FieldDefinitionInterface $original);
-
-  /**
-   * Reacts to the deletion of a field.
-   *
-   * Stored values should not be wiped at once, but marked as 'deleted' so that
-   * they can go through a proper purge process later on.
-   *
-   * @param \Drupal\Core\Field\FieldDefinitionInterface $field_definition
-   *   The field definition being deleted.
-   *
-   * @see purgeFieldData()
-   */
-  public function onFieldDefinitionDelete(FieldDefinitionInterface $field_definition);
+  public function hasData();
 
   /**
    * Purges a batch of field data.
@@ -66,23 +45,6 @@ interface DynamicallyFieldableEntityStorageInterface extends EntityStorageInterf
    *   The number of field data records that have been purged.
    */
   public function purgeFieldData(FieldDefinitionInterface $field_definition, $batch_size);
-
-  /**
-   * Determines the number of entities with values for a given field.
-   *
-   * @param \Drupal\Core\Field\FieldStorageDefinitionInterface $storage_definition
-   *   The field for which to count data records.
-   * @param bool $as_bool
-   *   (Optional) Optimises the query for checking whether there are any records
-   *   or not. Defaults to FALSE.
-   *
-   * @return bool|int
-   *   The number of entities. If $as_bool parameter is TRUE then the
-   *   value will either be TRUE or FALSE.
-   *
-   * @see \Drupal\Core\Entity\FieldableEntityStorageInterface::purgeFieldData()
-   */
-  public function countFieldData($storage_definition, $as_bool = FALSE);
 
   /**
    * Performs final cleanup after all data of a field has been purged.

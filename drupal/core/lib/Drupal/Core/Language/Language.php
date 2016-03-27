@@ -2,15 +2,17 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Language\Language.
+ * Contains \Drupal\Core\Language\Language.
  */
 
 namespace Drupal\Core\Language;
 
+use Drupal\Core\StringTranslation\TranslatableMarkup;
+
 /**
  * An object containing the information for an interface language.
  *
- * @see language_default()
+ * @see \Drupal\Core\Language\LanguageManager::getLanguage()
  */
 class Language implements LanguageInterface {
 
@@ -34,7 +36,7 @@ class Language implements LanguageInterface {
    *
    * @var string
    */
-  public $name = '';
+  protected $name = '';
 
   /**
    * The ID, langcode.
@@ -80,7 +82,9 @@ class Language implements LanguageInterface {
   public function __construct(array $values = array()) {
     // Set all the provided properties for the language.
     foreach ($values as $key => $value) {
-      $this->{$key} = $value;
+      if (property_exists($this, $key)) {
+        $this->{$key} = $value;
+      }
     }
     // If some values were not set, set sane defaults of a predefined language.
     if (!isset($values['name']) || !isset($values['direction'])) {
@@ -149,7 +153,17 @@ class Language implements LanguageInterface {
       $a_weight = $a->getWeight();
       $b_weight = $b->getWeight();
       if ($a_weight == $b_weight) {
-        return strnatcasecmp($a->getName(), $b->getName());
+        $a_name = $a->getName();
+        $b_name = $b->getName();
+        // If either name is a TranslatableMarkup object it can not be converted
+        // to a string. This is because translation requires a sorted list of
+        // languages thereby causing an infinite loop. Determine the order based
+        // on ID if this is the case.
+        if ($a_name instanceof TranslatableMarkup || $b_name instanceof TranslatableMarkup) {
+          $a_name = $a->getId();
+          $b_name = $b->getId();
+        }
+        return strnatcasecmp($a_name, $b_name);
       }
       return ($a_weight < $b_weight) ? -1 : 1;
     });

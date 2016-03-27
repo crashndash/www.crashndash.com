@@ -7,7 +7,7 @@
 
 namespace Drupal\Tests\block_content\Unit\Menu;
 
-use Drupal\Tests\Core\Menu\LocalTaskIntegrationTest;
+use Drupal\Tests\Core\Menu\LocalTaskIntegrationTestBase;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 /**
@@ -15,7 +15,7 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
  *
  * @group block_content
  */
-class BlockContentLocalTasksTest extends LocalTaskIntegrationTest {
+class BlockContentLocalTasksTest extends LocalTaskIntegrationTestBase {
 
   protected function setUp() {
     $this->directoryList = array(
@@ -64,11 +64,11 @@ class BlockContentLocalTasksTest extends LocalTaskIntegrationTest {
     $this->assertLocalTasks($route, array(
       0 => array(
         'block.admin_display',
-        'block_content.list',
+        'entity.block_content.collection',
       ),
       1 => array(
         'block_content.list_sub',
-        'block_content.type_list',
+        'entity.block_content_type.collection',
       ),
     ));
   }
@@ -78,7 +78,7 @@ class BlockContentLocalTasksTest extends LocalTaskIntegrationTest {
    */
   public function getBlockContentListingRoutes() {
     return array(
-      array('block_content.list', 'block_content.type_list'),
+      array('entity.block_content.collection', 'entity.block_content_type.collection'),
     );
   }
 

@@ -9,10 +9,14 @@ namespace Drupal\system\Plugin\ImageToolkit;
 
 use Drupal\Component\Utility\Color;
 use Drupal\Component\Utility\Unicode;
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\ImageToolkit\ImageToolkitBase;
-use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\Core\ImageToolkit\ImageToolkitOperationManagerInterface;
 use Drupal\Core\StreamWrapper\StreamWrapperInterface;
+use Drupal\Core\StreamWrapper\StreamWrapperManagerInterface;
+use Psr\Log\LoggerInterface;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Defines the GD2 toolkit for image manipulation within Drupal.
@@ -54,6 +58,47 @@ class GDToolkit extends ImageToolkitBase {
   protected $preLoadInfo = NULL;
 
   /**
+   * The StreamWrapper manager.
+   *
+   * @var \Drupal\Core\StreamWrapper\StreamWrapperManagerInterface
+   */
+  protected $streamWrapperManager;
+
+  /**
+   * Constructs a GDToolkit object.
+   *
+   * @param array $configuration
+   *   A configuration array containing information about the plugin instance.
+   * @param string $plugin_id
+   *   The plugin_id for the plugin instance.
+   * @param array $plugin_definition
+   *   The plugin implementation definition.
+   * @param \Drupal\Core\ImageToolkit\ImageToolkitOperationManagerInterface $operation_manager
+   *   The toolkit operation manager.
+   * @param \Psr\Log\LoggerInterface $logger
+   *   A logger instance.
+   * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
+   *   The config factory.
+   * @param \Drupal\Core\StreamWrapper\StreamWrapperManagerInterface $stream_wrapper_manager
+   *   The StreamWrapper manager.
+   */
+  public function __construct(array $configuration, $plugin_id, array $plugin_definition, ImageToolkitOperationManagerInterface $operation_manager, LoggerInterface $logger, ConfigFactoryInterface $config_factory, StreamWrapperManagerInterface $stream_wrapper_manager) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition, $operation_manager, $logger, $config_factory);
+    $this->streamWrapperManager = $stream_wrapper_manager;
+  }
+
+  /**
+   * Destructs a GDToolkit object.
+   *
+   * Frees memory associated with a GD image resource.
+   */
+  public function __destruct() {
+    if (is_resource($this->resource)) {
+      imagedestroy($this->resource);
+    }
+  }
+
+  /**
    * {@inheritdoc}
    */
   public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
@@ -63,7 +108,8 @@ class GDToolkit extends ImageToolkitBase {
       $plugin_definition,
       $container->get('image.toolkit.operation.manager'),
       $container->get('logger.channel.image'),
-      $container->get('config.factory')
+      $container->get('config.factory'),
+      $container->get('stream_wrapper_manager')
     );
   }
 
@@ -73,9 +119,13 @@ class GDToolkit extends ImageToolkitBase {
    * @param resource $resource
    *   The GD image resource.
    *
-   * @return $this
+   * @return \Drupal\system\Plugin\ImageToolkit\GDToolkit
+   *   An instance of the current toolkit object.
    */
   public function setResource($resource) {
+    if (!is_resource($resource) || get_resource_type($resource) != 'gd') {
+      throw new \InvalidArgumentException('Invalid resource argument');
+    }
     $this->preLoadInfo = NULL;
     $this->resource = $resource;
     return $this;
@@ -88,7 +138,7 @@ class GDToolkit extends ImageToolkitBase {
    *   The GD image resource, or NULL if not available.
    */
   public function getResource() {
-    if (!$this->resource) {
+    if (!is_resource($this->resource)) {
       $this->load();
     }
     return $this->resource;
@@ -104,7 +154,7 @@ class GDToolkit extends ImageToolkitBase {
       '#description' => t('Define the image quality for JPEG manipulations. Ranges from 0 to 100. Higher values mean better image quality but bigger files.'),
       '#min' => 0,
       '#max' => 100,
-      '#default_value' => $this->configFactory->get('system.image.gd')->get('jpeg_quality'),
+      '#default_value' => $this->configFactory->getEditable('system.image.gd')->get('jpeg_quality', FALSE),
       '#field_suffix' => t('%'),
     );
     return $form;
@@ -114,7 +164,7 @@ class GDToolkit extends ImageToolkitBase {
    * {@inheritdoc}
    */
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
-    $this->configFactory->get('system.image.gd')
+    $this->configFactory->getEditable('system.image.gd')
       ->set('jpeg_quality', $form_state->getValue(array('gd', 'image_jpeg_quality')))
       ->save();
   }
@@ -132,7 +182,7 @@ class GDToolkit extends ImageToolkitBase {
     }
 
     $function = 'imagecreatefrom' . image_type_to_extension($this->getType(), FALSE);
-    if (function_exists($function) && $resource = $function($this->getImage()->getSource())) {
+    if (function_exists($function) && $resource = $function($this->getSource())) {
       $this->setResource($resource);
       if (imageistruecolor($resource)) {
         return TRUE;
@@ -146,6 +196,7 @@ class GDToolkit extends ImageToolkitBase {
           'height' => imagesy($resource),
           'extension' => image_type_to_extension($this->getType(), FALSE),
           'transparent_color' => $this->getTransparentColor(),
+          'is_temp' => TRUE,
         );
         if ($this->apply('create_new', $data)) {
           imagecopy($this->getResource(), $resource, 0, 0, 0, 0, imagesx($resource), imagesy($resource));
@@ -172,7 +223,7 @@ class GDToolkit extends ImageToolkitBase {
     // Work around lack of stream wrapper support in imagejpeg() and imagepng().
     if ($scheme && file_stream_wrapper_valid_scheme($scheme)) {
       // If destination is not local, save image to temporary local file.
-      $local_wrappers = file_get_stream_wrappers(StreamWrapperInterface::LOCAL);
+      $local_wrappers = $this->streamWrapperManager->getWrappers(StreamWrapperInterface::LOCAL);
       if (!isset($local_wrappers[$scheme])) {
         $permanent_destination = $destination;
         $destination = drupal_tempnam('temporary://', 'gd_');
@@ -207,7 +258,7 @@ class GDToolkit extends ImageToolkitBase {
    * {@inheritdoc}
    */
   public function parseFile() {
-    $data = @getimagesize($this->getImage()->getSource());
+    $data = @getimagesize($this->getSource());
     if ($data && in_array($data[2], static::supportedTypes())) {
       $this->setType($data[2]);
       $this->preLoadInfo = $data;
@@ -327,7 +378,7 @@ class GDToolkit extends ImageToolkitBase {
     // Check for filter and rotate support.
     if (!function_exists('imagefilter') || !function_exists('imagerotate')) {
       $requirements['version']['severity'] = REQUIREMENT_WARNING;
-      $requirements['version']['description'] = t('The GD Library for PHP is enabled, but was compiled without support for functions used by the rotate and desaturate effects. It was probably compiled using the official GD libraries from http://www.libgd.org instead of the GD library bundled with PHP. You should recompile PHP --with-gd using the bundled GD library. See <a href="@url">the PHP manual</a>.', array('@url' => 'http://www.php.net/manual/book.image.php'));
+      $requirements['version']['description'] = t('The GD Library for PHP is enabled, but was compiled without support for functions used by the rotate and desaturate effects. It was probably compiled using the official GD libraries from http://www.libgd.org instead of the GD library bundled with PHP. You should recompile PHP --with-gd using the bundled GD library. See <a href=":url">the PHP manual</a>.', array(':url' => 'http://www.php.net/manual/book.image.php'));
     }
 
     return $requirements;

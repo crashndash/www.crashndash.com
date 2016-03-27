@@ -2,31 +2,34 @@
 
 /**
  * @file
- * Definition of Drupal\Component\Datetime\DateTimePlus
+ * Contains \Drupal\Component\Datetime\DateTimePlus.
  */
 namespace Drupal\Component\Datetime;
+use Drupal\Component\Utility\ToStringTrait;
 
 /**
- * Extends DateTime().
+ * Wraps DateTime().
  *
- * This class extends the PHP DateTime class with more flexible initialization
+ * This class wraps the PHP DateTime class with more flexible initialization
  * parameters, allowing a date to be created from an existing date object,
  * a timestamp, a string with an unknown format, a string with a known
  * format, or an array of date parts. It also adds an errors array
  * and a __toString() method to the date object.
  *
- * This class is less lenient than the parent DateTime class. It changes
+ * This class is less lenient than the DateTime class. It changes
  * the default behavior for handling date values like '2011-00-00'.
- * The parent class would convert that value to '2010-11-30' and report
+ * The DateTime class would convert that value to '2010-11-30' and report
  * a warning but not an error. This extension treats that as an error.
  *
- * As with the base class, a date object may be created even if it has
+ * As with the DateTime class, a date object may be created even if it has
  * errors. It has an errors array attached to it that explains what the
  * errors are. This is less disruptive than allowing datetime exceptions
  * to abort processing. The calling script can decide what to do about
  * errors using hasErrors() and getErrors().
  */
-class DateTimePlus extends \DateTime {
+class DateTimePlus {
+
+  use ToStringTrait;
 
   const FORMAT   = 'Y-m-d H:i:s';
 
@@ -92,6 +95,13 @@ class DateTimePlus extends \DateTime {
   protected $errors = array();
 
   /**
+   * The DateTime object.
+   *
+   * @var \DateTime
+   */
+  protected $dateTimeObject = NULL;
+
+  /**
    * Creates a date object from an input date object.
    *
    * @param \DateTime $datetime
@@ -112,15 +122,21 @@ class DateTimePlus extends \DateTime {
    * @param array $date_parts
    *   An array of date parts, like ('year' => 2014, 'month => 4).
    * @param mixed $timezone
-   *   @see __construct()
+   *   (optional) \DateTimeZone object, time zone string or NULL. NULL uses the
+   *   default system time zone. Defaults to NULL.
    * @param array $settings
-   *   @see __construct()
+   *   (optional) A keyed array for settings, suitable for passing on to
+   *   __construct().
+   *
+   * @return static
+   *   A new \Drupal\Component\DateTimePlus object based on the parameters
+   *   passed in.
    */
   public static function createFromArray(array $date_parts, $timezone = NULL, $settings = array()) {
     $date_parts = static::prepareArray($date_parts, TRUE);
     if (static::checkArray($date_parts)) {
       // Even with validation, we can end up with a value that the
-      // parent class won't handle, like a year outside the range
+      // DateTime class won't handle, like a year outside the range
       // of -9999 to 9999, which will pass checkdate() but
       // fail to construct a date object.
       $iso_date = static::arrayToISO($date_parts);
@@ -187,7 +203,7 @@ class DateTimePlus extends \DateTime {
     $datetimeplus = new static('', $timezone, $settings);
 
     $date = \DateTime::createFromFormat($format, $time, $datetimeplus->getTimezone());
-    if (!$date instanceOf \DateTime) {
+    if (!$date instanceof \DateTime) {
       throw new \Exception('The date cannot be created from a format.');
     }
     else {
@@ -196,10 +212,10 @@ class DateTimePlus extends \DateTime {
       // re-creating the date/time formatted string and comparing it to the input. For
       // instance, an input value of '11' using a format of Y (4 digits) gets
       // created as '0011' instead of '2011'.
-      if ($date instanceOf DateTimePlus) {
+      if ($date instanceof DateTimePlus) {
         $test_time = $date->format($format, $settings);
       }
-      elseif ($date instanceOf \DateTime) {
+      elseif ($date instanceof \DateTime) {
         $test_time = $date->format($format);
       }
       $datetimeplus->setTimestamp($date->getTimestamp());
@@ -216,11 +232,12 @@ class DateTimePlus extends \DateTime {
    * Constructs a date object set to a requested date and timezone.
    *
    * @param string $time
-   *   A date/time string. Defaults to 'now'.
+   *   (optional) A date/time string. Defaults to 'now'.
    * @param mixed $timezone
-   *   PHP DateTimeZone object, string or NULL allowed.
-   *   Defaults to NULL.
+   *   (optional) \DateTimeZone object, time zone string or NULL. NULL uses the
+   *   default system time zone. Defaults to NULL.
    * @param array $settings
+   *   (optional) Keyed array of settings. Defaults to empty array.
    *   - langcode: (optional) String two letter language code used to control
    *     the result of the format(). Defaults to NULL.
    *   - debug: (optional) Boolean choice to leave debug values in the
@@ -244,7 +261,7 @@ class DateTimePlus extends \DateTime {
       }
 
       if (empty($this->errors)) {
-        parent::__construct($prepared_time, $prepared_timezone);
+        $this->dateTimeObject = new \DateTime($prepared_time, $prepared_timezone);
       }
     }
     catch (\Exception $e) {
@@ -257,16 +274,49 @@ class DateTimePlus extends \DateTime {
   }
 
   /**
-   * Implements __toString() for dates.
+   * Renders the timezone name.
    *
-   * The base DateTime class does not implement this.
-   *
-   * @see https://bugs.php.net/bug.php?id=62911
-   * @see http://www.serverphorums.com/read.php?7,555645
+   * @return string
    */
-  public function __toString() {
-    $format = static::FORMAT;
-    return $this->format($format) . ' ' . $this->getTimeZone()->getName();
+  public function render() {
+    return $this->format(static::FORMAT) . ' ' . $this->getTimeZone()->getName();
+  }
+
+  /**
+   * Implements the magic __call method.
+   *
+   * Passes through all unknown calls onto the DateTime object.
+   */
+  public function __call($method, $args) {
+    // @todo consider using assert() as per https://www.drupal.org/node/2451793.
+    if (!isset($this->dateTimeObject)) {
+      throw new \Exception('DateTime object not set.');
+    }
+    if (!method_exists($this->dateTimeObject, $method)) {
+      throw new \BadMethodCallException(sprintf('Call to undefined method %s::%s()', get_class($this), $method));
+    }
+    return call_user_func_array(array($this->dateTimeObject, $method), $args);
+  }
+
+  /**
+   * Implements the magic __callStatic method.
+   *
+   * Passes through all unknown static calls onto the DateTime object.
+   */
+  public static function __callStatic($method, $args) {
+    if (!method_exists('\DateTime', $method)) {
+      throw new \BadMethodCallException(sprintf('Call to undefined method %s::%s()', get_called_class(), $method));
+    }
+    return call_user_func_array(array('\DateTime', $method), $args);
+  }
+
+  /**
+   * Implements the magic __clone method.
+   *
+   * Deep-clones the DateTime object we're wrapping.
+   */
+  public function __clone() {
+    $this->dateTimeObject = clone($this->dateTimeObject);
   }
 
   /**
@@ -295,7 +345,7 @@ class DateTimePlus extends \DateTime {
    */
   protected function prepareTimezone($timezone) {
     // If the input timezone is a valid timezone object, use it.
-    if ($timezone instanceOf \DateTimezone) {
+    if ($timezone instanceof \DateTimezone) {
       $timezone_adjusted = $timezone;
     }
 
@@ -306,7 +356,7 @@ class DateTimePlus extends \DateTime {
 
     // Default to the system timezone when not explicitly provided.
     // If the system timezone is missing, use 'UTC'.
-    if (empty($timezone_adjusted) || !$timezone_adjusted instanceOf \DateTimezone) {
+    if (empty($timezone_adjusted) || !$timezone_adjusted instanceof \DateTimezone) {
       $system_timezone = date_default_timezone_get();
       $timezone_name = !empty($system_timezone) ? $system_timezone : 'UTC';
       $timezone_adjusted = new \DateTimeZone($timezone_name);
@@ -342,7 +392,7 @@ class DateTimePlus extends \DateTime {
    * @see http://us3.php.net/manual/en/time.getlasterrors.php
    */
   public function checkErrors() {
-    $errors = $this->getLastErrors();
+    $errors = \DateTime::getLastErrors();
     if (!empty($errors['errors'])) {
       $this->errors += $errors['errors'];
     }
@@ -363,7 +413,7 @@ class DateTimePlus extends \DateTime {
   }
 
   /**
-   * Retrieves error messages.
+   * Gets error messages.
    *
    * Public function to return the error messages.
    */
@@ -457,7 +507,7 @@ class DateTimePlus extends \DateTime {
    * @param array $array
    *   An array of datetime values keyed by date part.
    *
-   * @return boolean
+   * @return bool
    *   TRUE if the datetime parts contain valid values, otherwise FALSE.
    */
   public static function checkArray($array) {
@@ -475,7 +525,7 @@ class DateTimePlus extends \DateTime {
     foreach (array('hour', 'minute', 'second') as $key) {
       if (array_key_exists($key, $array)) {
         $value = $array[$key];
-        switch ($value) {
+        switch ($key) {
           case 'hour':
             if (!preg_match('/^([1-2][0-3]|[01]?[0-9])$/', $value)) {
               $valid_time = FALSE;
@@ -517,8 +567,6 @@ class DateTimePlus extends \DateTime {
    * @param string $format
    *   A format string using either PHP's date().
    * @param array $settings
-   *   - langcode: (optional) String two letter language code used to control
-   *     the result of the format(). Defaults to NULL.
    *   - timezone: (optional) String timezone name. Defaults to the timezone
    *     of the date object.
    *
@@ -534,11 +582,18 @@ class DateTimePlus extends \DateTime {
 
     // Format the date and catch errors.
     try {
-      $value = parent::format($format);
+      // Clone the date/time object so we can change the time zone without
+      // disturbing the value stored in the object.
+      $dateTimeObject = clone $this->dateTimeObject;
+      if (isset($settings['timezone'])) {
+        $dateTimeObject->setTimezone(new \DateTimeZone($settings['timezone']));
+      }
+      $value = $dateTimeObject->format($format);
     }
     catch (\Exception $e) {
       $this->errors[] = $e->getMessage();
     }
+
     return $value;
   }
 }

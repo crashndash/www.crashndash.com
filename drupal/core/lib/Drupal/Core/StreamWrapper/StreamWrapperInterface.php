@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\Core\StreamWrapper\StreamWrapperInterface.
+ * Contains \Drupal\Core\StreamWrapper\StreamWrapperInterface.
  *
  * Provides a Drupal interface and classes to implement PHP stream wrappers for
  * public, private, and temporary files.
@@ -66,8 +66,10 @@ interface StreamWrapperInterface extends PhpStreamWrapperInterface {
    */
 
   /**
-   * Not visible in the UI or accessible via web, but readable and writable.
-   * E.g. the temporary directory for uploads.
+   * Defines the stream wrapper bit flag for a hidden file.
+   *
+   * This is not visible in the UI or accessible via web, but readable and
+   * writable; for instance, the temporary directory for file uploads.
    */
   const HIDDEN = 0x000C;
 

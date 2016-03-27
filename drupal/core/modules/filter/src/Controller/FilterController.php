@@ -17,8 +17,9 @@ class FilterController {
   /**
    * Displays a page with long filter tips.
    *
-   * @param \Drupal\filter\FilterFormatInterface|null $format
-   *   A filter format, or NULL to show tips for all formats. Defaults to NULL.
+   * @param \Drupal\filter\FilterFormatInterface|null $filter_format
+   *   (optional) A filter format, or NULL to show tips for all formats.
+   *   Defaults to NULL.
    *
    * @return array
    *   A renderable array.
@@ -26,7 +27,7 @@ class FilterController {
    * @see template_preprocess_filter_tips()
    */
   function filterTips(FilterFormatInterface $filter_format = NULL) {
-    $tips = $filter_format ? $filter_format->format : -1;
+    $tips = $filter_format ? $filter_format->id() : -1;
 
     $build = array(
       '#theme' => 'filter_tips',

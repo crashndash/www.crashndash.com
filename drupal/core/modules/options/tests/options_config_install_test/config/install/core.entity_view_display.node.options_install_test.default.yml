@@ -1,14 +1,13 @@
 langcode: en
 status: true
 dependencies:
-  entity:
+  config:
     - field.field.node.options_install_test.body
     - node.type.options_install_test
   module:
     - text
     - user
 id: node.options_install_test.default
-label: null
 targetEntityType: node
 bundle: options_install_test
 mode: default
@@ -23,6 +22,4 @@ content:
     third_party_settings: {  }
 hidden:
   langcode: true
-third_party_settings:
-  entity_test:
-    foo: bar
+third_party_settings: {  }

@@ -2,20 +2,22 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Database\Query\PagerSelectExtender
+ * Contains \Drupal\Core\Database\Query\PagerSelectExtender.
  */
 
 namespace Drupal\Core\Database\Query;
 
 use Drupal\Core\Database\Connection;
-use Drupal\Core\Database\Query\SelectExtender;
-use Drupal\Core\Database\Query\SelectInterface;
 
 /**
  * Query extender for pager queries.
  *
  * This is the "default" pager mechanism.  It creates a paged query with a fixed
  * number of entries per page.
+ *
+ * When adding this extender along with other extenders, be sure to add
+ * PagerSelectExtender last, so that its range and count are based on the full
+ * query.
  */
 class PagerSelectExtender extends SelectExtender {
 
@@ -62,10 +64,9 @@ class PagerSelectExtender extends SelectExtender {
    * to it.
    */
   public function execute() {
-
-    // Add convenience tag to mark that this is an extended query. We have to
-    // do this in the constructor to ensure that it is set before preExecute()
-    // gets called.
+    // By calling preExecute() here, we force it to preprocess the extender
+    // object rather than just the base query object. That means
+    // hook_query_alter() gets access to the extended object.
     if (!$this->preExecute($this)) {
       return NULL;
     }
@@ -135,8 +136,8 @@ class PagerSelectExtender extends SelectExtender {
    *
    * The default if not specified is 10 items per page.
    *
-   * @param $limit
-   *   An integer specifying the number of elements per page.  If passed a false
+   * @param int|false $limit
+   *   An integer specifying the number of elements per page. If passed a false
    *   value (FALSE, 0, NULL), the pager is disabled.
    */
   public function limit($limit = 10) {
@@ -161,6 +162,7 @@ class PagerSelectExtender extends SelectExtender {
    * if both are set explicitly.
    *
    * @param $element
+   *   Element ID that is used to differentiate different pager queries.
    */
   public function element($element) {
     $this->element = $element;

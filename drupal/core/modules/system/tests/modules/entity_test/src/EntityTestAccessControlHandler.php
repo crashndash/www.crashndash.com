@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\entity_test\EntityTestAccessControlHandler.
+ * Contains \Drupal\entity_test\EntityTestAccessControlHandler.
  */
 
 namespace Drupal\entity_test;
@@ -10,7 +10,6 @@ namespace Drupal\entity_test;
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityAccessControlHandler;
-use Drupal\Core\Language\LanguageInterface;
 use Drupal\Core\Session\AccountInterface;
 
 /**
@@ -29,9 +28,17 @@ class EntityTestAccessControlHandler extends EntityAccessControlHandler {
   /**
    * {@inheritdoc}
    */
-  protected function checkAccess(EntityInterface $entity, $operation, $langcode, AccountInterface $account) {
+  protected function checkAccess(EntityInterface $entity, $operation, AccountInterface $account) {
+    /** @var \Drupal\entity_test\Entity\EntityTest $entity */
+
+    // Always forbid access to entities with the label 'forbid_access', used for
+    // \Drupal\system\Tests\Entity\EntityAccessHControlandlerTest::testDefaultEntityAccess().
+    if ($entity->label() == 'forbid_access') {
+      return AccessResult::forbidden();
+    }
+
     if ($operation === 'view') {
-      if ($langcode != LanguageInterface::LANGCODE_DEFAULT) {
+      if (!$entity->isDefaultTranslation()) {
         return AccessResult::allowedIfHasPermission($account, 'view test entity translations');
       }
       return AccessResult::allowedIfHasPermission($account, 'view test entity');

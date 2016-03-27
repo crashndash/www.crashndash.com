@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\Core\Path\PathValidator
+ * Contains \Drupal\Core\Path\PathValidator.
  */
 
 namespace Drupal\Core\Path;
@@ -16,6 +16,7 @@ use Drupal\Core\Url;
 use Symfony\Cmf\Component\Routing\RouteObjectInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\Routing\Exception\MethodNotAllowedException;
 use Symfony\Component\Routing\Exception\ResourceNotFoundException;
 use Symfony\Component\Routing\Matcher\UrlMatcherInterface;
 
@@ -82,6 +83,22 @@ class PathValidator implements PathValidatorInterface {
    * {@inheritdoc}
    */
   public function getUrlIfValid($path) {
+    return $this->getUrl($path, TRUE);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getUrlIfValidWithoutAccessCheck($path) {
+    return $this->getUrl($path, FALSE);
+  }
+
+  /**
+   * Helper for getUrlIfValid() and getUrlIfValidWithoutAccessCheck().
+   */
+  protected function getUrl($path, $access_check) {
+    $path = ltrim($path, '/');
+
     $parsed_url = UrlHelper::parse($path);
 
     $options = [];
@@ -95,6 +112,9 @@ class PathValidator implements PathValidatorInterface {
     if ($parsed_url['path'] == '<front>') {
       return new Url('<front>', [], $options);
     }
+    elseif ($parsed_url['path'] == '<none>') {
+      return new Url('<none>', [], $options);
+    }
     elseif (UrlHelper::isExternal($path) && UrlHelper::isValid($path)) {
       if (empty($parsed_url['path'])) {
         return FALSE;
@@ -102,9 +122,8 @@ class PathValidator implements PathValidatorInterface {
       return Url::fromUri($path);
     }
 
-    $path = ltrim($path, '/');
     $request = Request::create('/' . $path);
-    $attributes = $this->getPathAttributes($path, $request);
+    $attributes = $this->getPathAttributes($path, $request, $access_check);
 
     if (!$attributes) {
       return FALSE;
@@ -123,22 +142,25 @@ class PathValidator implements PathValidatorInterface {
    *   The path to check.
    * @param \Symfony\Component\HttpFoundation\Request $request
    *   A request object with the given path.
+   * @param bool $access_check
+   *   If FALSE then skip access check and check only whether the path is
+   *   valid.
    *
    * @return array|bool
    *   An array of request attributes of FALSE if an exception was thrown.
    */
-  protected function getPathAttributes($path, Request $request) {
-    if ($this->account->hasPermission('link to any page')) {
+  protected function getPathAttributes($path, Request $request, $access_check) {
+    if (!$access_check || $this->account->hasPermission('link to any page')) {
       $router = $this->accessUnawareRouter;
     }
     else {
       $router = $this->accessAwareRouter;
     }
 
-    $path = $this->pathProcessor->processInbound($path, $request);
+    $path = $this->pathProcessor->processInbound('/' . $path, $request);
 
     try {
-      return $router->match('/' . $path);
+      return $router->match($path);
     }
     catch (ResourceNotFoundException $e) {
       return FALSE;
@@ -147,6 +169,9 @@ class PathValidator implements PathValidatorInterface {
       return FALSE;
     }
     catch (AccessDeniedHttpException $e) {
+      return FALSE;
+    }
+    catch (MethodNotAllowedException $e) {
       return FALSE;
     }
   }

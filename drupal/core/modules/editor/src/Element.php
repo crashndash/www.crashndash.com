@@ -10,6 +10,7 @@ namespace Drupal\editor;
 use Drupal\editor\Entity\Editor;
 use Drupal\filter\Entity\FilterFormat;
 use Drupal\Component\Plugin\PluginManagerInterface;
+use Drupal\Core\Render\BubbleableMetadata;
 
 /**
  * Defines a service for Text Editor's render elements.
@@ -17,7 +18,7 @@ use Drupal\Component\Plugin\PluginManagerInterface;
 class Element {
 
   /**
-   * The Text Editor plugin manager manager service.
+   * The Text Editor plugin manager service.
    *
    * @var \Drupal\Component\Plugin\PluginManagerInterface
    */
@@ -53,6 +54,12 @@ class Element {
 
     // Early-return if no text editor is associated with any of the text formats.
     $editors = Editor::loadMultiple($format_ids);
+    foreach ($editors as $key => $editor) {
+      $definition = $this->pluginManager->getDefinition($editor->getEditor());
+      if (!in_array($element['#base_type'], $definition['supported_element_types'])) {
+        unset($editors[$key]);
+      }
+    }
     if (count($editors) === 0) {
       return $element;
     }
@@ -67,7 +74,6 @@ class Element {
         '#name' => $element['format']['format']['#name'],
         '#value' => $format_id,
         '#attributes' => array(
-          'class' => array('editor'),
           'data-editor-for' => $field_id,
         ),
       );
@@ -88,7 +94,7 @@ class Element {
     $element['#attached']['library'][] = 'editor/drupal.editor';
 
     // Attach attachments for all available editors.
-    $element['#attached'] = drupal_merge_attached($element['#attached'], $this->pluginManager->getAttachments($format_ids));
+    $element['#attached'] = BubbleableMetadata::mergeAttachments($element['#attached'], $this->pluginManager->getAttachments($format_ids));
 
     // Apply XSS filters when editing content if necessary. Some types of text
     // editors cannot guarantee that the end user won't become a victim of XSS.

@@ -2,13 +2,13 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\style\Rss.
+ * Contains \Drupal\views\Plugin\views\style\Rss.
  */
 
 namespace Drupal\views\Plugin\views\style;
 
-use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 
 /**
  * Default style plugin to render an RSS feed.
@@ -32,8 +32,7 @@ class Rss extends StylePluginBase {
    */
   protected $usesRowPlugin = TRUE;
 
-  public function attachTo(array &$build, $display_id, $path, $title) {
-    $display = $this->view->displayHandlers->get($display_id);
+  public function attachTo(array &$build, $display_id, Url $feed_url, $title) {
     $url_options = array();
     $input = $this->view->getExposedInput();
     if ($input) {
@@ -41,30 +40,22 @@ class Rss extends StylePluginBase {
     }
     $url_options['absolute'] = TRUE;
 
-    $url = _url($this->view->getUrl(NULL, $path), $url_options);
-    if ($display->hasPath()) {
-      if (empty($this->preview)) {
-        // Add a call for _drupal_add_feed to the view attached data.
-        $build['#attached']['feed'][] = array($url, $title);
-      }
-    }
-    else {
-      // Add the RSS icon to the view.
-      $feed_icon = array(
-        '#theme' => 'feed_icon',
-        '#url' => $url,
-        '#title' => $title,
-      );
-      $this->view->feed_icon = $feed_icon;
+    $url = $feed_url->setOptions($url_options)->toString();
 
-      // Attach a link to the RSS feed, which is an alternate representation.
-      $build['#attached']['html_head_link'][][] = array(
-        'rel' => 'alternate',
-        'type' => 'application/rss+xml',
-        'title' => $title,
-        'href' => $url,
-      );
-    }
+    // Add the RSS icon to the view.
+    $this->view->feedIcons[] = [
+      '#theme' => 'feed_icon',
+      '#url' => $url,
+      '#title' => $title,
+    ];
+
+    // Attach a link to the RSS feed, which is an alternate representation.
+    $build['#attached']['html_head_link'][][] = array(
+      'rel' => 'alternate',
+      'type' => 'application/rss+xml',
+      'title' => $title,
+      'href' => $url,
+    );
   }
 
   protected function defineOptions() {
@@ -91,7 +82,7 @@ class Rss extends StylePluginBase {
    * Return an array of additional XHTML elements to add to the channel.
    *
    * @return
-   *   An array that can be passed to format_xml_elements().
+   *   A render array.
    */
   protected function getChannelElements() {
     return array();
@@ -117,7 +108,7 @@ class Rss extends StylePluginBase {
       debug('Drupal\views\Plugin\views\style\Rss: Missing row plugin');
       return array();
     }
-    $rows = '';
+    $rows = [];
 
     // This will be filled in by the row plugin and is used later on in the
     // theming output.
@@ -134,14 +125,14 @@ class Rss extends StylePluginBase {
 
     foreach ($this->view->result as $row_index => $row) {
       $this->view->row_index = $row_index;
-      $rows .= $this->view->rowPlugin->render($row);
+      $rows[] = $this->view->rowPlugin->render($row);
     }
 
     $build = array(
       '#theme' => $this->themeFunctions(),
       '#view' => $this->view,
       '#options' => $this->options,
-      '#rows' => SafeMarkup::set($rows),
+      '#rows' => $rows,
     );
     unset($this->view->row_index);
     return $build;

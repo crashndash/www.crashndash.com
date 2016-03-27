@@ -51,9 +51,20 @@ class ErrorTestController extends ControllerBase {
     $monkey_love = $bananas;
     // This will generate a warning.
     $awesomely_big = 1/0;
-    // This will generate a user error.
-    trigger_error("Drupal is awesome", E_USER_WARNING);
-    return "";
+    // This will generate a user error. Use & to check for double escaping.
+    trigger_error("Drupal & awesome", E_USER_WARNING);
+    return [];
+  }
+
+  /**
+   * Generate fatals to test the error handler.
+   */
+  public function generateFatals() {
+    $function = function(array $test) {
+    };
+
+    $function("test-string");
+    return [];
   }
 
   /**
@@ -61,7 +72,7 @@ class ErrorTestController extends ControllerBase {
    */
   public function triggerException() {
     define('SIMPLETEST_COLLECT_ERRORS', FALSE);
-    throw new \Exception("Drupal is awesome");
+    throw new \Exception("Drupal & awesome");
   }
 
   /**
@@ -70,6 +81,20 @@ class ErrorTestController extends ControllerBase {
   public function triggerPDOException() {
     define('SIMPLETEST_COLLECT_ERRORS', FALSE);
     $this->database->query('SELECT * FROM bananas_are_awesome');
+  }
+
+  /**
+   * Trigger an exception during rendering.
+   */
+  public function triggerRendererException() {
+    return [
+      '#type' => 'page',
+      '#post_render' => [
+        function () {
+          throw new \Exception('This is an exception that occurs during rendering');
+        }
+      ],
+    ];
   }
 
 }

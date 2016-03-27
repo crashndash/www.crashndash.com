@@ -7,8 +7,10 @@
 
 namespace Drupal\Core\Menu;
 
+use Drupal\Component\Plugin\PluginBase;
+use Drupal\Core\DependencyInjection\DependencySerializationTrait;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
-use Drupal\Core\Plugin\PluginBase;
+use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Routing\RouteProviderInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpFoundation\Request;
@@ -17,6 +19,8 @@ use Symfony\Component\HttpFoundation\Request;
  * Provides a default implementation for local action plugins.
  */
 class LocalActionDefault extends PluginBase implements LocalActionInterface, ContainerFactoryPluginInterface {
+
+  use DependencySerializationTrait;
 
   /**
    * The route provider to load routes by name.
@@ -67,15 +71,8 @@ class LocalActionDefault extends PluginBase implements LocalActionInterface, Con
    */
   public function getTitle(Request $request = NULL) {
     // Subclasses may pull in the request or specific attributes as parameters.
-    $options = array();
-    if (!empty($this->pluginDefinition['title_context'])) {
-      $options['context'] = $this->pluginDefinition['title_context'];
-    }
-    $args = array();
-    if (isset($this->pluginDefinition['title_arguments']) && $title_arguments = $this->pluginDefinition['title_arguments']) {
-      $args = (array) $title_arguments;
-    }
-    return $this->t($this->pluginDefinition['title'], $args, $options);
+    // The title from YAML file discovery may be a TranslatableMarkup object.
+    return (string) $this->pluginDefinition['title'];
   }
 
   /**
@@ -88,7 +85,7 @@ class LocalActionDefault extends PluginBase implements LocalActionInterface, Con
   /**
    * {@inheritdoc}
    */
-  public function getRouteParameters(Request $request) {
+  public function getRouteParameters(RouteMatchInterface $route_match) {
     $parameters = isset($this->pluginDefinition['route_parameters']) ? $this->pluginDefinition['route_parameters'] : array();
     $route = $this->routeProvider->getRouteByName($this->getRouteName());
     $variables = $route->compile()->getVariables();
@@ -99,7 +96,7 @@ class LocalActionDefault extends PluginBase implements LocalActionInterface, Con
     // slugs in the path patterns. For example, if the route's path pattern is
     // /filter/tips/{filter_format} and the path is /filter/tips/plain_text then
     // $raw_variables->get('filter_format') == 'plain_text'.
-    $raw_variables = $request->attributes->get('_raw_variables');
+    $raw_variables = $route_match->getRawParameters();
 
     foreach ($variables as $name) {
       if (isset($parameters[$name])) {
@@ -109,8 +106,8 @@ class LocalActionDefault extends PluginBase implements LocalActionInterface, Con
       if ($raw_variables && $raw_variables->has($name)) {
         $parameters[$name] = $raw_variables->get($name);
       }
-      elseif ($request->attributes->has($name)) {
-        $parameters[$name] = $request->attributes->get($name);
+      elseif ($value = $route_match->getRawParameter($name)) {
+        $parameters[$name] = $value;
       }
     }
     // The UrlGenerator will throw an exception if expected parameters are
@@ -121,7 +118,8 @@ class LocalActionDefault extends PluginBase implements LocalActionInterface, Con
   /**
    * {@inheritdoc}
    */
-  public function getOptions(Request $request) {
+  public function getOptions(RouteMatchInterface $route_match) {
     return (array) $this->pluginDefinition['options'];
   }
+
 }

@@ -7,7 +7,6 @@
 
 namespace Drupal\Core\Config\Entity;
 
-use Drupal\Core\Config\Config;
 use Drupal\Core\Entity\EntityStorageInterface;
 
 /**
@@ -19,10 +18,10 @@ interface ConfigEntityStorageInterface extends EntityStorageInterface {
    * Extracts the configuration entity ID from the full configuration name.
    *
    * @param string $config_name
-   *   The full configuration name to extract the ID from. E.g.
+   *   The full configuration name to extract the ID from; for example,
    *   'views.view.archive'.
    * @param string $config_prefix
-   *   The config prefix of the configuration entity. E.g. 'views.view'
+   *   The config prefix of the configuration entity; for example, 'views.view'.
    *
    * @return string
    *   The ID of the configuration entity.
@@ -64,5 +63,28 @@ interface ConfigEntityStorageInterface extends EntityStorageInterface {
    * @see \Drupal\field\FieldStorageConfigStorage::mapFromStorageRecords()
    */
   public function updateFromStorageRecord(ConfigEntityInterface $entity, array $values);
+
+  /**
+   * Loads one entity in their original form without overrides.
+   *
+   * @param mixed $id
+   *   The ID of the entity to load.
+   *
+   * @return \Drupal\Core\Entity\EntityInterface|null
+   *   An entity object. NULL if no matching entity is found.
+   */
+  public function loadOverrideFree($id);
+
+  /**
+   * Loads one or more entities in their original form without overrides.
+   *
+   * @param $ids
+   *   An array of entity IDs, or NULL to load all entities.
+   *
+   * @return \Drupal\Core\Entity\EntityInterface[]
+   *   An array of entity objects indexed by their IDs. Returns an empty array
+   *   if no matching entities are found.
+   */
+  public function loadMultipleOverrideFree(array $ids = NULL);
 
 }

@@ -7,7 +7,9 @@
 
 namespace Drupal\toolbar\Element;
 
+use Drupal\Component\Utility\Html;
 use Drupal\Core\Render\Element\RenderElement;
+use Drupal\Core\Render\Element;
 
 /**
  * Provides a render element for the default Drupal toolbar.
@@ -64,7 +66,7 @@ class Toolbar extends RenderElement {
    * @return array
    *  A renderable array.
    *
-   * @see toolbar_page_build().
+   * @see toolbar_page_top().
    */
   public static function preRenderToolbar($element) {
     // Get the configured breakpoints to switch from vertical to horizontal
@@ -76,14 +78,7 @@ class Toolbar extends RenderElement {
         $media_queries[$id] = $breakpoint->getMediaQuery();
       }
 
-      $element['#attached']['js'][] = array(
-        'data' => array(
-          'toolbar' => array(
-            'breakpoints' => $media_queries,
-          )
-        ),
-        'type' => 'setting',
-      );
+      $element['#attached']['drupalSettings']['toolbar']['breakpoints'] = $media_queries;
     }
 
     $module_handler = static::moduleHandler();
@@ -97,8 +92,10 @@ class Toolbar extends RenderElement {
     // Merge in the original toolbar values.
     $element = array_merge($element, $items);
 
-    // Render the children.
-    $element['#children'] = drupal_render_children($element);
+    // Assign each item a unique ID, based on its key.
+    foreach (Element::children($element) as $key) {
+      $element[$key]['#id'] = Html::getId('toolbar-item-' . $key);
+    }
 
     return $element;
   }

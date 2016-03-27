@@ -8,7 +8,7 @@
 namespace Drupal\tour;
 
 use Drupal\Core\Entity\EntityViewBuilder;
-use Drupal\Core\Entity\EntityInterface;
+use Drupal\Component\Utility\Html;
 
 /**
  * Provides a Tour view builder.
@@ -29,9 +29,9 @@ class TourViewBuilder extends EntityViewBuilder {
         if ($output = $tip->getOutput()) {
           $attributes = array(
             'class' => array(
-              'tip-module-' . drupal_clean_css_identifier($entity->get('module')),
-              'tip-type-' . drupal_clean_css_identifier($tip->get('plugin')),
-              'tip-' . drupal_clean_css_identifier($tip->get('id')),
+              'tip-module-' . Html::cleanCssIdentifier($entity->getModule()),
+              'tip-type-' . Html::cleanCssIdentifier($tip->getPluginId()),
+              'tip-' . Html::cleanCssIdentifier($tip->id()),
             ),
           );
           $list_items[] = array(
@@ -43,7 +43,7 @@ class TourViewBuilder extends EntityViewBuilder {
                   'tour-progress',
                 ),
               ),
-              '#children' => t('!tour_item of !total', array('!tour_item' => $index + 1, '!total' => $count)),
+              '#children' => t('@tour_item of @total', array('@tour_item' => $index + 1, '@total' => $count)),
             ),
             '#wrapper_attributes' => $tip->getAttributes() + $attributes,
           );
@@ -65,7 +65,7 @@ class TourViewBuilder extends EntityViewBuilder {
             ),
           ),
           '#cache' => [
-            'tags' => $entity->getCacheTag(),
+            'tags' => $entity->getCacheTags(),
           ],
         );
       }

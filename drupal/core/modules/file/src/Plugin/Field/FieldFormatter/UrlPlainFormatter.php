@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\file\Plugin\field\formatter\UrlPlainFormatter.
+ * Contains \Drupal\file\Plugin\Field\FieldFormatter\UrlPlainFormatter.
  */
 
 namespace Drupal\file\Plugin\Field\FieldFormatter;
@@ -25,13 +25,16 @@ class UrlPlainFormatter extends FileFormatterBase {
   /**
    * {@inheritdoc}
    */
-  public function viewElements(FieldItemListInterface $items) {
+  public function viewElements(FieldItemListInterface $items, $langcode) {
     $elements = array();
 
-    foreach ($items as $delta => $item) {
-      if ($item->isDisplayed() && $item->entity) {
-        $elements[$delta] = array('#markup' => empty($item->entity) ? '' : file_create_url($item->entity->getFileUri()));
-      }
+    foreach ($this->getEntitiesToView($items, $langcode) as $delta => $file) {
+      $elements[$delta] = array(
+        '#markup' => file_url_transform_relative(file_create_url($file->getFileUri())),
+        '#cache' => array(
+          'tags' => $file->getCacheTags(),
+        ),
+      );
     }
 
     return $elements;

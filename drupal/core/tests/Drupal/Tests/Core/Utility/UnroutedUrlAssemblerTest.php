@@ -7,6 +7,8 @@
 
 namespace Drupal\Tests\Core\Utility;
 
+use Drupal\Core\GeneratedUrl;
+use Drupal\Core\Render\BubbleableMetadata;
 use Drupal\Core\Utility\UnroutedUrlAssembler;
 use Drupal\Tests\UnitTestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -40,14 +42,21 @@ class UnroutedUrlAssemblerTest extends UnitTestCase {
   protected $unroutedUrlAssembler;
 
   /**
+   * The mocked outbound path processor.
+   *
+   * @var \Drupal\Core\PathProcessor\OutboundPathProcessorInterface|\PHPUnit_Framework_MockObject_MockObject
+   */
+  protected $pathProcessor;
+
+  /**
    * {@inheritdoc}
    */
   protected function setUp() {
     parent::setUp();
 
     $this->requestStack = new RequestStack();
-    $this->configFactory = $this->getConfigFactoryStub(['system.filter' => []]);
-    $this->unroutedUrlAssembler = new UnroutedUrlAssembler($this->requestStack, $this->configFactory);
+    $this->pathProcessor = $this->getMock('Drupal\Core\PathProcessor\OutboundPathProcessorInterface');
+    $this->unroutedUrlAssembler = new UnroutedUrlAssembler($this->requestStack, $this->pathProcessor);
   }
 
   /**
@@ -60,12 +69,24 @@ class UnroutedUrlAssemblerTest extends UnitTestCase {
 
   /**
    * @covers ::assemble
+   * @expectedException \InvalidArgumentException
+   */
+  public function testAssembleWithLeadingSlash() {
+    $this->unroutedUrlAssembler->assemble('/drupal.org');
+  }
+
+  /**
+   * @covers ::assemble
    * @covers ::buildExternalUrl
    *
    * @dataProvider providerTestAssembleWithExternalUrl
    */
   public function testAssembleWithExternalUrl($uri, array $options, $expected) {
+   $this->setupRequestStack(FALSE);
    $this->assertEquals($expected, $this->unroutedUrlAssembler->assemble($uri, $options));
+   $generated_url = $this->unroutedUrlAssembler->assemble($uri, $options, TRUE);
+   $this->assertEquals($expected, $generated_url->getGeneratedUrl());
+   $this->assertInstanceOf('\Drupal\Core\Render\BubbleableMetadata', $generated_url);
   }
 
   /**
@@ -80,6 +101,7 @@ class UnroutedUrlAssemblerTest extends UnitTestCase {
       ['http://example.com/test', ['https' => TRUE], 'https://example.com/test'],
       ['https://example.com/test', ['https' => FALSE], 'http://example.com/test'],
       ['https://example.com/test?foo=1#bar', [], 'https://example.com/test?foo=1#bar'],
+      ['//www.drupal.org', [], '//www.drupal.org'],
     ];
   }
 
@@ -90,23 +112,7 @@ class UnroutedUrlAssemblerTest extends UnitTestCase {
    * @dataProvider providerTestAssembleWithLocalUri
    */
   public function testAssembleWithLocalUri($uri, array $options, $subdir, $expected) {
-    $server = [];
-    if ($subdir) {
-      // Setup a fake request which looks like a Drupal installed under the
-      // subdir "subdir" on the domain www.example.com.
-      // To reproduce the values install Drupal like that and use a debugger.
-      $server = [
-        'SCRIPT_NAME' => '/subdir/index.php',
-        'SCRIPT_FILENAME' => DRUPAL_ROOT . '/index.php',
-        'SERVER_NAME' => 'http://www.example.com',
-      ];
-      $request = Request::create('/subdir');
-    }
-    else {
-      $request = Request::create('/');
-    }
-    $request->server->add($server);
-    $this->requestStack->push($request);
+    $this->setupRequestStack($subdir);
 
     $this->assertEquals($expected, $this->unroutedUrlAssembler->assemble($uri, $options));
   }
@@ -116,14 +122,77 @@ class UnroutedUrlAssemblerTest extends UnitTestCase {
    */
   public function providerTestAssembleWithLocalUri() {
     return [
-      ['base://example', [], FALSE, '/example'],
-      ['base://example', ['query' => ['foo' => 'bar']], FALSE, '/example?foo=bar'],
-      ['base://example', ['fragment' => 'example', ], FALSE, '/example#example'],
-      ['base://example', [], TRUE, '/subdir/example'],
-      ['base://example', ['query' => ['foo' => 'bar']], TRUE, '/subdir/example?foo=bar'],
-      ['base://example', ['fragment' => 'example', ], TRUE, '/subdir/example#example'],
+      ['base:example', [], FALSE, '/example'],
+      ['base:example', ['query' => ['foo' => 'bar']], FALSE, '/example?foo=bar'],
+      ['base:example', ['query' => ['foo' => '"bar"']], FALSE, '/example?foo=%22bar%22'],
+      ['base:example', ['query' => ['foo' => '"bar"', 'zoo' => 'baz']], FALSE, '/example?foo=%22bar%22&zoo=baz'],
+      ['base:example', ['fragment' => 'example', ], FALSE, '/example#example'],
+      ['base:example', [], TRUE, '/subdir/example'],
+      ['base:example', ['query' => ['foo' => 'bar']], TRUE, '/subdir/example?foo=bar'],
+      ['base:example', ['fragment' => 'example', ], TRUE, '/subdir/example#example'],
+      ['base:/drupal.org', [], FALSE, '/drupal.org'],
     ];
   }
 
-}
+  /**
+   * @covers ::assemble
+   */
+  public function testAssembleWithNotEnabledProcessing() {
+    $this->setupRequestStack(FALSE);
+    $this->pathProcessor->expects($this->never())
+      ->method('processOutbound');
+    $result = $this->unroutedUrlAssembler->assemble('base:test-uri', []);
+    $this->assertEquals('/test-uri', $result);
+  }
 
+  /**
+   * @covers ::assemble
+   */
+  public function testAssembleWithEnabledProcessing() {
+    $this->setupRequestStack(FALSE);
+    $this->pathProcessor->expects($this->exactly(2))
+      ->method('processOutbound')
+      ->willReturnCallback(function($path, &$options = [], Request $request = NULL, BubbleableMetadata $bubbleable_metadata = NULL) {
+        if ($bubbleable_metadata) {
+          $bubbleable_metadata->setCacheContexts(['some-cache-context']);
+        }
+        return 'test-other-uri';
+      });
+
+    $result = $this->unroutedUrlAssembler->assemble('base:test-uri', ['path_processing' => TRUE]);
+    $this->assertEquals('/test-other-uri', $result);
+
+    $result = $this->unroutedUrlAssembler->assemble('base:test-uri', ['path_processing' => TRUE], TRUE);
+    $expected_generated_url = new GeneratedUrl();
+    $expected_generated_url->setGeneratedUrl('/test-other-uri')
+      ->setCacheContexts(['some-cache-context']);
+    $this->assertEquals($expected_generated_url, $result);
+  }
+
+  /**
+   * Setups the request stack for a given subdir.
+   *
+   * @param string $subdir
+   *   The wanted subdir.
+   */
+  protected function setupRequestStack($subdir) {
+    $server = [];
+    if ($subdir) {
+      // Setup a fake request which looks like a Drupal installed under the
+      // subdir "subdir" on the domain www.example.com.
+      // To reproduce the values install Drupal like that and use a debugger.
+      $server = [
+        'SCRIPT_NAME' => '/subdir/index.php',
+        'SCRIPT_FILENAME' => $this->root . '/index.php',
+        'SERVER_NAME' => 'http://www.example.com',
+      ];
+      $request = Request::create('/subdir/');
+    }
+    else {
+      $request = Request::create('/');
+    }
+    $request->server->add($server);
+    $this->requestStack->push($request);
+  }
+
+}

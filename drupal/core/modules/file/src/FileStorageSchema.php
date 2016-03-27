@@ -30,10 +30,7 @@ class FileStorageSchema extends SqlContentEntityStorageSchema {
           break;
 
         case 'uri':
-          $this->addSharedTableFieldUniqueKey($storage_definition, $schema, TRUE);
-          // @todo There should be a 'binary' field type or setting:
-          //   https://www.drupal.org/node/2068655.
-          $schema['fields'][$field_name]['binary'] = TRUE;
+          $this->addSharedTableFieldIndex($storage_definition, $schema, TRUE);
           break;
       }
     }

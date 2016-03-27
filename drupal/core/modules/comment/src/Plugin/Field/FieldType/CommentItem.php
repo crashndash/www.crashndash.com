@@ -9,8 +9,11 @@ namespace Drupal\comment\Plugin\Field\FieldType;
 
 use Drupal\comment\CommentManagerInterface;
 use Drupal\comment\Entity\CommentType;
+use Drupal\Core\Field\FieldDefinitionInterface;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Render\Element;
+use Drupal\Core\Routing\UrlGeneratorTrait;
 use Drupal\Core\TypedData\DataDefinition;
 use Drupal\Core\Field\FieldItemBase;
 use Drupal\Core\Session\AnonymousUserSession;
@@ -22,11 +25,13 @@ use Drupal\Core\Session\AnonymousUserSession;
  *   id = "comment",
  *   label = @Translation("Comments"),
  *   description = @Translation("This field manages configuration and presentation of comments on an entity."),
+ *   list_class = "\Drupal\comment\CommentFieldItemList",
  *   default_widget = "comment_default",
  *   default_formatter = "comment_default"
  * )
  */
 class CommentItem extends FieldItemBase implements CommentItemInterface {
+  use UrlGeneratorTrait;
 
   /**
    * {@inheritdoc}
@@ -55,7 +60,8 @@ class CommentItem extends FieldItemBase implements CommentItemInterface {
    */
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
     $properties['status'] = DataDefinition::create('integer')
-      ->setLabel(t('Comment status'));
+      ->setLabel(t('Comment status'))
+      ->setRequired(TRUE);
 
     $properties['cid'] = DataDefinition::create('integer')
       ->setLabel(t('Last comment ID'));
@@ -87,7 +93,6 @@ class CommentItem extends FieldItemBase implements CommentItemInterface {
         'status' => array(
           'description' => 'Whether comments are allowed on this entity: 0 = no, 1 = closed (read only), 2 = open (read/write).',
           'type' => 'int',
-          'not null' => TRUE,
           'default' => 0,
         ),
       ),
@@ -106,21 +111,13 @@ class CommentItem extends FieldItemBase implements CommentItemInterface {
 
     $anonymous_user = new AnonymousUserSession();
 
-    $element['comment'] = array(
-      '#type' => 'details',
-      '#title' => t('Comment form settings'),
-      '#open' => TRUE,
-      '#attached' => array(
-        'library' => array('comment/drupal.comment'),
-      ),
-    );
-    $element['comment']['default_mode'] = array(
+    $element['default_mode'] = array(
       '#type' => 'checkbox',
       '#title' => t('Threading'),
       '#default_value' => $settings['default_mode'],
       '#description' => t('Show comment replies in a threaded list.'),
     );
-    $element['comment']['per_page'] = array(
+    $element['per_page'] = array(
       '#type' => 'number',
       '#title' => t('Comments per page'),
       '#default_value' => $settings['per_page'],
@@ -129,7 +126,7 @@ class CommentItem extends FieldItemBase implements CommentItemInterface {
       '#max' => 1000,
       '#step' => 10,
     );
-    $element['comment']['anonymous'] = array(
+    $element['anonymous'] = array(
       '#type' => 'select',
       '#title' => t('Anonymous commenting'),
       '#default_value' => $settings['anonymous'],
@@ -140,12 +137,12 @@ class CommentItem extends FieldItemBase implements CommentItemInterface {
       ),
       '#access' => $anonymous_user->hasPermission('post comments'),
     );
-    $element['comment']['form_location'] = array(
+    $element['form_location'] = array(
       '#type' => 'checkbox',
       '#title' => t('Show reply form on the same page as comments'),
       '#default_value' => $settings['form_location'],
     );
-    $element['comment']['preview'] = array(
+    $element['preview'] = array(
       '#type' => 'radios',
       '#title' => t('Preview comment'),
       '#default_value' => $settings['preview'],
@@ -162,15 +159,8 @@ class CommentItem extends FieldItemBase implements CommentItemInterface {
   /**
    * {@inheritdoc}
    */
-  public function __get($name) {
-    if ($name == 'status' && !isset($this->values[$name])) {
-      // Get default value from the field when no data saved in entity.
-      $field_default_values = $this->getFieldDefinition()->getDefaultValue($this->getEntity());
-      return $field_default_values[0]['status'];
-    }
-    else {
-      return parent::__get($name);
-    }
+  public static function mainPropertyName() {
+    return 'status';
   }
 
   /**
@@ -190,7 +180,7 @@ class CommentItem extends FieldItemBase implements CommentItemInterface {
     $element = array();
 
     // @todo Inject entity storage once typed-data supports container injection.
-    // See https://drupal.org/node/2053415 for more details.
+    //   See https://www.drupal.org/node/2053415 for more details.
     $comment_types = CommentType::loadMultiple();
     $options = array();
     $entity_type = $this->getEntity()->getEntityTypeId();
@@ -203,11 +193,26 @@ class CommentItem extends FieldItemBase implements CommentItemInterface {
       '#type' => 'select',
       '#title' => t('Comment type'),
       '#options' => $options,
-      '#description' => t('Select the Comment type to use for this comment field.'),
+      '#required' => TRUE,
+      '#description' => $this->t('Select the Comment type to use for this comment field. Manage the comment types from the <a href=":url">administration overview page</a>.', array(':url' => $this->url('entity.comment_type.collection'))),
       '#default_value' => $this->getSetting('comment_type'),
       '#disabled' => $has_data,
     );
     return $element;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function generateSampleValue(FieldDefinitionInterface $field_definition) {
+    $statuses = [
+      CommentItemInterface::HIDDEN,
+      CommentItemInterface::CLOSED,
+      CommentItemInterface::OPEN,
+    ];
+    return [
+      'status' => $statuses[mt_rand(0, count($statuses) - 1)],
+    ];
   }
 
 }

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\comment\Plugin\views\filter\NodeComment.
+ * Contains \Drupal\comment\Plugin\views\filter\NodeComment.
  */
 
 namespace Drupal\comment\Plugin\views\filter;
@@ -25,6 +25,7 @@ class NodeComment extends InOperator {
       CommentItemInterface::CLOSED => $this->t('Closed'),
       CommentItemInterface::OPEN => $this->t('Open'),
     );
+    return $this->valueOptions;
   }
 
 }

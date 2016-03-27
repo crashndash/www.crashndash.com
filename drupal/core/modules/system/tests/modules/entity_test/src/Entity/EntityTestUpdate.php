@@ -23,13 +23,13 @@ use Drupal\Core\Entity\EntityTypeInterface;
  *   },
  *   base_table = "entity_test_update",
  *   revision_table = "entity_test_update_revision",
- *   fieldable = TRUE,
  *   persistent_cache = FALSE,
  *   entity_keys = {
  *     "id" = "id",
  *     "uuid" = "uuid",
  *     "bundle" = "type",
- *     "label" = "name"
+ *     "label" = "name",
+ *     "langcode" = "langcode",
  *   }
  * )
  */

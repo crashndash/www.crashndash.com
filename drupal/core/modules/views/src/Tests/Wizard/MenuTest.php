@@ -2,12 +2,13 @@
 
 /**
  * @file
- * Definition of Drupal\views\Tests\Wizard\MenuTest.
+ * Contains \Drupal\views\Tests\Wizard\MenuTest.
  */
 
 namespace Drupal\views\Tests\Wizard;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\Core\Url;
 
 /**
  * Tests the ability of the views wizard to put views in a menu.
@@ -40,7 +41,7 @@ class MenuTest extends WizardTestBase {
     $this->drupalGet('');
     $this->assertResponse(200);
     $this->assertLink($view['page[link_properties][title]']);
-    $this->assertLinkByHref(_url($view['page[path]']));
+    $this->assertLinkByHref(Url::fromUri('base:' . $view['page[path]'])->toString());
 
     // Make sure the link is associated with the main menu.
     /** @var \Drupal\Core\Menu\MenuLinkManagerInterface $menu_link_manager */
@@ -48,7 +49,7 @@ class MenuTest extends WizardTestBase {
     /** @var \Drupal\Core\Menu\MenuLinkInterface $link */
     $link = $menu_link_manager->createInstance('views_view:views.' . $view['id'] . '.page_1');
     $url = $link->getUrlObject();
-    $this->assertEqual($url->getRouteName(), 'view.' . $view['id'] . '.page_1', String::format('Found a link to %path in the main menu', array('%path' => $view['page[path]'])));
+    $this->assertEqual($url->getRouteName(), 'view.' . $view['id'] . '.page_1', SafeMarkup::format('Found a link to %path in the main menu', array('%path' => $view['page[path]'])));
     $metadata = $link->getMetaData();
     $this->assertEqual(array('view_id' => $view['id'], 'display_id' => 'page_1'), $metadata);
   }

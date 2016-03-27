@@ -8,6 +8,7 @@
 namespace Drupal\views\Plugin\views\query;
 
 use Drupal\Component\Utility\NestedArray;
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Database\Database;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\views\Plugin\views\display\DisplayPluginBase;
@@ -111,7 +112,7 @@ class Sql extends QueryPluginBase {
   protected $noDistinct;
 
   /**
-   * Overrides \Drupal\views\Plugin\views\PluginBase::init().
+   * {@inheritdoc}
    */
   public function init(ViewExecutable $view, DisplayPluginBase $display, array &$options = NULL) {
     parent::init($view, $display, $options);
@@ -151,7 +152,7 @@ class Sql extends QueryPluginBase {
    * Set the view to be distinct (per base field).
    *
    * @param bool $value
-   *   Should the view by distincted.
+   *   Should the view be distincted.
    */
   protected function setDistinct($value = TRUE) {
     if (!(isset($this->noDistinct) && $value)) {
@@ -203,7 +204,7 @@ class Sql extends QueryPluginBase {
 
     $form['disable_sql_rewrite'] = array(
       '#title' => $this->t('Disable SQL rewriting'),
-      '#description' => $this->t('Disabling SQL rewriting will disable node_access checks as well as other modules that implement hook_query_alter().'),
+      '#description' => $this->t('Disabling SQL rewriting will omit all query tags, i. e. disable node access checks as well as override hook_query_alter() implementations in other modules.'),
       '#type' => 'checkbox',
       '#default_value' => !empty($this->options['disable_sql_rewrite']),
       '#suffix' => '<div class="messages messages--warning sql-rewrite-warning js-hide">' . $this->t('WARNING: Disabling SQL rewriting means that node access security is disabled. This may allow users to see data they should not be able to see if your view is misconfigured. Use this option only if you understand and accept this security risk.') . '</div>',
@@ -242,7 +243,7 @@ class Sql extends QueryPluginBase {
     $element = array('#parents' => array('query', 'options', 'query_tags'));
     $value = explode(',', NestedArray::getValue($form_state->getValues(), $element['#parents']));
     $value = array_filter(array_map('trim', $value));
-    form_set_value($element, $value, $form_state);
+    $form_state->setValueForElement($element, $value);
   }
 
   /**
@@ -603,7 +604,7 @@ class Sql extends QueryPluginBase {
 
     // Have we been this way?
     if (isset($traced[$join->leftTable])) {
-      // we looped. Broked.
+      // We looped. Broken.
       return FALSE;
     }
 
@@ -721,7 +722,11 @@ class Sql extends QueryPluginBase {
    *   alias be used.
    * @param $params
    *   An array of parameters additional to the field that will control items
-   *   such as aggregation functions and DISTINCT.
+   *   such as aggregation functions and DISTINCT. Some values that are
+   *   recognized:
+   *   - function: An aggregation function to apply, such as SUM.
+   *   - aggregate: Set to TRUE to indicate that this value should be
+   *     aggregated in a GROUP BY.
    *
    * @return $name
    *   The name that this field can be referred to as. Usually this is the alias.
@@ -743,7 +748,8 @@ class Sql extends QueryPluginBase {
     // Make sure an alias is assigned
     $alias = $alias ? $alias : $field;
 
-    // PostgreSQL truncates aliases to 63 characters: http://drupal.org/node/571548
+    // PostgreSQL truncates aliases to 63 characters:
+    //   https://www.drupal.org/node/571548.
 
     // We limit the length of the original alias up to 60 characters
     // to get a unique alias later if its have duplicates
@@ -799,9 +805,9 @@ class Sql extends QueryPluginBase {
    *   complex options, it is an array. The meaning of each element in the array is
    *   dependent on the $operator.
    * @param $operator
-   *   The comparison operator, such as =, <, or >=. It also accepts more complex
-   *   options such as IN, LIKE, or BETWEEN. Defaults to IN if $value is an array
-   *   = otherwise. If $field is a string you have to use 'formula' here.
+   *   The comparison operator, such as =, <, or >=. It also accepts more
+   *   complex options such as IN, LIKE, LIKE BINARY, or BETWEEN. Defaults to =.
+   *   If $field is a string you have to use 'formula' here.
    *
    * The $field, $value and $operator arguments can also be passed in with a
    * single DatabaseCondition object, like this:
@@ -1130,7 +1136,7 @@ class Sql extends QueryPluginBase {
       if (!empty($field['function'])) {
         $info = $this->getAggregationInfo();
         if (!empty($info[$field['function']]['method']) && is_callable(array($this, $info[$field['function']]['method']))) {
-          $string = $this::$info[$field['function']]['method']($field['function'], $string);
+          $string = $this::{$info[$field['function']]['method']}($field['function'], $string);
           $placeholders = !empty($field['placeholders']) ? $field['placeholders'] : array();
           $query->addExpression($string, $fieldname, $placeholders);
         }
@@ -1232,6 +1238,10 @@ class Sql extends QueryPluginBase {
     if (count($this->having)) {
       $this->hasAggregate = TRUE;
     }
+    elseif (!$this->hasAggregate) {
+      // Allow 'GROUP BY' even no aggregation function has been set.
+      $this->hasAggregate = $this->view->display_handler->getOption('group_by');
+    }
     $groupby = array();
     if ($this->hasAggregate && (!empty($this->groupby) || !empty($non_aggregates))) {
       $groupby = array_unique(array_merge($this->groupby, $non_aggregates));
@@ -1250,8 +1260,8 @@ class Sql extends QueryPluginBase {
       }
 
       foreach ($entity_information as $entity_type_id => $info) {
-        $entity_type = \Drupal::entityManager()->getDefinition($entity_type_id);
-        $base_field = empty($table['revision']) ? $entity_type->getKey('id') : $entity_type->getKey('revision');
+        $entity_type = \Drupal::entityManager()->getDefinition($info['entity_type']);
+        $base_field = !$info['revision'] ? $entity_type->getKey('id') : $entity_type->getKey('revision');
         $this->addField($info['alias'], $base_field, '', $params);
       }
     }
@@ -1262,6 +1272,11 @@ class Sql extends QueryPluginBase {
     // Add groupby.
     if ($groupby) {
       foreach ($groupby as $field) {
+        // Handle group by of field without table alias to avoid ambiguous
+        // column error.
+        if ($field == $this->view->storage->get('base_field')) {
+          $field = $this->view->storage->get('base_table') . '.' . $field;
+        }
         $query->groupBy($field);
       }
       if (!empty($this->having) && $condition = $this->buildCondition('having')) {
@@ -1386,14 +1401,14 @@ class Sql extends QueryPluginBase {
       // (e.g. COUNT DISTINCT(1) ...) and no pager will return.
       // See pager.inc > PagerDefault::execute()
       // http://api.drupal.org/api/drupal/includes--pager.inc/function/PagerDefault::execute/7
-      // See http://drupal.org/node/1046170.
+      // See https://www.drupal.org/node/1046170.
       $count_query->preExecute();
 
       // Build the count query.
       $count_query = $count_query->countQuery();
 
       // Add additional arguments as a fake condition.
-      // XXX: this doesn't work... because PDO mandates that all bound arguments
+      // XXX: this doesn't work, because PDO mandates that all bound arguments
       // are used on the query. TODO: Find a better way to do this.
       if (!empty($additional_arguments)) {
         // $query->where('1 = 1', $additional_arguments);
@@ -1439,7 +1454,7 @@ class Sql extends QueryPluginBase {
           drupal_set_message($e->getMessage(), 'error');
         }
         else {
-          throw new DatabaseExceptionWrapper(format_string('Exception in @label[@view_name]: @message', array('@label' => $view->storage->label(), '@view_name' => $view->storage->id(), '@message' => $e->getMessage())));
+          throw new DatabaseExceptionWrapper("Exception in {$view->storage->label()}[{$view->storage->id()}]: {$e->getMessage()}");
         }
       }
 
@@ -1456,38 +1471,51 @@ class Sql extends QueryPluginBase {
    * If the entity belongs to the base table, then it gets stored in
    * $result->_entity. Otherwise, it gets stored in
    * $result->_relationship_entities[$relationship_id];
+   *
+   * @param \Drupal\views\ResultRow[] $results
+   *   The result of the SQL query.
    */
-  function loadEntities(&$results) {
+  public function loadEntities(&$results) {
     $entity_information = $this->getEntityTableInfo();
     // No entity tables found, nothing else to do here.
     if (empty($entity_information)) {
       return;
     }
 
+    // Extract all entity types from entity_information.
+    $entity_types = array();
+    foreach ($entity_information as $info) {
+      $entity_type = $info['entity_type'];
+      if (!isset($entity_types[$entity_type])) {
+        $entity_types[$entity_type] = \Drupal::entityManager()->getDefinition($entity_type);
+      }
+    }
+
     // Assemble a list of entities to load.
     $ids_by_type = array();
-    foreach ($entity_information as $entity_type => $info) {
-      $entity_info = \Drupal::entityManager()->getDefinition($entity_type);
-      $id_key = empty($table['revision']) ? $entity_info->getKey('id') : $entity_info->getKey('revision');
+    foreach ($entity_information as $info) {
+      $relationship_id = $info['relationship_id'];
+      $entity_type = $info['entity_type'];
+      $entity_info = $entity_types[$entity_type];
+      $id_key = !$info['revision'] ? $entity_info->getKey('id') : $entity_info->getKey('revision');
       $id_alias = $this->getFieldAlias($info['alias'], $id_key);
 
       foreach ($results as $index => $result) {
         // Store the entity id if it was found.
         if (isset($result->{$id_alias}) && $result->{$id_alias} != '') {
-          $ids_by_type[$entity_type][$index] = $result->$id_alias;
+          $ids_by_type[$entity_type][$index][$relationship_id] = $result->$id_alias;
         }
       }
     }
 
     // Load all entities and assign them to the correct result row.
     foreach ($ids_by_type as $entity_type => $ids) {
-      $info = $entity_information[$entity_type];
-      $relationship_id = $info['relationship_id'];
+      $flat_ids = iterator_to_array(new \RecursiveIteratorIterator(new \RecursiveArrayIterator($ids)), FALSE);
 
       // Drupal core currently has no way to load multiple revisions. Sad.
-      if ($info['revision']) {
+      if (isset($entity_information[$entity_type]['revision']) && $entity_information[$entity_type]['revision'] === TRUE) {
         $entities = array();
-        foreach ($ids as $revision_id) {
+        foreach ($flat_ids as $revision_id) {
           $entity = entity_revision_load($entity_type, $revision_id);
           if ($entity) {
             $entities[$revision_id] = $entity;
@@ -1495,25 +1523,73 @@ class Sql extends QueryPluginBase {
         }
       }
       else {
-        $entities = entity_load_multiple($entity_type, $ids);
+        $entities = entity_load_multiple($entity_type, $flat_ids);
       }
 
-      foreach ($ids as $index => $id) {
-        if (isset($entities[$id])) {
-          $entity = $entities[$id];
-        }
-        else {
-          $entity = NULL;
-        }
+      foreach ($ids as $index => $relationships) {
+        foreach ($relationships as $relationship_id => $entity_id) {
+          if (isset($entities[$entity_id])) {
+            $entity = $entities[$entity_id];
+          }
+          else {
+            $entity = NULL;
+          }
 
-        if ($relationship_id == 'none') {
-          $results[$index]->_entity = $entity;
-        }
-        else {
-          $results[$index]->_relationship_entities[$relationship_id] = $entity;
+          if ($relationship_id == 'none') {
+            $results[$index]->_entity = $entity;
+          }
+          else {
+            $results[$index]->_relationship_entities[$relationship_id] = $entity;
+          }
         }
       }
     }
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheTags() {
+    $tags = [];
+    // Add cache tags for each row, if there is an entity associated with it.
+    if (!$this->hasAggregate) {
+      foreach ($this->getAllEntities() as $entity) {
+        $tags = Cache::mergeTags($entity->getCacheTags(), $tags);
+      }
+    }
+
+    return $tags;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheMaxAge() {
+    $max_age = parent::getCacheMaxAge();
+    foreach ($this->getAllEntities() as $entity) {
+      $max_age = Cache::mergeMaxAges($max_age, $entity->getCacheMaxAge());
+    }
+
+    return $max_age;
+  }
+
+  /**
+   * Gets all the involved entities of the view.
+   *
+   * @return \Drupal\Core\Entity\EntityInterface[]
+   */
+  protected function getAllEntities() {
+    $entities = [];
+    foreach ($this->view->result as $row) {
+      if ($row->_entity) {
+        $entities[] = $row->_entity;
+      }
+      foreach ($row->_relationship_entities as $entity) {
+        $entities[] = $entity;
+      }
+    }
+
+    return $entities;
   }
 
   public function addSignature(ViewExecutable $view) {
@@ -1611,7 +1687,7 @@ class Sql extends QueryPluginBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\query\QueryPluginBase::getDateField().
+   * {@inheritdoc}
    */
   public function getDateField($field) {
     $db_type = Database::getConnection()->databaseType();
@@ -1637,7 +1713,7 @@ class Sql extends QueryPluginBase {
         break;
       case 'sqlite':
         if (!empty($offset)) {
-          $field = "($field + '$offset_seconds')";
+          $field = "($field + $offset_seconds)";
         }
         break;
     }
@@ -1646,7 +1722,7 @@ class Sql extends QueryPluginBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\query\QueryPluginBase::setupTimezone().
+   * {@inheritdoc}
    */
   public function setupTimezone() {
     $timezone = drupal_get_user_timezone();
@@ -1672,9 +1748,9 @@ class Sql extends QueryPluginBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\query\QueryPluginBase::getDateFormat().
+   * {@inheritdoc}
    */
-  public function getDateFormat($field, $format) {
+  public function getDateFormat($field, $format, $string_date = FALSE) {
     $db_type = Database::getConnection()->databaseType();
     switch ($db_type) {
       case 'mysql':
@@ -1713,7 +1789,7 @@ class Sql extends QueryPluginBase {
           'l' => 'Day',
           // No format for Day of the month without leading zeros.
           'j' => 'DD',
-          'W' => 'WW',
+          'W' => 'IW',
           'H' => 'HH24',
           'h' => 'HH12',
           'i' => 'MI',
@@ -1721,7 +1797,12 @@ class Sql extends QueryPluginBase {
           'A' => 'AM',
         );
         $format = strtr($format, $replace);
-        return "TO_CHAR($field, '$format')";
+        if (!$string_date) {
+          return "TO_CHAR($field, '$format')";
+        }
+        // In order to allow for partials (eg, only the year), transform to a
+        // date, back to a string again.
+        return "TO_CHAR(TO_TIMESTAMP($field, 'YYYY-MM-DD HH24:MI:SS'), '$format')";
       case 'sqlite':
         $replace = array(
           'Y' => '%Y',
@@ -1751,7 +1832,31 @@ class Sql extends QueryPluginBase {
           'A' => '',
         );
         $format = strtr($format, $replace);
-        return "strftime('$format', $field, 'unixepoch')";
+
+        // Don't use the 'unixepoch' flag for string date comparisons.
+        $unixepoch = $string_date ? '' : ", 'unixepoch'";
+
+        // SQLite does not have a ISO week substitution string, so it needs
+        // special handling.
+        // @see http://en.wikipedia.org/wiki/ISO_week_date#Calculation
+        // @see http://stackoverflow.com/a/15511864/1499564
+        if ($format === '%W') {
+          $expression = "((strftime('%j', date(strftime('%Y-%m-%d', $field" . $unixepoch . "), '-3 days', 'weekday 4')) - 1) / 7 + 1)";
+        }
+        else {
+          $expression = "strftime('$format', $field" . $unixepoch . ")";
+        }
+        // The expression yields a string, but the comparison value is an
+        // integer in case the comparison value is a float, integer, or numeric.
+        // All of the above SQLite format tokens only produce integers. However,
+        // the given $format may contain 'Y-m-d', which results in a string.
+        // @see \Drupal\Core\Database\Driver\sqlite\Connection::expandArguments()
+        // @see http://www.sqlite.org/lang_datefunc.html
+        // @see http://www.sqlite.org/lang_expr.html#castexpr
+        if (preg_match('/^(?:%\w)+$/', $format)) {
+          $expression = "CAST($expression AS NUMERIC)";
+        }
+        return $expression;
     }
   }
 

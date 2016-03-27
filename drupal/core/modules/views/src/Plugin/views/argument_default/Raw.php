@@ -2,16 +2,17 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\argument_default\Raw.
+ * Contains \Drupal\views\Plugin\views\argument_default\Raw.
  */
 
 namespace Drupal\views\Plugin\views\argument_default;
 
+use Drupal\Core\Cache\Cache;
+use Drupal\Core\Cache\CacheableDependencyInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Path\AliasManagerInterface;
-use Drupal\views\Plugin\CacheablePluginInterface;
+use Drupal\Core\Path\CurrentPathStack;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Default argument plugin to use the raw value from the URL.
@@ -23,7 +24,7 @@ use Symfony\Component\HttpFoundation\Request;
  *   title = @Translation("Raw value from URL")
  * )
  */
-class Raw extends ArgumentDefaultPluginBase implements CacheablePluginInterface {
+class Raw extends ArgumentDefaultPluginBase implements CacheableDependencyInterface {
 
   /**
    * The alias manager.
@@ -31,6 +32,13 @@ class Raw extends ArgumentDefaultPluginBase implements CacheablePluginInterface 
    * @var \Drupal\Core\Path\AliasManagerInterface
    */
   protected $aliasManager;
+
+  /**
+   * The current path.
+   *
+   * @var \Drupal\Core\Path\CurrentPathStack
+   */
+  protected $currentPath;
 
   /**
    * Constructs a Raw object.
@@ -43,11 +51,14 @@ class Raw extends ArgumentDefaultPluginBase implements CacheablePluginInterface 
    *   The plugin implementation definition.
    * @param \Drupal\Core\Path\AliasManagerInterface $alias_manager
    *   The alias manager.
+   * @param \Drupal\Core\Path\CurrentPathStack $current_path
+   *   The current path.
    */
-  public function __construct(array $configuration, $plugin_id, $plugin_definition, AliasManagerInterface $alias_manager) {
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, AliasManagerInterface $alias_manager, CurrentPathStack $current_path) {
     parent::__construct($configuration, $plugin_id, $plugin_definition);
 
     $this->aliasManager = $alias_manager;
+    $this->currentPath = $current_path;
   }
 
   /**
@@ -58,10 +69,14 @@ class Raw extends ArgumentDefaultPluginBase implements CacheablePluginInterface 
       $configuration,
       $plugin_id,
       $plugin_definition,
-      $container->get('path.alias_manager')
+      $container->get('path.alias_manager'),
+      $container->get('path.current')
     );
   }
 
+  /**
+   * {@inheritdoc}
+   */
   protected function defineOptions() {
     $options = parent::defineOptions();
     $options['index'] = array('default' => '');
@@ -70,6 +85,9 @@ class Raw extends ArgumentDefaultPluginBase implements CacheablePluginInterface 
     return $options;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
     $form['index'] = array(
@@ -90,14 +108,19 @@ class Raw extends ArgumentDefaultPluginBase implements CacheablePluginInterface 
     );
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function getArgument() {
-    // @todo Remove dependency on the internal _system_path attribute:
-    //   https://www.drupal.org/node/2293581.
-    $path = $this->view->getRequest()->attributes->get('_system_path');
+    // Don't trim the leading slash since getAliasByPath() requires it.
+    $path = rtrim($this->currentPath->getPath($this->view->getRequest()), '/');
     if ($this->options['use_alias']) {
       $path = $this->aliasManager->getAliasByPath($path);
     }
     $args = explode('/', $path);
+    // Drop the empty first element created by the leading slash since the path
+    // component index doesn't take it into account.
+    array_shift($args);
     if (isset($args[$this->options['index']])) {
       return $args[$this->options['index']];
     }
@@ -106,15 +129,15 @@ class Raw extends ArgumentDefaultPluginBase implements CacheablePluginInterface 
   /**
    * {@inheritdoc}
    */
-  public function isCacheable() {
-    return TRUE;
+  public function getCacheMaxAge() {
+    return Cache::PERMANENT;
   }
 
   /**
    * {@inheritdoc}
    */
   public function getCacheContexts() {
-    return ['cache.context.url'];
+    return ['url'];
   }
 
 }

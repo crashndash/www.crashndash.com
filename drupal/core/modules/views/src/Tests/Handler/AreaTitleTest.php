@@ -7,7 +7,7 @@
 
 namespace Drupal\views\Tests\Handler;
 
-use Drupal\views\Tests\ViewUnitTestBase;
+use Drupal\views\Tests\ViewKernelTestBase;
 use Drupal\views\Views;
 
 /**
@@ -16,7 +16,7 @@ use Drupal\views\Views;
  * @group views
  * @see \Drupal\views\Plugin\views\area\Title
  */
-class AreaTitleTest extends ViewUnitTestBase {
+class AreaTitleTest extends ViewKernelTestBase {
 
   /**
    * Views used by this test.
@@ -54,7 +54,7 @@ class AreaTitleTest extends ViewUnitTestBase {
     $this->executeView($view);
     $view->result = array();
     $view->render();
-    $this->assertEqual($view->getTitle(), 'test_title_header', 'The title area on the header should override the title if the result is empty.');
+    $this->assertEqual($view->getTitle(), 'test_title_empty', 'The title area should override the title if the result is empty.');
     $view->destroy();
   }
 

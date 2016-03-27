@@ -10,6 +10,7 @@ namespace Drupal\language\Form;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 use Drupal\language\ConfigurableLanguageManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -56,15 +57,22 @@ class NegotiationBrowserForm extends ConfigFormBase {
   /**
    * {@inheritdoc}
    */
+  protected function getEditableConfigNames() {
+    return ['language.mappings'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $form = array();
 
     // Initialize a language list to the ones available, including English.
-    $languages = language_list();
+    $languages = $this->languageManager->getLanguages();
 
     $existing_languages = array();
     foreach ($languages as $langcode => $language) {
-      $existing_languages[$langcode] = $language->name;
+      $existing_languages[$langcode] = $language->getName();
     }
 
     // If we have no languages available, present the list of predefined languages
@@ -75,32 +83,51 @@ class NegotiationBrowserForm extends ConfigFormBase {
     }
     else {
       $language_options = array(
-        $this->t('Existing languages') => $existing_languages,
-        $this->t('Languages not yet added') => $this->languageManager->getStandardLanguageListWithoutConfigured(),
+        (string) $this->t('Existing languages') => $existing_languages,
+        (string) $this->t('Languages not yet added') => $this->languageManager->getStandardLanguageListWithoutConfigured(),
       );
     }
 
-    $form['mappings'] = array(
-      '#tree' => TRUE,
-      '#theme' => 'language_negotiation_configure_browser_form_table',
-    );
+    $form['mappings'] = [
+      '#type' => 'table',
+      '#header' => [
+        $this->t('Browser language code'),
+        $this->t('Site language'),
+        $this->t('Operations'),
+      ],
+      '#attributes' => ['id' => 'language-negotiation-browser'],
+      '#empty' => $this->t('No browser language mappings available.'),
+    ];
 
     $mappings = $this->language_get_browser_drupal_langcode_mappings();
     foreach ($mappings as $browser_langcode => $drupal_langcode) {
       $form['mappings'][$browser_langcode] = array(
         'browser_langcode' => array(
+          '#title' => $this->t('Browser language code'),
+          '#title_display' => 'invisible',
           '#type' => 'textfield',
           '#default_value' => $browser_langcode,
           '#size' => 20,
           '#required' => TRUE,
         ),
         'drupal_langcode' => array(
+          '#title' => $this->t('Site language'),
+          '#title_display' => 'invisible',
           '#type' => 'select',
           '#options' => $language_options,
           '#default_value' => $drupal_langcode,
           '#required' => TRUE,
         ),
       );
+      // Operations column.
+      $form['mappings'][$browser_langcode]['operations'] = [
+        '#type' => 'operations',
+        '#links' => [],
+      ];
+      $form['mappings'][$browser_langcode]['operations']['#links']['delete'] = [
+        'title' => $this->t('Delete'),
+        'url' => Url::fromRoute('language.negotiation_browser_delete', ['browser_langcode' => $browser_langcode]),
+      ];
     }
 
     // Add empty row.
@@ -112,15 +139,13 @@ class NegotiationBrowserForm extends ConfigFormBase {
     $form['new_mapping']['browser_langcode'] = array(
       '#type' => 'textfield',
       '#title' => $this->t('Browser language code'),
-      '#description' => $this->t('Use language codes as <a href="@w3ctags">defined by the W3C</a> for interoperability. <em>Examples: "en", "en-gb" and "zh-hant".</em>', array('@w3ctags' => 'http://www.w3.org/International/articles/language-tags/')),
-      '#default_value' => '',
+      '#description' => $this->t('Use language codes as <a href=":w3ctags">defined by the W3C</a> for interoperability. <em>Examples: "en", "en-gb" and "zh-hant".</em>', array(':w3ctags' => 'http://www.w3.org/International/articles/language-tags/')),
       '#size' => 20,
     );
     $form['new_mapping']['drupal_langcode'] = array(
       '#type' => 'select',
-      '#title' => $this->t('Drupal language'),
+      '#title' => $this->t('Site language'),
       '#options' => $language_options,
-      '#default_value' => '',
     );
 
     return parent::buildForm($form, $form_state);
@@ -134,16 +159,15 @@ class NegotiationBrowserForm extends ConfigFormBase {
     $unique_values = array();
 
     // Check all mappings.
-    $mappings = array();
     if ($form_state->hasValue('mappings')) {
       $mappings = $form_state->getValue('mappings');
       foreach ($mappings as $key => $data) {
         // Make sure browser_langcode is unique.
         if (array_key_exists($data['browser_langcode'], $unique_values)) {
-          $form_state->setErrorByName('mappings][' . $key . '][browser_langcode', $this->t('Browser language codes must be unique.'));
+          $form_state->setErrorByName('mappings][new_mapping][browser_langcode', $this->t('Browser language codes must be unique.'));
         }
         elseif (preg_match('/[^a-z\-]/', $data['browser_langcode'])) {
-          $form_state->setErrorByName('mappings][' . $key . '][browser_langcode', $this->t('Browser language codes can only contain lowercase letters and a hyphen(-).'));
+          $form_state->setErrorByName('mappings][new_mapping][browser_langcode', $this->t('Browser language codes can only contain lowercase letters and a hyphen(-).'));
         }
         $unique_values[$data['browser_langcode']] = $data['drupal_langcode'];
       }
@@ -172,10 +196,9 @@ class NegotiationBrowserForm extends ConfigFormBase {
     $mappings = $form_state->get('mappings');
     if (!empty($mappings)) {
       $config = $this->config('language.mappings');
-      $config->setData($mappings);
+      $config->setData(['map' => $mappings]);
       $config->save();
     }
-    $form_state->setRedirect('language.negotiation');
 
     parent::submitForm($form, $form_state);
   }
@@ -191,7 +214,7 @@ class NegotiationBrowserForm extends ConfigFormBase {
     if ($config->isNew()) {
       return array();
     }
-    return $config->get();
+    return $config->get('map');
   }
 }
 

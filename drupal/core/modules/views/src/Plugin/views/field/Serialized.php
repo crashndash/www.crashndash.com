@@ -2,12 +2,11 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\field\Serialized.
+ * Contains \Drupal\views\Plugin\views\field\Serialized.
  */
 
 namespace Drupal\views\Plugin\views\field;
 
-use Drupal\Component\Utility\String;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\views\ResultRow;
 
@@ -20,6 +19,9 @@ use Drupal\views\ResultRow;
  */
 class Serialized extends FieldPluginBase {
 
+  /**
+   * {@inheritdoc}
+   */
   protected function defineOptions() {
     $options = parent::defineOptions();
     $options['format'] = array('default' => 'unserialized');
@@ -27,7 +29,9 @@ class Serialized extends FieldPluginBase {
     return $options;
   }
 
-
+  /**
+   * {@inheritdoc}
+   */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
 
@@ -54,6 +58,9 @@ class Serialized extends FieldPluginBase {
     );
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function validateOptionsForm(&$form, FormStateInterface $form_state) {
     // Require a key if the format is key.
     if ($form_state->getValue(array('options', 'format')) == 'key' && $form_state->getValue(array('options', 'key')) == '') {
@@ -68,11 +75,11 @@ class Serialized extends FieldPluginBase {
     $value = $values->{$this->field_alias};
 
     if ($this->options['format'] == 'unserialized') {
-      return String::checkPlain(print_r(unserialize($value), TRUE));
+      return $this->sanitizeValue(print_r(unserialize($value), TRUE));
     }
     elseif ($this->options['format'] == 'key' && !empty($this->options['key'])) {
       $value = (array) unserialize($value);
-      return String::checkPlain($value[$this->options['key']]);
+      return $this->sanitizeValue($value[$this->options['key']]);
     }
 
     return $value;

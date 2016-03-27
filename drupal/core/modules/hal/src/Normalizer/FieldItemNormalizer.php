@@ -23,7 +23,7 @@ class FieldItemNormalizer extends NormalizerBase {
   protected $supportedInterfaceOrClass = 'Drupal\Core\Field\FieldItemInterface';
 
   /**
-   * Implements \Symfony\Component\Serializer\Normalizer\NormalizerInterface::normalize()
+   * {@inheritdoc}
    */
   public function normalize($field_item, $format = NULL, array $context = array()) {
     $values = $field_item->toArray();
@@ -42,7 +42,7 @@ class FieldItemNormalizer extends NormalizerBase {
   }
 
   /**
-   * Implements \Symfony\Component\Serializer\Normalizer\DenormalizerInterface::denormalize()
+   * {@inheritdoc}
    */
   public function denormalize($data, $class, $format = NULL, array $context = array()) {
     if (!isset($context['target_instance'])) {
@@ -99,20 +99,18 @@ class FieldItemNormalizer extends NormalizerBase {
    * @return \Drupal\Core\Field\FieldItemInterface
    *   The translated field item instance.
    */
-  protected function createTranslatedInstance(FieldItemInterface $field_item, $langcode) {
-    $field_items = $field_item->getParent();
+  protected function createTranslatedInstance(FieldItemInterface $item, $langcode) {
+    // Remove the untranslated item that was created for the default language
+    // by FieldNormalizer::denormalize().
+    $items = $item->getParent();
+    $delta = $item->getName();
+    unset($items[$delta]);
 
-    // Remove the untranslated instance from the field's list of items.
-    $field_items->offsetUnset($field_item->getName());
-
-    // Get the entity in the requested language and the field's item list from
-    // that.
-    $entity_translation = $field_item->getEntity()->getTranslation($langcode);
-    $field_items_translation = $entity_translation->get($field_item->getFieldDefinition()->getName());
-
-    // Create a new instance and return it.
-    $count = $field_items_translation->isEmpty() ? 0 : $field_items_translation->count();
-    return $field_items_translation->get($count);
+    // Instead, create a new item for the entity in the requested language.
+    $entity = $item->getEntity();
+    $entity_translation = $entity->hasTranslation($langcode) ? $entity->getTranslation($langcode) : $entity->addTranslation($langcode);
+    $field_name = $item->getFieldDefinition()->getName();
+    return $entity_translation->get($field_name)->appendItem();
   }
 
 }

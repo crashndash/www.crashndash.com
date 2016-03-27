@@ -2,16 +2,17 @@
 
 /**
  * @file
- * Definition of Drupal\user\Plugin\views\argument_default\User.
+ * Contains \Drupal\user\Plugin\views\argument_default\User.
  */
 
 namespace Drupal\user\Plugin\views\argument_default;
 
+use Drupal\Core\Cache\Cache;
+use Drupal\Core\Cache\CacheableDependencyInterface;
 use Drupal\Core\Form\FormStateInterface;
-use Drupal\views\Plugin\CacheablePluginInterface;
+use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\views\Plugin\views\argument_default\ArgumentDefaultPluginBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\HttpFoundation\Request;
 use Drupal\user\UserInterface;
 use Drupal\node\NodeInterface;
 
@@ -23,7 +24,45 @@ use Drupal\node\NodeInterface;
  *   title = @Translation("User ID from route context")
  * )
  */
-class User extends ArgumentDefaultPluginBase implements CacheablePluginInterface {
+class User extends ArgumentDefaultPluginBase implements CacheableDependencyInterface {
+
+  /**
+   * The route match.
+   *
+   * @var \Drupal\Core\Routing\RouteMatchInterface
+   */
+  protected $routeMatch;
+
+  /**
+   * Constructs a new User instance.
+   *
+   * @param array $configuration
+   *   A configuration array containing information about the plugin instance.
+   * @param string $plugin_id
+   *   The plugin_id for the plugin instance.
+   * @param mixed $plugin_definition
+   *   The plugin implementation definition.
+   *
+   * @param \Drupal\Core\Routing\RouteMatchInterface $route_match
+   *   The route match.
+   */
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, RouteMatchInterface $route_match) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition);
+
+    $this->routeMatch = $route_match;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    return new static(
+      $configuration,
+      $plugin_id,
+      $plugin_definition,
+      $container->get('current_route_match')
+    );
+  }
 
   /**
    * {@inheritdoc}
@@ -52,41 +91,32 @@ class User extends ArgumentDefaultPluginBase implements CacheablePluginInterface
   public function getArgument() {
 
     // If there is a user object in the current route.
-    if ($this->view->getRequest()->attributes->has('user')) {
-      $user = $this->view->getRequest()->attributes->get('user');
+    if ($user = $this->routeMatch->getParameter('user')) {
       if ($user instanceof UserInterface) {
         return $user->id();
       }
     }
 
     // If option to use node author; and node in current route.
-    if (!empty($this->options['user']) && $this->view->getRequest()->attributes->has('node')) {
-      $node = $this->view->getRequest()->attributes->get('node');
+    if (!empty($this->options['user']) && $node = $this->routeMatch->getParameter('node')) {
       if ($node instanceof NodeInterface) {
         return $node->getOwnerId();
       }
-    }
-
-    // If the current page is a view that takes uid as an argument.
-    $view = views_get_page_view();
-
-    if ($view && isset($view->argument['uid'])) {
-      return $view->argument['uid']->argument;
     }
   }
 
   /**
    * {@inheritdoc}
    */
-  public function isCacheable() {
-    return TRUE;
+  public function getCacheMaxAge() {
+    return Cache::PERMANENT;
   }
 
   /**
    * {@inheritdoc}
    */
   public function getCacheContexts() {
-    return ['cache.context.url'];
+    return ['url'];
   }
 
 }

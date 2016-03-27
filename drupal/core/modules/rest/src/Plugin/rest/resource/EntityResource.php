@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\rest\Plugin\rest\resource\EntityResource.
+ * Contains \Drupal\rest\Plugin\rest\resource\EntityResource.
  */
 
 namespace Drupal\rest\Plugin\rest\resource;
@@ -22,14 +22,14 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
  *   id = "entity",
  *   label = @Translation("Entity"),
  *   serialization_class = "Drupal\Core\Entity\Entity",
- *   deriver = "Drupal\rest\Plugin\Derivative\EntityDerivative",
+ *   deriver = "Drupal\rest\Plugin\Deriver\EntityDeriver",
  *   uri_paths = {
  *     "canonical" = "/entity/{entity_type}/{entity}",
- *     "http://drupal.org/link-relations/create" = "/entity/{entity_type}"
+ *     "https://www.drupal.org/link-relations/create" = "/entity/{entity_type}"
  *   }
  * )
  *
- * @see \Drupal\rest\Plugin\Derivative\EntityDerivative
+ * @see \Drupal\rest\Plugin\Deriver\EntityDeriver
  */
 class EntityResource extends ResourceBase {
 
@@ -45,15 +45,25 @@ class EntityResource extends ResourceBase {
    * @throws \Symfony\Component\HttpKernel\Exception\HttpException
    */
   public function get(EntityInterface $entity) {
-    if (!$entity->access('view')) {
+    $entity_access = $entity->access('view', NULL, TRUE);
+    if (!$entity_access->isAllowed()) {
       throw new AccessDeniedHttpException();
     }
+
+    $response = new ResourceResponse($entity, 200);
+    $response->addCacheableDependency($entity);
+    $response->addCacheableDependency($entity_access);
     foreach ($entity as $field_name => $field) {
-      if (!$field->access('view')) {
-        unset($entity->{$field_name});
+      /** @var \Drupal\Core\Field\FieldItemListInterface $field */
+      $field_access = $field->access('view', NULL, TRUE);
+      $response->addCacheableDependency($field_access);
+
+      if (!$field_access->isAllowed()) {
+        $entity->set($field_name, NULL);
       }
     }
-    return new ResourceResponse($entity);
+
+    return $response;
   }
 
   /**
@@ -69,7 +79,7 @@ class EntityResource extends ResourceBase {
    */
   public function post(EntityInterface $entity = NULL) {
     if ($entity == NULL) {
-      throw new BadRequestHttpException(t('No entity content received.'));
+      throw new BadRequestHttpException('No entity content received.');
     }
 
     if (!$entity->access('create')) {
@@ -79,16 +89,20 @@ class EntityResource extends ResourceBase {
     // Verify that the deserialized entity is of the type that we expect to
     // prevent security issues.
     if ($entity->getEntityTypeId() != $definition['entity_type']) {
-      throw new BadRequestHttpException(t('Invalid entity type'));
+      throw new BadRequestHttpException('Invalid entity type');
     }
     // POSTed entities must not have an ID set, because we always want to create
     // new entities here.
     if (!$entity->isNew()) {
-      throw new BadRequestHttpException(t('Only new entities can be created'));
+      throw new BadRequestHttpException('Only new entities can be created');
     }
-    foreach ($entity as $field_name => $field) {
-      if (!$field->access('create')) {
-        throw new AccessDeniedHttpException(t('Access denied on creating field @field.', array('@field' => $field_name)));
+
+    // Only check 'edit' permissions for fields that were actually
+    // submitted by the user. Field access makes no difference between 'create'
+    // and 'update', so the 'edit' operation is used here.
+    foreach ($entity->_restSubmittedFields as $key => $field_name) {
+      if (!$entity->get($field_name)->access('edit')) {
+        throw new AccessDeniedHttpException("Access denied on creating field '$field_name'");
       }
     }
 
@@ -98,12 +112,15 @@ class EntityResource extends ResourceBase {
       $entity->save();
       $this->logger->notice('Created entity %type with ID %id.', array('%type' => $entity->getEntityTypeId(), '%id' => $entity->id()));
 
-      $url = _url(strtr($this->pluginId, ':', '/') . '/' . $entity->id(), array('absolute' => TRUE));
       // 201 Created responses have an empty body.
-      return new ResourceResponse(NULL, 201, array('Location' => $url));
+      $url = $entity->urlInfo('canonical', ['absolute' => TRUE])->toString(TRUE);
+      $response = new ResourceResponse(NULL, 201, ['Location' => $url->getGeneratedUrl()]);
+      // Responses after creating an entity are not cacheable, so we add no
+      // cacheability metadata here.
+      return $response;
     }
     catch (EntityStorageException $e) {
-      throw new HttpException(500, t('Internal Server Error'), $e);
+      throw new HttpException(500, 'Internal Server Error', $e);
     }
   }
 
@@ -122,47 +139,43 @@ class EntityResource extends ResourceBase {
    */
   public function patch(EntityInterface $original_entity, EntityInterface $entity = NULL) {
     if ($entity == NULL) {
-      throw new BadRequestHttpException(t('No entity content received.'));
+      throw new BadRequestHttpException('No entity content received.');
     }
     $definition = $this->getPluginDefinition();
     if ($entity->getEntityTypeId() != $definition['entity_type']) {
-      throw new BadRequestHttpException(t('Invalid entity type'));
+      throw new BadRequestHttpException('Invalid entity type');
     }
     if (!$original_entity->access('update')) {
       throw new AccessDeniedHttpException();
     }
 
     // Overwrite the received properties.
-    foreach ($entity as $field_name => $field) {
-      if (isset($entity->{$field_name})) {
-        // It is not possible to set the language to NULL as it is automatically
-        // re-initialized. As it must not be empty, skip it if it is.
-        // @todo: Use the langcode entity key when available. See
-        //   https://drupal.org/node/2143729.
-        if ($field_name == 'langcode' && $field->isEmpty()) {
-          continue;
-        }
-        if ($field->isEmpty() && !$original_entity->get($field_name)->access('delete')) {
-          throw new AccessDeniedHttpException(t('Access denied on deleting field @field.', array('@field' => $field_name)));
-        }
-        $original_entity->set($field_name, $field->getValue());
-        if (!$original_entity->get($field_name)->access('update')) {
-          throw new AccessDeniedHttpException(t('Access denied on updating field @field.', array('@field' => $field_name)));
-        }
+    $langcode_key = $entity->getEntityType()->getKey('langcode');
+    foreach ($entity->_restSubmittedFields as $field_name) {
+      $field = $entity->get($field_name);
+      // It is not possible to set the language to NULL as it is automatically
+      // re-initialized. As it must not be empty, skip it if it is.
+      if ($field_name == $langcode_key && $field->isEmpty()) {
+        continue;
       }
+
+      if (!$original_entity->get($field_name)->access('edit')) {
+        throw new AccessDeniedHttpException("Access denied on updating field '$field_name'.");
+      }
+      $original_entity->set($field_name, $field->getValue());
     }
 
     // Validate the received data before saving.
     $this->validate($original_entity);
     try {
       $original_entity->save();
-      $this->logger->notice('Updated entity %type with ID %id.', array('%type' => $entity->getEntityTypeId(), '%id' => $entity->id()));
+      $this->logger->notice('Updated entity %type with ID %id.', array('%type' => $original_entity->getEntityTypeId(), '%id' => $original_entity->id()));
 
       // Update responses have an empty body.
       return new ResourceResponse(NULL, 204);
     }
     catch (EntityStorageException $e) {
-      throw new HttpException(500, t('Internal Server Error'), $e);
+      throw new HttpException(500, 'Internal Server Error', $e);
     }
   }
 
@@ -189,7 +202,7 @@ class EntityResource extends ResourceBase {
       return new ResourceResponse(NULL, 204);
     }
     catch (EntityStorageException $e) {
-      throw new HttpException(500, t('Internal Server Error'), $e);
+      throw new HttpException(500, 'Internal Server Error', $e);
     }
   }
 
@@ -204,6 +217,11 @@ class EntityResource extends ResourceBase {
    */
   protected function validate(EntityInterface $entity) {
     $violations = $entity->validate();
+
+    // Remove violations of inaccessible fields as they cannot stem from our
+    // changes.
+    $violations->filterByFieldAccess();
+
     if (count($violations) > 0) {
       $message = "Unprocessable Entity: validation failed.\n";
       foreach ($violations as $violation) {

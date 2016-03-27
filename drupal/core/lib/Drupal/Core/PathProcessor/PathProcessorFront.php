@@ -2,16 +2,20 @@
 
 /**
  * @file
- * Contains Drupal\Core\PathProcessor\PathProcessorFront.
+ * Contains \Drupal\Core\PathProcessor\PathProcessorFront.
  */
 
 namespace Drupal\Core\PathProcessor;
 
 use Drupal\Core\Config\ConfigFactoryInterface;
+use Drupal\Core\Render\BubbleableMetadata;
 use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * Processes the inbound path by resolving it to the front page if empty.
+ *
+ * @todo - remove ::processOutbound() when we remove UrlGenerator::fromPath().
  */
 class PathProcessorFront implements InboundPathProcessorInterface, OutboundPathProcessorInterface {
 
@@ -33,25 +37,27 @@ class PathProcessorFront implements InboundPathProcessorInterface, OutboundPathP
   }
 
   /**
-   * Implements Drupal\Core\PathProcessor\InboundPathProcessorInterface::processInbound().
+   * {@inheritdoc}
    */
   public function processInbound($path, Request $request) {
-    if (empty($path)) {
+    if ($path === '/') {
       $path = $this->config->get('system.site')->get('page.front');
       if (empty($path)) {
-        $path = 'user';
+        // We have to return a valid path but / won't be routable and config
+        // might be broken so stop execution.
+        throw new NotFoundHttpException();
       }
     }
     return $path;
   }
 
   /**
-   * Implements Drupal\Core\PathProcessor\OutboundPathProcessorInterface::processOutbound().
+   * {@inheritdoc}
    */
-  public function processOutbound($path, &$options = array(), Request $request = NULL) {
+  public function processOutbound($path, &$options = array(), Request $request = NULL, BubbleableMetadata $bubbleable_metadata = NULL) {
     // The special path '<front>' links to the default front page.
-    if ($path == '<front>') {
-      $path = '';
+    if ($path === '/<front>') {
+      $path = '/';
     }
     return $path;
   }

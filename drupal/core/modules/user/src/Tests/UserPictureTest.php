@@ -2,13 +2,14 @@
 
 /**
  * @file
- * Definition of Drupal\user\Tests\UserPictureTest.
+ * Contains \Drupal\user\Tests\UserPictureTest.
  */
 
 namespace Drupal\user\Tests;
 
-use Drupal\Core\Cache\Cache;
+use Drupal\image\Entity\ImageStyle;
 use Drupal\simpletest\WebTestBase;
+use Drupal\file\Entity\File;
 
 /**
  * Tests user picture functionality.
@@ -27,13 +28,17 @@ class UserPictureTest extends WebTestBase {
    */
   protected $profile = 'standard';
 
-  protected $user;
-  protected $_directory_test;
+  /**
+   * A regular user.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $webUser;
 
   protected function setUp() {
     parent::setUp();
 
-    $this->web_user = $this->drupalCreateUser(array(
+    $this->webUser = $this->drupalCreateUser(array(
       'access content',
       'access comments',
       'post comments',
@@ -45,7 +50,7 @@ class UserPictureTest extends WebTestBase {
    * Tests creation, display, and deletion of user pictures.
    */
   function testCreateDeletePicture() {
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
 
     // Save a new picture.
     $image = current($this->drupalGetTestFiles('image'));
@@ -57,7 +62,7 @@ class UserPictureTest extends WebTestBase {
 
     // Delete the picture.
     $edit = array();
-    $this->drupalPostForm('user/' . $this->web_user->id() . '/edit', $edit, t('Remove'));
+    $this->drupalPostForm('user/' . $this->webUser->id() . '/edit', $edit, t('Remove'));
     $this->drupalPostForm(NULL, array(), t('Save'));
 
     // Call file_cron() to clean up the file. Make sure the timestamp
@@ -65,14 +70,14 @@ class UserPictureTest extends WebTestBase {
     // configuration value.
     db_update('file_managed')
       ->fields(array(
-        'changed' => REQUEST_TIME - ($this->container->get('config.factory')->get('system.file')->get('temporary_maximum_age') + 1),
+        'changed' => REQUEST_TIME - ($this->config('system.file')->get('temporary_maximum_age') + 1),
       ))
       ->condition('fid', $file->id())
       ->execute();
     \Drupal::service('cron')->run();
 
     // Verify that the image has been deleted.
-    $this->assertFalse(file_load($file->id(), TRUE), 'File was removed from the database.');
+    $this->assertFalse(File::load($file->id()), 'File was removed from the database.');
     // Clear out PHP's file stat cache so we see the current value.
     clearstatcache(TRUE, $file->getFileUri());
     $this->assertFalse(is_file($file->getFileUri()), 'File was removed from the file system.');
@@ -82,7 +87,7 @@ class UserPictureTest extends WebTestBase {
    * Tests embedded users on node pages.
    */
   function testPictureOnNodeComment() {
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
 
     // Save a new picture.
     $image = current($this->drupalGetTestFiles('image'));
@@ -91,35 +96,36 @@ class UserPictureTest extends WebTestBase {
     $node = $this->drupalCreateNode(array('type' => 'article'));
 
     // Enable user pictures on nodes.
-    $this->container->get('config.factory')->get('system.theme.global')->set('features.node_user_picture', TRUE)->save();
+    $this->config('system.theme.global')->set('features.node_user_picture', TRUE)->save();
 
-    // Verify that the image is displayed on the user account page.
+    $image_style_id = $this->config('core.entity_view_display.user.user.compact')->get('content.user_picture.settings.image_style');
+    $style = ImageStyle::load($image_style_id);
+    $image_url = file_url_transform_relative($style->buildUrl($file->getfileUri()));
+    $alt_text = 'Profile picture for user ' . $this->webUser->getUsername();
+
+    // Verify that the image is displayed on the node page.
     $this->drupalGet('node/' . $node->id());
-    $this->assertRaw(file_uri_target($file->getFileUri()), 'User picture found on node page.');
+    $elements = $this->cssSelect('.node__meta .field--name-user-picture img[alt="' . $alt_text . '"][src="' . $image_url . '"]');
+    $this->assertEqual(count($elements), 1, 'User picture with alt text found on node page.');
 
     // Enable user pictures on comments, instead of nodes.
-    $this->container->get('config.factory')->get('system.theme.global')
+    $this->config('system.theme.global')
       ->set('features.node_user_picture', FALSE)
       ->set('features.comment_user_picture', TRUE)
       ->save();
-
-    // @todo Remove when https://www.drupal.org/node/2040135 lands.
-    Cache::invalidateTags(['rendered']);
 
     $edit = array(
       'comment_body[0][value]' => $this->randomString(),
     );
     $this->drupalPostForm('comment/reply/node/' . $node->id() . '/comment', $edit, t('Save'));
-    $this->assertRaw(file_uri_target($file->getFileUri()), 'User picture found on comment.');
+    $elements = $this->cssSelect('.comment__meta .field--name-user-picture img[alt="' . $alt_text . '"][src="' . $image_url . '"]');
+    $this->assertEqual(count($elements), 1, 'User picture with alt text found on the comment.');
 
     // Disable user pictures on comments and nodes.
-    $this->container->get('config.factory')->get('system.theme.global')
+    $this->config('system.theme.global')
       ->set('features.node_user_picture', FALSE)
       ->set('features.comment_user_picture', FALSE)
       ->save();
-
-    // @todo Remove when https://www.drupal.org/node/2040135 lands.
-    Cache::invalidateTags(['rendered']);
 
     $this->drupalGet('node/' . $node->id());
     $this->assertNoRaw(file_uri_target($file->getFileUri()), 'User picture not found on node and comment.');
@@ -130,10 +136,12 @@ class UserPictureTest extends WebTestBase {
    */
   function saveUserPicture($image) {
     $edit = array('files[user_picture_0]' => drupal_realpath($image->uri));
-    $this->drupalPostForm('user/' . $this->web_user->id() . '/edit', $edit, t('Save'));
+    $this->drupalPostForm('user/' . $this->webUser->id() . '/edit', $edit, t('Save'));
 
     // Load actual user data from database.
-    $account = user_load($this->web_user->id(), TRUE);
-    return file_load($account->user_picture->target_id, TRUE);
+    $user_storage = $this->container->get('entity.manager')->getStorage('user');
+    $user_storage->resetCache(array($this->webUser->id()));
+    $account = $user_storage->load($this->webUser->id());
+    return File::load($account->user_picture->target_id);
   }
 }

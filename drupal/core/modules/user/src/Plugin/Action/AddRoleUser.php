@@ -7,8 +7,6 @@
 
 namespace Drupal\user\Plugin\Action;
 
-use Drupal\user\Plugin\Action\ChangeUserRoleBase;
-
 /**
  * Adds a role to a user.
  *

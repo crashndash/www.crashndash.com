@@ -6,16 +6,19 @@
  */
 
 use GuzzleHttp\Exception\RequestException;
+use Psr\Http\Message\RequestInterface;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\UriInterface;
 
 /**
  * Load the common translation API.
  */
 // @todo Combine functions differently in files to avoid unnecessary includes.
-// Follow-up issue http://drupal.org/node/1834298
+// Follow-up issue: https://www.drupal.org/node/1834298.
 require_once __DIR__ . '/locale.translation.inc';
 
 /**
- * Batch operation callback: Check status of a remote and local po file.
+ * Implements callback_batch_operation().
  *
  * Checks the presence and creation time po translation files in located at
  * remote server location and local file system.
@@ -25,7 +28,7 @@ require_once __DIR__ . '/locale.translation.inc';
  * @param string $langcode
  *   Language code of the language for which to check the translation.
  * @param array $options
- *   Optional, an array with options that can have the following elements:
+ *   An array with options that can have the following elements:
  *   - 'finish_feedback': Whether or not to give feedback to the user when the
  *     batch is finished. Optional, defaults to TRUE.
  *   - 'use_remote': Whether or not to check the remote translation file.
@@ -33,7 +36,7 @@ require_once __DIR__ . '/locale.translation.inc';
  * @param array $context
  *   The batch context.
  */
-function locale_translation_batch_status_check($project, $langcode, $options = array(), &$context) {
+function locale_translation_batch_status_check($project, $langcode, array $options, array &$context) {
   $failure = $checked = FALSE;
   $options += array(
     'finish_feedback' => TRUE,
@@ -83,7 +86,9 @@ function locale_translation_batch_status_check($project, $langcode, $options = a
 }
 
 /**
- * Batch finished callback: Set result message.
+ * Implements callback_batch_finished().
+ *
+ * Set result message.
  *
  * @param bool $success
  *   TRUE if batch successfully completed.
@@ -94,15 +99,15 @@ function locale_translation_batch_status_finished($success, $results) {
   if ($success) {
     if (isset($results['failed_files'])) {
       if (\Drupal::moduleHandler()->moduleExists('dblog') && \Drupal::currentUser()->hasPermission('access site reports')) {
-        $message = format_plural(count($results['failed_files']), 'One translation file could not be checked. <a href="@url">See the log</a> for details.', '@count translation files could not be checked. <a href="@url">See the log</a> for details.', array('@url' => \Drupal::url('dblog.overview')));
+        $message = \Drupal::translation()->formatPlural(count($results['failed_files']), 'One translation file could not be checked. <a href=":url">See the log</a> for details.', '@count translation files could not be checked. <a href=":url">See the log</a> for details.', array(':url' => \Drupal::url('dblog.overview')));
       }
       else {
-        $message = format_plural(count($results['failed_files']), 'One translation files could not be checked. See the log for details.', '@count translation files could not be checked. See the log for details.');
+        $message = \Drupal::translation()->formatPlural(count($results['failed_files']), 'One translation files could not be checked. See the log for details.', '@count translation files could not be checked. See the log for details.');
       }
       drupal_set_message($message, 'error');
     }
     if (isset($results['files'])) {
-      drupal_set_message(format_plural(
+      drupal_set_message(\Drupal::translation()->formatPlural(
         count($results['files']),
         'Checked available interface translation updates for one project.',
         'Checked available interface translation updates for @count projects.'
@@ -119,7 +124,7 @@ function locale_translation_batch_status_finished($success, $results) {
 }
 
 /**
- * Batch operation: Download a remote translation file.
+ * Implements callback_batch_operation().
  *
  * Downloads a remote gettext file into the translations directory. When
  * successfully the translation status is updated.
@@ -150,7 +155,7 @@ function locale_translation_batch_fetch_download($project, $langcode, &$context)
 }
 
 /**
- * Batch process: Import translation file.
+ * Implements callback_batch_operation().
  *
  * Imports a gettext file from the translation directory. When successfully the
  * translation status is updated.
@@ -199,7 +204,9 @@ function locale_translation_batch_fetch_import($project, $langcode, $options, &$
 }
 
 /**
- * Batch finished callback: Set result message.
+ * Implements callback_batch_finished().
+ *
+ * Set result message.
  *
  * @param bool $success
  *   TRUE if batch successfully completed.
@@ -230,30 +237,36 @@ function locale_translation_batch_fetch_finished($success, $results) {
 function locale_translation_http_check($uri) {
   $logger = \Drupal::logger('locale');
   try {
-    $response = \Drupal::httpClient()->head($uri);
+    $actual_uri = NULL;
+    $response = \Drupal::service('http_client_factory')->fromOptions(['allow_redirects' => [
+      'on_redirect' => function(RequestInterface $request, ResponseInterface $response, UriInterface $request_uri) use (&$actual_uri) {
+        $actual_uri = (string) $request_uri;
+      }
+    ]])->head($uri);
     $result = array();
 
     // Return the effective URL if it differs from the requested.
-    if ($response->getEffectiveUrl() != $uri) {
-      $result['location'] = $response->getEffectiveUrl();
+    if ($actual_uri && $actual_uri !== $uri) {
+      $result['location'] = $actual_uri;
     }
 
-    $result['last_modified'] = $response->hasHeader('Last-Modified') ? strtotime($response->getHeader('Last-Modified')) : 0;
+    $result['last_modified'] = $response->hasHeader('Last-Modified') ? strtotime($response->getHeaderLine('Last-Modified')) : 0;
     return $result;
   }
   catch (RequestException $e) {
     // Handle 4xx and 5xx http responses.
-    $response = $e->getResponse();
-    if ($response->getStatusCode() == 404) {
-      // File not found occurs when a translation file is not yet available
-      // at the translation server. But also if a custom module or custom
-      // theme does not define the location of a translation file. By default
-      // the file is checked at the translation server, but it will not be
-      // found there.
-      $logger->notice('Translation file not found: @uri.', array('@uri' => $uri));
-      return TRUE;
+    if ($response = $e->getResponse()) {
+      if ($response->getStatusCode() == 404) {
+        // File not found occurs when a translation file is not yet available
+        // at the translation server. But also if a custom module or custom
+        // theme does not define the location of a translation file. By default
+        // the file is checked at the translation server, but it will not be
+        // found there.
+        $logger->notice('Translation file not found: @uri.', array('@uri' => $uri));
+        return TRUE;
+      }
+      $logger->notice('HTTP request to @url failed with error: @error.', array('@url' => $uri, '@error' => $response->getStatusCode() . ' ' . $response->getReasonPhrase()));
     }
-    $logger->notice('HTTP request to @url failed with error: @error.', array('@url' => $uri, '@error' => $response->getStatusCode() . ' ' . $response->getReasonPhrase()));
   }
 
   return FALSE;

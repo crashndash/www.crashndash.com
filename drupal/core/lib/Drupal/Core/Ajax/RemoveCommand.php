@@ -2,12 +2,10 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Ajax\RemoveCommand.
+ * Contains \Drupal\Core\Ajax\RemoveCommand.
  */
 
 namespace Drupal\Core\Ajax;
-
-use Drupal\Core\Ajax\CommandInterface;
 
 /**
  * AJAX command for calling the jQuery remove() method.

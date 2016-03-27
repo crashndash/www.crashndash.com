@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Database\Driver\pgsql\Connection
+ * Contains \Drupal\Core\Database\Driver\pgsql\Connection.
  */
 
 namespace Drupal\Core\Database\Driver\pgsql;
@@ -10,15 +10,15 @@ namespace Drupal\Core\Database\Driver\pgsql;
 use Drupal\Core\Database\Database;
 use Drupal\Core\Database\Connection as DatabaseConnection;
 use Drupal\Core\Database\DatabaseNotFoundException;
-use Drupal\Core\Database\StatementInterface;
-use Drupal\Core\Database\IntegrityConstraintViolationException;
-use Drupal\Core\Database\DatabaseExceptionWrapper;
 
 /**
  * @addtogroup database
  * @{
  */
 
+/**
+ * PostgreSQL implementation of \Drupal\Core\Database\Connection.
+ */
 class Connection extends DatabaseConnection {
 
   /**
@@ -30,6 +30,27 @@ class Connection extends DatabaseConnection {
    * Error code for "Unknown database" error.
    */
   const DATABASE_NOT_FOUND = 7;
+
+  /**
+   * The list of PostgreSQL reserved key words.
+   *
+   * @see http://www.postgresql.org/docs/9.4/static/sql-keywords-appendix.html
+   */
+  protected $postgresqlReservedKeyWords = ['all', 'analyse', 'analyze', 'and',
+  'any', 'array', 'as', 'asc', 'asymmetric', 'authorization', 'binary', 'both',
+  'case', 'cast', 'check', 'collate', 'collation', 'column', 'concurrently',
+  'constraint', 'create', 'cross', 'current_catalog', 'current_date',
+  'current_role', 'current_schema', 'current_time', 'current_timestamp',
+  'current_user', 'default', 'deferrable', 'desc', 'distinct', 'do', 'else',
+  'end', 'except', 'false', 'fetch', 'for', 'foreign', 'freeze', 'from', 'full',
+  'grant', 'group', 'having', 'ilike', 'in', 'initially', 'inner', 'intersect',
+  'into', 'is', 'isnull', 'join', 'lateral', 'leading', 'left', 'like', 'limit',
+  'localtime', 'localtimestamp', 'natural', 'not', 'notnull', 'null', 'offset',
+  'on', 'only', 'or', 'order', 'outer', 'over', 'overlaps', 'placing',
+  'primary', 'references', 'returning', 'right', 'select', 'session_user',
+  'similar', 'some', 'symmetric', 'table', 'then', 'to', 'trailing', 'true',
+  'union', 'unique', 'user', 'using', 'variadic', 'verbose', 'when', 'where',
+  'window', 'with'];
 
   /**
    * Constructs a connection object.
@@ -102,67 +123,53 @@ class Connection extends DatabaseConnection {
     return $pdo;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function query($query, array $args = array(), $options = array()) {
-
     $options += $this->defaultOptions();
 
-    // The PDO PostgreSQL driver has a bug which
-    // doesn't type cast booleans correctly when
-    // parameters are bound using associative
-    // arrays.
-    // See http://bugs.php.net/bug.php?id=48383
+    // The PDO PostgreSQL driver has a bug which doesn't type cast booleans
+    // correctly when parameters are bound using associative arrays.
+    // @see http://bugs.php.net/bug.php?id=48383
     foreach ($args as &$value) {
       if (is_bool($value)) {
         $value = (int) $value;
       }
     }
 
-    try {
-      if ($query instanceof StatementInterface) {
-        $stmt = $query;
-        $stmt->execute(NULL, $options);
+    // We need to wrap queries with a savepoint if:
+    // - Currently in a transaction.
+    // - A 'mimic_implicit_commit' does not exist already.
+    // - The query is not a savepoint query.
+    $wrap_with_savepoint = $this->inTransaction() &&
+      !isset($this->transactionLayers['mimic_implicit_commit']) &&
+      !(is_string($query) && (
+        stripos($query, 'ROLLBACK TO SAVEPOINT ') === 0 ||
+        stripos($query, 'RELEASE SAVEPOINT ') === 0 ||
+        stripos($query, 'SAVEPOINT ') === 0
+      )
+    );
+    if ($wrap_with_savepoint) {
+      // Create a savepoint so we can rollback a failed query. This is so we can
+      // mimic MySQL and SQLite transactions which don't fail if a single query
+      // fails. This is important for tables that are created on demand. For
+      // example, \Drupal\Core\Cache\DatabaseBackend.
+      $this->addSavepoint();
+      try {
+        $return = parent::query($query, $args, $options);
+        $this->releaseSavepoint();
       }
-      else {
-        $this->expandArguments($query, $args);
-        $stmt = $this->prepareQuery($query);
-        $stmt->execute($args, $options);
-      }
-
-      switch ($options['return']) {
-        case Database::RETURN_STATEMENT:
-          return $stmt;
-        case Database::RETURN_AFFECTED:
-          $stmt->allowRowCount = TRUE;
-          return $stmt->rowCount();
-        case Database::RETURN_INSERT_ID:
-          return $this->connection->lastInsertId($options['sequence_name']);
-        case Database::RETURN_NULL:
-          return;
-        default:
-          throw new \PDOException('Invalid return directive: ' . $options['return']);
-      }
-    }
-    catch (\PDOException $e) {
-      if ($options['throw_exception']) {
-        // Match all SQLSTATE 23xxx errors.
-        if (substr($e->getCode(), -6, -3) == '23') {
-          $e = new IntegrityConstraintViolationException($e->getMessage(), $e->getCode(), $e);
-        }
-        else {
-          $e = new DatabaseExceptionWrapper($e->getMessage(), 0, $e);
-        }
-        // Add additional debug information.
-        if ($query instanceof StatementInterface) {
-          $e->query_string = $stmt->getQueryString();
-        }
-        else {
-          $e->query_string = $query;
-        }
-        $e->args = $args;
+      catch (\Exception $e) {
+        $this->rollbackSavepoint();
         throw $e;
       }
-      return NULL;
     }
+    else {
+      $return = parent::query($query, $args, $options);
+    }
+
+    return $return;
   }
 
   public function prepareQuery($query) {
@@ -184,6 +191,76 @@ class Connection extends DatabaseConnection {
     $tablename = $this->generateTemporaryTableName();
     $this->query('CREATE TEMPORARY TABLE {' . $tablename . '} AS ' . $query, $args, $options);
     return $tablename;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function escapeField($field) {
+    $escaped = parent::escapeField($field);
+
+    // Remove any invalid start character.
+    $escaped = preg_replace('/^[^A-Za-z0-9_]/', '', $escaped);
+
+    // The pgsql database driver does not support field names that contain
+    // periods (supported by PostgreSQL server) because this method may be
+    // called by a field with a table alias as part of SQL conditions or
+    // order by statements. This will consider a period as a table alias
+    // identifier, and split the string at the first period.
+    if (preg_match('/^([A-Za-z0-9_]+)"?[.]"?([A-Za-z0-9_.]+)/', $escaped, $parts)) {
+      $table = $parts[1];
+      $column = $parts[2];
+
+      // Use escape alias because escapeField may contain multiple periods that
+      // need to be escaped.
+      $escaped = $this->escapeTable($table) . '.' . $this->escapeAlias($column);
+    }
+    elseif (preg_match('/[A-Z]/', $escaped)) {
+      // Quote the field name for case-sensitivity.
+      $escaped = '"' . $escaped . '"';
+    }
+    elseif (in_array(strtolower($escaped), $this->postgresqlReservedKeyWords)) {
+      // Quote the field name for PostgreSQL reserved key words.
+      $escaped = '"' . $escaped . '"';
+    }
+
+    return $escaped;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function escapeAlias($field) {
+    $escaped = preg_replace('/[^A-Za-z0-9_]+/', '', $field);
+
+    // Escape the alias in quotes for case-sensitivity.
+    if (preg_match('/[A-Z]/', $escaped)) {
+      $escaped = '"' . $escaped . '"';
+    }
+    elseif (in_array(strtolower($escaped), $this->postgresqlReservedKeyWords)) {
+      // Quote the alias name for PostgreSQL reserved key words.
+      $escaped = '"' . $escaped . '"';
+    }
+
+    return $escaped;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function escapeTable($table) {
+    $escaped = parent::escapeTable($table);
+
+    // Quote identifier to make it case-sensitive.
+    if (preg_match('/[A-Z]/', $escaped)) {
+      $escaped = '"' . $escaped . '"';
+    }
+    elseif (in_array(strtolower($escaped), $this->postgresqlReservedKeyWords)) {
+      // Quote the table name for PostgreSQL reserved key words.
+      $escaped = '"' . $escaped . '"';
+    }
+
+    return $escaped;
   }
 
   public function driver() {
@@ -229,6 +306,7 @@ class Connection extends DatabaseConnection {
       // In PostgreSQL, 'LIKE' is case-sensitive. For case-insensitive LIKE
       // statements, we need to use ILIKE instead.
       'LIKE' => array('operator' => 'ILIKE'),
+      'LIKE BINARY' => array('operator' => 'LIKE'),
       'NOT LIKE' => array('operator' => 'NOT ILIKE'),
       'REGEXP' => array('operator' => '~*'),
     );
@@ -279,6 +357,19 @@ class Connection extends DatabaseConnection {
   }
 
   /**
+   * {@inheritdoc}
+   */
+  public function getFullQualifiedTableName($table) {
+    $options = $this->getConnectionOptions();
+    $prefix = $this->tablePrefix($table);
+
+    // The fully qualified table name in PostgreSQL is in the form of
+    // <database>.<schema>.<table>, so we have to include the 'public' schema in
+    // the return value.
+    return $options['database'] . '.public.' . $prefix . $table;
+  }
+
+  /**
    * Add a new savepoint with an unique name.
    *
    * The main use for this method is to mimic InnoDB functionality, which
@@ -323,6 +414,22 @@ class Connection extends DatabaseConnection {
       $this->rollback($savepoint_name);
     }
   }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function upsert($table, array $options = array()) {
+    // Use the (faster) native Upsert implementation for PostgreSQL >= 9.5.
+    if (version_compare($this->version(), '9.5', '>=')) {
+      $class = $this->getDriverClass('NativeUpsert');
+    }
+    else {
+      $class = $this->getDriverClass('Upsert');
+    }
+
+    return new $class($this, $table, $options);
+  }
+
 }
 
 /**

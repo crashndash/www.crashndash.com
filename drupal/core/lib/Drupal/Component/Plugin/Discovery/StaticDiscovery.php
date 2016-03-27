@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\Component\Plugin\Discovery\StaticDiscovery.
+ * Contains \Drupal\Component\Plugin\Discovery\StaticDiscovery.
  */
 
 namespace Drupal\Component\Plugin\Discovery;
@@ -16,7 +16,7 @@ class StaticDiscovery implements DiscoveryInterface {
   use DiscoveryCachedTrait;
 
   /**
-   * Implements Drupal\Component\Plugin\Discovery\DiscoveryInterface::getDefinitions().
+   * {@inheritdoc}
    */
   public function getDefinitions() {
     if (!$this->definitions) {

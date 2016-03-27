@@ -14,6 +14,7 @@ use Symfony\Component\HttpFoundation\RequestStack;
 /**
  * Tests the Drupal class.
  *
+ * @coversDefaultClass \Drupal
  * @group DrupalTest
  */
 class DrupalTest extends UnitTestCase {
@@ -25,7 +26,11 @@ class DrupalTest extends UnitTestCase {
    */
   protected $container;
 
+  /**
+   * {@inheritdoc}
+   */
   protected function setUp() {
+    parent::setUp();
     $this->container = $this->getMockBuilder('Symfony\Component\DependencyInjection\ContainerBuilder')
       ->setMethods(array('get'))
       ->getMock();
@@ -33,6 +38,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the get/setContainer() method.
+   *
+   * @covers ::getContainer
    */
   public function testSetContainer() {
     \Drupal::setContainer($this->container);
@@ -40,7 +47,19 @@ class DrupalTest extends UnitTestCase {
   }
 
   /**
+   * @covers ::getContainer
+   *
+   * @expectedException \Drupal\Core\DependencyInjection\ContainerNotInitializedException
+   * @expectedExceptionMessage \Drupal::$container is not initialized yet. \Drupal::setContainer() must be called with a real container.
+   */
+  public function testGetContainerException() {
+    \Drupal::getContainer();
+  }
+
+  /**
    * Tests the service() method.
+   *
+   * @covers ::service
    */
   public function testService() {
     $this->setMockContainerService('test_service');
@@ -49,6 +68,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the currentUser() method.
+   *
+   * @covers ::currentUser
    */
   public function testCurrentUser() {
     $this->setMockContainerService('current_user');
@@ -57,6 +78,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the entityManager() method.
+   *
+   * @covers ::entityManager
    */
   public function testEntityManager() {
     $this->setMockContainerService('entity.manager');
@@ -64,7 +87,19 @@ class DrupalTest extends UnitTestCase {
   }
 
   /**
+   * Tests the entityTypeManager() method.
+   *
+   * @covers ::entityTypeManager
+   */
+  public function testEntityTypeManager() {
+    $this->setMockContainerService('entity_type.manager');
+    $this->assertNotNull(\Drupal::entityTypeManager());
+  }
+
+  /**
    * Tests the database() method.
+   *
+   * @covers ::database
    */
   public function testDatabase() {
     $this->setMockContainerService('database');
@@ -73,6 +108,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the service() method.
+   *
+   * @covers ::cache
    */
   public function testCache() {
     $this->setMockContainerService('cache.test');
@@ -81,6 +118,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the keyValueExpirable() method.
+   *
+   * @covers ::keyValueExpirable
    */
   public function testKeyValueExpirable() {
     $keyvalue = $this->getMockBuilder('Drupal\Core\KeyValueStore\KeyValueExpirableFactory')
@@ -97,6 +136,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the lock() method.
+   *
+   * @covers ::lock
    */
   public function testLock() {
     $this->setMockContainerService('lock');
@@ -105,6 +146,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the config() method.
+   *
+   * @covers ::config
    */
   public function testConfig() {
     $config = $this->getMock('Drupal\Core\Config\ConfigFactoryInterface');
@@ -114,11 +157,14 @@ class DrupalTest extends UnitTestCase {
       ->will($this->returnValue(TRUE));
     $this->setMockContainerService('config.factory', $config);
 
+    // Test \Drupal::config(), not $this->config().
     $this->assertNotNull(\Drupal::config('test_config'));
   }
 
   /**
    * Tests the queue() method.
+   *
+   * @covers ::queue
    */
   public function testQueue() {
     $queue = $this->getMockBuilder('Drupal\Core\Queue\QueueFactory')
@@ -147,6 +193,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the keyValue() method.
+   *
+   * @covers ::keyValue
    */
   public function testKeyValue() {
     $keyvalue = $this->getMockBuilder('Drupal\Core\KeyValueStore\KeyValueFactory')
@@ -163,6 +211,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the state() method.
+   *
+   * @covers ::state
    */
   public function testState() {
     $this->setMockContainerService('state');
@@ -171,6 +221,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the httpClient() method.
+   *
+   * @covers ::httpClient
    */
   public function testHttpClient() {
     $this->setMockContainerService('http_client');
@@ -179,6 +231,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the entityQuery() method.
+   *
+   * @covers ::entityQuery
    */
   public function testEntityQuery() {
     $query = $this->getMockBuilder('Drupal\Core\Entity\Query\QueryFactory')
@@ -195,6 +249,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the entityQueryAggregate() method.
+   *
+   * @covers ::entityQueryAggregate
    */
   public function testEntityQueryAggregate() {
     $query = $this->getMockBuilder('Drupal\Core\Entity\Query\QueryFactory')
@@ -211,6 +267,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the flood() method.
+   *
+   * @covers ::flood
    */
   public function testFlood() {
     $this->setMockContainerService('flood');
@@ -219,6 +277,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the moduleHandler() method.
+   *
+   * @covers ::moduleHandler
    */
   public function testModuleHandler() {
     $this->setMockContainerService('module_handler');
@@ -226,7 +286,9 @@ class DrupalTest extends UnitTestCase {
   }
 
   /**
-   * Tests the typedData() method.
+   * Tests the typedDataManager() method.
+   *
+   * @covers ::typedDataManager
    */
   public function testTypedDataManager() {
     $this->setMockContainerService('typed_data_manager');
@@ -235,6 +297,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the token() method.
+   *
+   * @covers ::token
    */
   public function testToken() {
     $this->setMockContainerService('token');
@@ -243,6 +307,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the urlGenerator() method.
+   *
+   * @covers ::urlGenerator
    */
   public function testUrlGenerator() {
     $this->setMockContainerService('url_generator');
@@ -250,8 +316,9 @@ class DrupalTest extends UnitTestCase {
   }
 
   /**
-   * Tests the _url() method.
+   * Tests the url() method.
    *
+   * @covers ::url
    * @see \Drupal\Core\Routing\UrlGeneratorInterface::generateFromRoute()
    */
   public function testUrl() {
@@ -269,6 +336,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the linkGenerator() method.
+   *
+   * @covers ::linkGenerator
    */
   public function testLinkGenerator() {
     $this->setMockContainerService('link_generator');
@@ -276,8 +345,9 @@ class DrupalTest extends UnitTestCase {
   }
 
   /**
-   * Tests the _l() method.
+   * Tests the l() method.
    *
+   * @covers ::l
    * @see \Drupal\Core\Utility\LinkGeneratorInterface::generate()
    */
   public function testL() {
@@ -296,6 +366,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the translation() method.
+   *
+   * @covers ::translation
    */
   public function testTranslation() {
     $this->setMockContainerService('string_translation');
@@ -304,6 +376,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the languageManager() method.
+   *
+   * @covers ::languageManager
    */
   public function testLanguageManager() {
     $this->setMockContainerService('language_manager');
@@ -312,6 +386,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the csrfToken() method.
+   *
+   * @covers ::csrfToken
    */
   public function testCsrfToken() {
     $this->setMockContainerService('csrf_token');
@@ -320,6 +396,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the transliteration() method.
+   *
+   * @covers ::transliteration
    */
   public function testTransliteration() {
     $this->setMockContainerService('transliteration');
@@ -328,6 +406,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the formBuilder() method.
+   *
+   * @covers ::formBuilder
    */
   public function testFormBuilder() {
     $this->setMockContainerService('form_builder');
@@ -336,6 +416,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the menuTree() method.
+   *
+   * @covers ::menuTree
    */
   public function testMenuTree() {
     $this->setMockContainerService('menu.link_tree');
@@ -344,6 +426,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the pathValidator() method.
+   *
+   * @covers ::pathValidator
    */
   public function testPathValidator() {
     $this->setMockContainerService('path.validator');
@@ -352,6 +436,8 @@ class DrupalTest extends UnitTestCase {
 
   /**
    * Tests the accessManager() method.
+   *
+   * @covers ::accessManager
    */
   public function testAccessManager() {
     $this->setMockContainerService('access_manager');

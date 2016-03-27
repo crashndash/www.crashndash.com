@@ -7,16 +7,18 @@
 
 namespace Drupal\field_ui\Form;
 
-use Drupal\Core\Entity\EntityConfirmFormBase;
+use Drupal\Core\Config\Entity\ConfigEntityInterface;
+use Drupal\Core\Entity\EntityDeleteForm;
 use Drupal\Core\Entity\EntityManagerInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Render\Element;
 use Drupal\field_ui\FieldUI;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
  * Provides a form for removing a field from a bundle.
  */
-class FieldConfigDeleteForm extends EntityConfirmFormBase {
+class FieldConfigDeleteForm extends EntityDeleteForm {
 
   /**
    * The entity manager.
@@ -47,22 +49,46 @@ class FieldConfigDeleteForm extends EntityConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public function getQuestion() {
-    return $this->t('Are you sure you want to delete the field %field?', array('%field' => $this->entity->getLabel()));
+  public function buildForm(array $form, FormStateInterface $form_state) {
+    $form = parent::buildForm($form, $form_state);
+
+    // If we are adding the field storage as a dependency to delete, then that
+    // will list the field as a dependency. That is confusing, so remove it.
+    // Also remove the entity type and the whole entity deletions details
+    // element if nothing else is in there.
+    if (isset($form['entity_deletes']['field_config']['#items']) && isset($form['entity_deletes']['field_config']['#items'][$this->entity->id()])) {
+      unset($form['entity_deletes']['field_config']['#items'][$this->entity->id()]);
+      if (empty($form['entity_deletes']['field_config']['#items'])) {
+        unset($form['entity_deletes']['field_config']);
+        if (!Element::children($form['entity_deletes'])) {
+          $form['entity_deletes']['#access'] = FALSE;
+        }
+      }
+    }
+    return $form;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getConfirmText() {
-    return $this->t('Delete');
+  protected function getConfigNamesToDelete(ConfigEntityInterface $entity) {
+    /** @var \Drupal\field\FieldStorageConfigInterface $field_storage */
+    $field_storage = $entity->getFieldStorageDefinition();
+    $config_names = [$entity->getConfigDependencyName()];
+
+    // If there is only one bundle left for this field storage, it will be
+    // deleted too, notify the user about dependencies.
+    if (count($field_storage->getBundles()) <= 1) {
+      $config_names[] = $field_storage->getConfigDependencyName();
+    }
+    return $config_names;
   }
 
   /**
    * {@inheritdoc}
    */
   public function getCancelUrl() {
-    return FieldUI::getOverviewRouteInfo($this->entity->entity_type, $this->entity->bundle);
+    return FieldUI::getOverviewRouteInfo($this->entity->getTargetEntityTypeId(), $this->entity->getTargetBundle());
   }
 
   /**
@@ -70,10 +96,10 @@ class FieldConfigDeleteForm extends EntityConfirmFormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $field_storage = $this->entity->getFieldStorageDefinition();
-    $bundles = entity_get_bundles();
-    $bundle_label = $bundles[$this->entity->entity_type][$this->entity->bundle]['label'];
+    $bundles = $this->entityManager->getBundleInfo($this->entity->getTargetEntityTypeId());
+    $bundle_label = $bundles[$this->entity->getTargetBundle()]['label'];
 
-    if ($field_storage && !$field_storage->locked) {
+    if ($field_storage && !$field_storage->isLocked()) {
       $this->entity->delete();
       drupal_set_message($this->t('The field %field has been deleted from the %type content type.', array('%field' => $this->entity->label(), '%type' => $bundle_label)));
     }

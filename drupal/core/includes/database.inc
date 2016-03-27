@@ -1,9 +1,5 @@
 <?php
 
-use Drupal\Core\Database\Database;
-use Drupal\Core\Database\Query\Condition;
-use Drupal\Core\Site\Settings;
-
 /**
  * @file
  * Core systems for the database layer.
@@ -13,224 +9,13 @@ use Drupal\Core\Site\Settings;
  * file only, as they cannot auto-load the way classes can.
  */
 
+use Drupal\Core\Database\Database;
+use Drupal\Core\Database\Query\Condition;
+use Drupal\Core\Site\Settings;
+
 /**
- * @defgroup database Database abstraction layer
+ * @addtogroup database
  * @{
- * Allow the use of different database servers using the same code base.
- *
- * @section sec_intro Overview
- * Drupal's database abstraction layer provides a unified database query API
- * that can query different underlying databases. It is built upon PHP's
- * PDO (PHP Data Objects) database API, and inherits much of its syntax and
- * semantics. Besides providing a unified API for database queries, the
- * database abstraction layer also provides a structured way to construct
- * complex queries, and it protects the database by using good security
- * practices.
- *
- * For more detailed information on the database abstraction layer, see
- * https://drupal.org/developing/api/database
- *
- * @section sec_entity Querying entities
- * Any query on Drupal entities or fields should use the Entity Query API. See
- * the @link entity_api entity API topic @endlink for more information.
- *
- * @section sec_simple Simple SELECT database queries
- * For simple SELECT queries that do not involve entities, the Drupal database
- * abstraction layer provides the functions db_query() and db_query_range(),
- * which execute SELECT queries (optionally with range limits) and return result
- * sets that you can iterate over using foreach loops. (The result sets are
- * objects implementing the \Drupal\Core\Database\StatementInterface interface.)
- * You can use the simple query functions for query strings that are not
- * dynamic (except for placeholders, see below), and that you are certain will
- * work in any database engine. See @ref sec_dynamic below if you have a more
- * complex query, or a query whose syntax would be different in some databases.
- *
- * As a note, db_query() and similar functions are wrappers on connection object
- * methods. In most classes, you should use dependency injection and the
- * database connection object instead of these wrappers; See @ref sec_connection
- * below for details.
- *
- * To use the simple database query functions, you will need to make a couple of
- * modifications to your bare SQL query:
- * - Enclose your table name in {}. Drupal allows site builders to use
- *   database table name prefixes, so you cannot be sure what the actual
- *   name of the table will be. So, use the name that is in the hook_schema(),
- *   enclosed in {}, and Drupal will calculate the right name.
- * - Instead of putting values for conditions into the query, use placeholders.
- *   The placeholders are named and start with :, and they take the place of
- *   putting variables directly into the query, to protect against SQL
- *   injection attacks.
- * - LIMIT syntax differs between databases, so if you have a ranged query,
- *   use db_query_range() instead of db_query().
- *
- * For example, if the query you want to run is:
- * @code
- * SELECT e.id, e.title, e.created FROM example e WHERE e.uid = $uid
- *   ORDER BY e.created DESC LIMIT 0, 10;
- * @endcode
- * you would do it like this:
- * @code
- * $result = db_query_range('SELECT e.id, e.title, e.created
- *   FROM {example} e
- *   WHERE e.uid = :uid
- *   ORDER BY e.created DESC',
- *   0, 10, array(':uid' => $uid));
- * foreach ($result as $record) {
- *   // Perform operations on $record->title, etc. here.
- * }
- * @endcode
- *
- * Note that if your query has a string condition, like:
- * @code
- * WHERE e.my_field = 'foo'
- * @endcode
- * when you convert it to placeholders, omit the quotes:
- * @code
- * WHERE e.my_field = :my_field
- * ... array(':my_field' => 'foo') ...
- * @endcode
- *
- * @section sec_dynamic Dynamic SELECT queries
- * For SELECT queries where the simple query API described in @ref sec_simple
- * will not work well, you need to use the dynamic query API. However, you
- * should still use the Entity Query API if your query involves entities or
- * fields (see the @link entity_api Entity API topic @endlink for more on
- * entity queries).
- *
- * As a note, db_select() and similar functions are wrappers on connection
- * object methods. In most classes, you should use dependency injection and the
- * database connection object instead of these wrappers; See @ref sec_connection
- * below for details.
- *
- * The dynamic query API lets you build up a query dynamically using method
- * calls. As an illustration, the query example from @ref sec_simple above
- * would be:
- * @code
- * $result = db_select('example', 'e')
- *   ->fields('e', array('id', 'title', 'created'))
- *   ->condition('e.uid', $uid)
- *   ->orderBy('e.created', 'DESC')
- *   ->range(0, 10)
- *   ->execute();
- * @endcode
- *
- * There are also methods to join to other tables, add fields with aliases,
- * isNull() to have a @code WHERE e.foo IS NULL @endcode condition, etc. See
- * https://drupal.org/developing/api/database for many more details.
- *
- * One note on chaining: It is common in the dynamic database API to chain
- * method calls (as illustrated here), because most of the query methods modify
- * the query object and then return the modified query as their return
- * value. However, there are some important exceptions; these methods (and some
- * others) do not support chaining:
- * - join(), innerJoin(), etc.: These methods return the joined table alias.
- * - addField(): This method returns the field alias.
- * Check the documentation for the query method you are using to see if it
- * returns the query or something else, and only chain methods that return the
- * query.
- *
- * @section_insert INSERT, UPDATE, and DELETE queries
- * INSERT, UPDATE, and DELETE queries need special care in order to behave
- * consistently across databases; you should never use db_query() to run
- * an INSERT, UPDATE, or DELETE query. Instead, use functions db_insert(),
- * db_update(), and db_delete() to obtain a base query on your table, and then
- * add dynamic conditions (as illustrated in @ref sec_dynamic above).
- *
- * As a note, db_insert() and similar functions are wrappers on connection
- * object methods. In most classes, you should use dependency injection and the
- * database connection object instead of these wrappers; See @ref sec_connection
- * below for details.
- *
- * For example, if your query is:
- * @code
- * INSERT INTO example (id, uid, path, name) VALUES (1, 2, 'path', 'Name');
- * @endcode
- * You can execute it via:
- * @code
- * $fields = array('id' => 1, 'uid' => 2, 'path' => 'path', 'name' => 'Name');
- * db_insert('example')
- *   ->fields($fields)
- *   ->execute();
- * @endcode
- *
- * @section sec_transaction Transactions
- * Drupal supports transactions, including a transparent fallback for
- * databases that do not support transactions. To start a new transaction,
- * call @code $txn = db_transaction(); @endcode The transaction will
- * remain open for as long as the variable $txn remains in scope; when $txn is
- * destroyed, the transaction will be committed. If your transaction is nested
- * inside of another then Drupal will track each transaction and only commit
- * the outer-most transaction when the last transaction object goes out out of
- * scope (when all relevant queries have completed successfully).
- *
- * Example:
- * @code
- * function my_transaction_function() {
- *   // The transaction opens here.
- *   $txn = db_transaction();
- *
- *   try {
- *     $id = db_insert('example')
- *       ->fields(array(
- *         'field1' => 'mystring',
- *         'field2' => 5,
- *       ))
- *       ->execute();
- *
- *     my_other_function($id);
- *
- *     return $id;
- *   }
- *   catch (Exception $e) {
- *     // Something went wrong somewhere, so roll back now.
- *     $txn->rollback();
- *     // Log the exception to watchdog.
- *     watchdog_exception('type', $e);
- *   }
- *
- *   // $txn goes out of scope here.  Unless the transaction was rolled back, it
- *   // gets automatically committed here.
- * }
- *
- * function my_other_function($id) {
- *   // The transaction is still open here.
- *
- *   if ($id % 2 == 0) {
- *     db_update('example')
- *       ->condition('id', $id)
- *       ->fields(array('field2' => 10))
- *       ->execute();
- *   }
- * }
- * @endcode
- *
- * @section sec_connection Database connection objects
- * The examples here all use functions like db_select() and db_query(), which
- * can be called from any Drupal method or function code. In some classes, you
- * may already have a database connection object in a member variable, or it may
- * be passed into a class constructor via dependency injection. If that is the
- * case, you can look at the code for db_select() and the other functions to see
- * how to get a query object from your connection variable. For example:
- * @code
- * $query = $connection->select('example', 'e');
- * @endcode
- * would be the equivalent of
- * @code
- * $query = db_select('example', 'e');
- * @endcode
- * if you had a connection object variable $connection available to use. See
- * also the @link container Services and Dependency Injection topic. @endlink
- *
- * @see http://drupal.org/developing/api/database
- * @see entity_api
- * @see schemaapi
- */
-
-
-/**
- * The following utility functions are simply convenience wrappers.
- *
- * They should never, ever have any database-specific code in them.
  */
 
 /**
@@ -243,21 +28,29 @@ use Drupal\Core\Site\Settings;
  * Do not use this function for INSERT, UPDATE, or DELETE queries. Those should
  * be handled via db_insert(), db_update() and db_delete() respectively.
  *
- * @param $query
+ * @param string|\Drupal\Core\Database\StatementInterface $query
  *   The prepared statement query to run. Although it will accept both named and
  *   unnamed placeholders, named placeholders are strongly preferred as they are
- *   more self-documenting.
- * @param $args
+ *   more self-documenting. If the argument corresponding to a placeholder is
+ *   an array of values to be expanded (for example, with an IN query), the
+ *   placeholder should be named with a trailing bracket like :example[].
+ * @param array $args
  *   An array of values to substitute into the query. If the query uses named
  *   placeholders, this is an associative array in any order. If the query uses
  *   unnamed placeholders (?), this is an indexed array and the order must match
  *   the order of placeholders in the query string.
- * @param $options
+ * @param array $options
  *   An array of options to control how the query operates.
  *
  * @return \Drupal\Core\Database\StatementInterface
  *   A prepared statement object, already executed.
  *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call query() on it. For example,
+ *   $injected_database->query($query, $args, $options);
+ *
+ * @see \Drupal\Core\Database\Connection::query()
  * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_query($query, array $args = array(), array $options = array()) {
@@ -271,7 +64,7 @@ function db_query($query, array $args = array(), array $options = array()) {
 /**
  * Executes a query against the active database, restricted to a range.
  *
- * @param $query
+ * @param string $query
  *   The prepared statement query to run. Although it will accept both named and
  *   unnamed placeholders, named placeholders are strongly preferred as they are
  *   more self-documenting.
@@ -279,17 +72,23 @@ function db_query($query, array $args = array(), array $options = array()) {
  *   The first record from the result set to return.
  * @param $count
  *   The number of records to return from the result set.
- * @param $args
+ * @param array $args
  *   An array of values to substitute into the query. If the query uses named
  *   placeholders, this is an associative array in any order. If the query uses
  *   unnamed placeholders (?), this is an indexed array and the order must match
  *   the order of placeholders in the query string.
- * @param $options
+ * @param array $options
  *   An array of options to control how the query operates.
  *
  * @return \Drupal\Core\Database\StatementInterface
  *   A prepared statement object, already executed.
  *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call queryRange() on it. For example,
+ *   $injected_database->queryRange($query, $from, $count, $args, $options);
+ *
+ * @see \Drupal\Core\Database\Connection::queryRange()
  * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_query_range($query, $from, $count, array $args = array(), array $options = array()) {
@@ -305,21 +104,27 @@ function db_query_range($query, $from, $count, array $args = array(), array $opt
  *
  * The execution of the query string happens against the active database.
  *
- * @param $query
+ * @param string $query
  *   The prepared SELECT statement query to run. Although it will accept both
  *   named and unnamed placeholders, named placeholders are strongly preferred
  *   as they are more self-documenting.
- * @param $args
+ * @param array $args
  *   An array of values to substitute into the query. If the query uses named
  *   placeholders, this is an associative array in any order. If the query uses
  *   unnamed placeholders (?), this is an indexed array and the order must match
  *   the order of placeholders in the query string.
- * @param $options
+ * @param array $options
  *   An array of options to control how the query operates.
  *
  * @return
  *   The name of the temporary table.
  *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call queryTemporary() on it. For example,
+ *   $injected_database->queryTemporary($query, $args, $options);
+ *
+ * @see \Drupal\Core\Database\Connection::queryTemporary()
  * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_query_temporary($query, array $args = array(), array $options = array()) {
@@ -333,13 +138,21 @@ function db_query_temporary($query, array $args = array(), array $options = arra
 /**
  * Returns a new InsertQuery object for the active database.
  *
- * @param $table
+ * @param string $table
  *   The table into which to insert.
- * @param $options
+ * @param array $options
  *   An array of options to control how the query operates.
  *
  * @return \Drupal\Core\Database\Query\Insert
  *   A new Insert object for this connection.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call insert() on it. For example,
+ *   $injected_database->insert($table, $options);
+ *
+ * @see \Drupal\Core\Database\Connection::insert()
+ * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_insert($table, array $options = array()) {
   if (empty($options['target']) || $options['target'] == 'replica') {
@@ -351,13 +164,21 @@ function db_insert($table, array $options = array()) {
 /**
  * Returns a new MergeQuery object for the active database.
  *
- * @param $table
- *   The table into which to merge.
- * @param $options
+ * @param string $table
+ *   Name of the table to associate with this query.
+ * @param array $options
  *   An array of options to control how the query operates.
  *
  * @return \Drupal\Core\Database\Query\Merge
  *   A new Merge object for this connection.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call merge() on it. For example,
+ *   $injected_database->merge($table, $options);
+ *
+ * @see \Drupal\Core\Database\Connection::merge()
+ * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_merge($table, array $options = array()) {
   if (empty($options['target']) || $options['target'] == 'replica') {
@@ -369,13 +190,21 @@ function db_merge($table, array $options = array()) {
 /**
  * Returns a new UpdateQuery object for the active database.
  *
- * @param $table
+ * @param string $table
  *   The table to update.
- * @param $options
+ * @param array $options
  *   An array of options to control how the query operates.
  *
  * @return \Drupal\Core\Database\Query\Update
  *   A new Update object for this connection.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call update() on it. For example,
+ *   $injected_database->update($table, $options);
+ *
+ * @see \Drupal\Core\Database\Connection::update()
+ * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_update($table, array $options = array()) {
   if (empty($options['target']) || $options['target'] == 'replica') {
@@ -387,13 +216,21 @@ function db_update($table, array $options = array()) {
 /**
  * Returns a new DeleteQuery object for the active database.
  *
- * @param $table
+ * @param string $table
  *   The table from which to delete.
- * @param $options
+ * @param array $options
  *   An array of options to control how the query operates.
  *
  * @return \Drupal\Core\Database\Query\Delete
  *   A new Delete object for this connection.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call delete() on it. For example,
+ *   $injected_database->delete($table, $options);
+ *
+ * @see \Drupal\Core\Database\Connection::delete()
+ * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_delete($table, array $options = array()) {
   if (empty($options['target']) || $options['target'] == 'replica') {
@@ -405,13 +242,21 @@ function db_delete($table, array $options = array()) {
 /**
  * Returns a new TruncateQuery object for the active database.
  *
- * @param $table
- *   The table from which to delete.
- * @param $options
+ * @param string $table
+ *   The table from which to truncate.
+ * @param array $options
  *   An array of options to control how the query operates.
  *
  * @return \Drupal\Core\Database\Query\Truncate
  *   A new Truncate object for this connection.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call truncate() on it. For example,
+ *   $injected_database->truncate($table, $options);
+ *
+ * @see \Drupal\Core\Database\Connection::truncate()
+ * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_truncate($table, array $options = array()) {
   if (empty($options['target']) || $options['target'] == 'replica') {
@@ -423,16 +268,25 @@ function db_truncate($table, array $options = array()) {
 /**
  * Returns a new SelectQuery object for the active database.
  *
- * @param $table
- *   The base table for this query. May be a string or another SelectQuery
- *   object. If a query object is passed, it will be used as a subselect.
- * @param $alias
- *   The alias for the base table of this query.
- * @param $options
- *   An array of options to control how the query operates.
+ * @param string|\Drupal\Core\Database\Query\SelectInterface $table
+ *   The base table for this query. May be a string or another SelectInterface
+ *   object. If a SelectInterface object is passed, it will be used as a
+ *   subselect.
+ * @param string $alias
+ *   (optional) The alias for the base table of this query.
+ * @param array $options
+ *   (optional) An array of options to control how the query operates.
  *
  * @return \Drupal\Core\Database\Query\Select
  *   A new Select object for this connection.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call select() on it. For example,
+ *   $injected_database->select($table, $alias, $options);
+ *
+ * @see \Drupal\Core\Database\Connection::select()
+ * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_select($table, $alias = NULL, array $options = array()) {
   if (empty($options['target'])) {
@@ -452,6 +306,14 @@ function db_select($table, $alias = NULL, array $options = array()) {
  *
  * @return \Drupal\Core\Database\Transaction
  *   A new Transaction object for this connection.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call startTransaction() on it. For example,
+ *   $injected_database->startTransaction($name);
+ *
+ * @see \Drupal\Core\Database\Connection::startTransaction()
+ * @see \Drupal\Core\Database\Connection::defaultOptions()
  */
 function db_transaction($name = NULL, array $options = array()) {
   if (empty($options['target'])) {
@@ -466,8 +328,11 @@ function db_transaction($name = NULL, array $options = array()) {
  * @param $key
  *   The key in the $databases array to set as the default database.
  *
- * @return
+ * @return string|null
  *   The key of the formerly active database.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Use
+ * \Drupal\Core\Database\Database::setActiveConnection().
  */
 function db_set_active($key = 'default') {
   return Database::setActiveConnection($key);
@@ -481,8 +346,15 @@ function db_set_active($key = 'default') {
  * @param $table
  *   The table name to escape.
  *
- * @return
+ * @return string
  *   The escaped table name as a string.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call escapeTable() on it. For example,
+ *   $injected_database->escapeTable($table);
+ *
+ * @see \Drupal\Core\Database\Connection::escapeTable()
  */
 function db_escape_table($table) {
   return Database::getConnection()->escapeTable($table);
@@ -493,11 +365,18 @@ function db_escape_table($table) {
  *
  * Only keeps alphanumeric and underscores.
  *
- * @param $field
+ * @param string $field
  *   The field name to escape.
  *
- * @return
+ * @return string
  *   The escaped field name as a string.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call escapeTable() on it. For example,
+ *   $injected_database->escapeTable($table);
+ *
+ * @see \Drupal\Core\Database\Connection::escapeField()
  */
 function db_escape_field($field) {
   return Database::getConnection()->escapeField($field);
@@ -527,11 +406,18 @@ function db_escape_field($field) {
  * Backslash is defined as escape character for LIKE patterns in
  * DatabaseCondition::mapConditionOperator().
  *
- * @param $string
+ * @param string $string
  *   The string to escape.
  *
- * @return
+ * @return string
  *   The escaped string.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call escapeLike() on it. For example,
+ *   $injected_database->escapeLike($string);
+ *
+ * @see \Drupal\Core\Database\Connection::escapeLike()
  */
 function db_like($string) {
   return Database::getConnection()->escapeLike($string);
@@ -540,8 +426,14 @@ function db_like($string) {
 /**
  * Retrieves the name of the currently active database driver.
  *
- * @return
+ * @return string
  *   The name of the currently active database driver.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call driver() on it. For example, $injected_database->driver($string);
+ *
+ * @see \Drupal\Core\Database\Connection::driver()
  */
 function db_driver() {
   return Database::getConnection()->driver();
@@ -550,9 +442,14 @@ function db_driver() {
 /**
  * Closes the active database connection.
  *
- * @param $options
+ * @param array $options
  *   An array of options to control which connection is closed. Only the target
  *   key has any meaning in this case.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Use
+ *   \Drupal\Core\Database\Database::closeConnection($target).
+ *
+ * @see \Drupal\Core\Database\Database::closeConnection()
  */
 function db_close(array $options = array()) {
   if (empty($options['target'])) {
@@ -568,13 +465,19 @@ function db_close(array $options = array()) {
  * serial field is preferred, and InsertQuery::execute() returns the value of
  * the last ID inserted.
  *
- * @param $existing_id
+ * @param int $existing_id
  *   After a database import, it might be that the sequences table is behind, so
  *   by passing in a minimum ID, it can be assured that we never issue the same
  *   ID.
  *
- * @return
+ * @return int
  *   An integer number larger than any number returned before for this sequence.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container and
+ *   call nextId() on it. For example, $injected_database->nextId($existing_id);
+ *
+ * @see \Drupal\Core\Database\Connection::nextId()
  */
 function db_next_id($existing_id = 0) {
   return Database::getConnection()->nextId($existing_id);
@@ -585,6 +488,12 @@ function db_next_id($existing_id = 0) {
  *
  * @return \Drupal\Core\Database\Query\Condition
  *   A new Condition object, set to "OR" all conditions together.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Create
+ *   a \Drupal\Core\Database\Query\Condition object, specifying an OR
+ *   conjunction: new Condition('OR');
+ *
+ * @see \Drupal\Core\Database\Query\Condition
  */
 function db_or() {
   return new Condition('OR');
@@ -595,6 +504,12 @@ function db_or() {
  *
  * @return \Drupal\Core\Database\Query\Condition
  *   A new Condition object, set to "AND" all conditions together.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Create
+ *   a \Drupal\Core\Database\Query\Condition object, specifying an AND
+ *   conjunction: new Condition('AND');
+ *
+ * @see \Drupal\Core\Database\Query\Condition
  */
 function db_and() {
   return new Condition('AND');
@@ -605,6 +520,12 @@ function db_and() {
  *
  * @return \Drupal\Core\Database\Query\Condition
  *   A new Condition object, set to "XOR" all conditions together.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Create
+ *   a \Drupal\Core\Database\Query\Condition object, specifying an XOR
+ *   conjunction: new Condition('XOR');
+ *
+ * @see \Drupal\Core\Database\Query\Condition
  */
 function db_xor() {
   return new Condition('XOR');
@@ -616,18 +537,24 @@ function db_xor() {
  * Internal API function call.  The db_and(), db_or(), and db_xor()
  * functions are preferred.
  *
- * @param $conjunction
+ * @param string $conjunction
  *   The conjunction to use for query conditions (AND, OR or XOR).
  *
  * @return \Drupal\Core\Database\Query\Condition
  *   A new Condition object, set to the specified conjunction.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Create
+ *   a \Drupal\Core\Database\Query\Condition object, specifying the desired
+ *   conjunction: new Condition($conjunctin);
+ *
+ * @see \Drupal\Core\Database\Query\Condition
  */
 function db_condition($conjunction) {
   return new Condition($conjunction);
 }
 
 /**
- * @} End of "defgroup database".
+ * @} End of "addtogroup database".
  */
 
 
@@ -639,10 +566,17 @@ function db_condition($conjunction) {
 /**
  * Creates a new table from a Drupal table definition.
  *
- * @param $name
+ * @param string $name
  *   The name of the table to create.
- * @param $table
+ * @param array $table
  *   A Schema API table definition array.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call createTable() on it. For example,
+ *   $injected_database->schema()->createTable($name, $table);
+ *
+ * @see \Drupal\Core\Database\Schema::createTable()
  */
 function db_create_table($name, $table) {
   return Database::getConnection()->schema()->createTable($name, $table);
@@ -654,11 +588,18 @@ function db_create_table($name, $table) {
  * This is usually an identity function but if a key/index uses a column prefix
  * specification, this function extracts just the name.
  *
- * @param $fields
+ * @param array $fields
  *   An array of key/index column specifiers.
  *
- * @return
+ * @return array
  *   An array of field names.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call fieldNames() on it. For example,
+ *   $injected_database->schema()->fieldNames($fields);
+ *
+ * @see \Drupal\Core\Database\Schema::fieldNames()
  */
 function db_field_names($fields) {
   return Database::getConnection()->schema()->fieldNames($fields);
@@ -667,13 +608,20 @@ function db_field_names($fields) {
 /**
  * Checks if an index exists in the given table.
  *
- * @param $table
+ * @param string $table
  *   The name of the table in drupal (no prefixing).
- * @param $name
+ * @param string $name
  *   The name of the index in drupal (no prefixing).
  *
- * @return
+ * @return bool
  *   TRUE if the given index exists, otherwise FALSE.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call indexExists() on it. For example,
+ *   $injected_database->schema()->indexExists($table, $name);
+ *
+ * @see \Drupal\Core\Database\Schema::indexExists()
  */
 function db_index_exists($table, $name) {
   return Database::getConnection()->schema()->indexExists($table, $name);
@@ -682,11 +630,18 @@ function db_index_exists($table, $name) {
 /**
  * Checks if a table exists.
  *
- * @param $table
+ * @param string $table
  *   The name of the table in drupal (no prefixing).
  *
- * @return
+ * @return bool
  *   TRUE if the given table exists, otherwise FALSE.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call tableExists() on it. For example,
+ *   $injected_database->schema()->tableExists($table);
+ *
+ * @see \Drupal\Core\Database\Schema::tableExists()
  */
 function db_table_exists($table) {
   return Database::getConnection()->schema()->tableExists($table);
@@ -700,8 +655,15 @@ function db_table_exists($table) {
  * @param $field
  *   The name of the field.
  *
- * @return
+ * @return bool
  *   TRUE if the given column exists, otherwise FALSE.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call fieldExists() on it. For example,
+ *   $injected_database->schema()->fieldExists($table, $field);
+ *
+ * @see \Drupal\Core\Database\Schema::fieldExists()
  */
 function db_field_exists($table, $field) {
   return Database::getConnection()->schema()->fieldExists($table, $field);
@@ -710,19 +672,21 @@ function db_field_exists($table, $field) {
 /**
  * Finds all tables that are like the specified base table name.
  *
- * @param $table_expression
+ * @param string $table_expression
  *   An SQL expression, for example "simpletest%" (without the quotes).
- *   BEWARE: this is not prefixed, the caller should take care of that.
  *
- * @return
+ * @return array
  *   Array, both the keys and the values are the matching tables.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call findTables() on it. For example,
+ *   $injected_database->schema()->findTables($table_expression);
+ *
+ * @see \Drupal\Core\Database\Schema::findTables()
  */
 function db_find_tables($table_expression) {
   return Database::getConnection()->schema()->findTables($table_expression);
-}
-
-function _db_create_keys_sql($spec) {
-  return Database::getConnection()->schema()->createKeysSql($spec);
 }
 
 /**
@@ -732,26 +696,16 @@ function _db_create_keys_sql($spec) {
  *   The current name of the table to be renamed.
  * @param $new_name
  *   The new name for the table.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call renameTable() on it. For example,
+ *   $injected_database->schema()->renameTable($table, $new_name);
+ *
+ * @see \Drupal\Core\Database\Schema::renameTable()
  */
 function db_rename_table($table, $new_name) {
   return Database::getConnection()->schema()->renameTable($table, $new_name);
-}
-
-/**
- * Copies the structure of a table.
- *
- * @param string $source
- *   The name of the table to be copied.
- * @param string $destination
- *   The name for the new table.
- *
- * @return \Drupal\Core\Database\StatementInterface
- *   The result of the executed query.
- *
- * @see \Drupal\Core\Database\Schema::copyTable()
- */
-function db_copy_table_schema($source, $destination) {
-  return Database::getConnection()->schema()->copyTable($source, $destination);
 }
 
 /**
@@ -759,6 +713,13 @@ function db_copy_table_schema($source, $destination) {
  *
  * @param $table
  *   The table to be dropped.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call dropTable() on it. For example,
+ *   $injected_database->schema()->dropTable($table);
+ *
+ * @see \Drupal\Core\Database\Schema::dropTable()
  */
 function db_drop_table($table) {
   return Database::getConnection()->schema()->dropTable($table);
@@ -771,18 +732,24 @@ function db_drop_table($table) {
  *   Name of the table to be altered.
  * @param $field
  *   Name of the field to be added.
- * @param $spec
+ * @param array $spec
  *   The field specification array, as taken from a schema definition. The
  *   specification may also contain the key 'initial'; the newly-created field
  *   will be set to the value of the key in all rows. This is most useful for
  *   creating NOT NULL columns with no default value in existing tables.
- * @param $keys_new
+ * @param array $keys_new
  *   (optional) Keys and indexes specification to be created on the table along
  *   with adding the field. The format is the same as a table specification, but
  *   without the 'fields' element. If you are adding a type 'serial' field, you
  *   MUST specify at least one key or index including it in this array. See
  *   db_change_field() for more explanation why.
  *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call addField() on it. For example,
+ *   $injected_database->schema()->addField($table, $field, $spec, $keys_new);
+ *
+ * @see \Drupal\Core\Database\Schema::addField()
  * @see db_change_field()
  */
 function db_add_field($table, $field, $spec, $keys_new = array()) {
@@ -796,6 +763,17 @@ function db_add_field($table, $field, $spec, $keys_new = array()) {
  *   The table to be altered.
  * @param $field
  *   The field to be dropped.
+ *
+ * @return bool
+ *   TRUE if the field was successfully dropped, FALSE if there was no field by
+ *   that name to begin with.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call dropField() on it. For example,
+ *   $injected_database->schema()->dropField($table, $field);
+ *
+ * @see \Drupal\Core\Database\Schema::dropField()
  */
 function db_drop_field($table, $field) {
   return Database::getConnection()->schema()->dropField($table, $field);
@@ -810,6 +788,13 @@ function db_drop_field($table, $field) {
  *   The field to be altered.
  * @param $default
  *   Default value to be set. NULL for 'default NULL'.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call fieldSetDefault() on it. For example,
+ *   $injected_database->schema()->fieldSetDefault($table, $field, $default);
+ *
+ * @see \Drupal\Core\Database\Schema::fieldSetDefault()
  */
 function db_field_set_default($table, $field, $default) {
   return Database::getConnection()->schema()->fieldSetDefault($table, $field, $default);
@@ -822,6 +807,13 @@ function db_field_set_default($table, $field, $default) {
  *   The table to be altered.
  * @param $field
  *   The field to be altered.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call fieldSetNoDefault() on it. For example,
+ *   $injected_database->schema()->fieldSetNoDefault($table, $field);
+ *
+ * @see \Drupal\Core\Database\Schema::fieldSetNoDefault()
  */
 function db_field_set_no_default($table, $field) {
   return Database::getConnection()->schema()->fieldSetNoDefault($table, $field);
@@ -834,6 +826,13 @@ function db_field_set_no_default($table, $field) {
  *   Name of the table to be altered.
  * @param $fields
  *   Array of fields for the primary key.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call addPrimaryKey() on it. For example,
+ *   $injected_database->schema()->addPrimaryKey($table, $fields);
+ *
+ * @see \Drupal\Core\Database\Schema::addPrimaryKey()
  */
 function db_add_primary_key($table, $fields) {
   return Database::getConnection()->schema()->addPrimaryKey($table, $fields);
@@ -844,6 +843,17 @@ function db_add_primary_key($table, $fields) {
  *
  * @param $table
  *   Name of the table to be altered.
+ *
+ * @return bool
+ *   TRUE if the primary key was successfully dropped, FALSE if there was no
+ *   primary key on this table to begin with.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call dropPrimaryKey() on it. For example,
+ *   $injected_database->schema()->dropPrimaryKey($table);
+ *
+ * @see \Drupal\Core\Database\Schema::dropPrimaryKey()
  */
 function db_drop_primary_key($table) {
   return Database::getConnection()->schema()->dropPrimaryKey($table);
@@ -856,8 +866,15 @@ function db_drop_primary_key($table) {
  *   The table to be altered.
  * @param $name
  *   The name of the key.
- * @param $fields
+ * @param array $fields
  *   An array of field names.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call addUniqueKey() on it. For example,
+ *   $injected_database->schema()->addUniqueKey($table, $name, $fields);
+ *
+ * @see \Drupal\Core\Database\Schema::addUniqueKey()
  */
 function db_add_unique_key($table, $name, $fields) {
   return Database::getConnection()->schema()->addUniqueKey($table, $name, $fields);
@@ -870,6 +887,17 @@ function db_add_unique_key($table, $name, $fields) {
  *   The table to be altered.
  * @param $name
  *   The name of the key.
+ *
+ * @return bool
+ *   TRUE if the key was successfully dropped, FALSE if there was no key by
+ *   that name to begin with.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call dropUniqueKey() on it. For example,
+ *   $injected_database->schema()->dropUniqueKey($table, $name);
+ *
+ * @see \Drupal\Core\Database\Schema::dropUniqueKey()
  */
 function db_drop_unique_key($table, $name) {
   return Database::getConnection()->schema()->dropUniqueKey($table, $name);
@@ -882,11 +910,24 @@ function db_drop_unique_key($table, $name) {
  *   The table to be altered.
  * @param $name
  *   The name of the index.
- * @param $fields
+ * @param array $fields
  *   An array of field names.
+ * @param array $spec
+ *   The table specification of the table to be altered, as taken from a schema
+ *   definition. See \Drupal\Core\Database\Schema::addIndex() for how to obtain
+ *   this specification.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call addIndex() on it. For example,
+ *   $injected_database->schema()->addIndex($table, $name, $fields, $spec);
+ *
+ * @see hook_schema()
+ * @see schemaapi
+ * @see \Drupal\Core\Database\Schema::addIndex()
  */
-function db_add_index($table, $name, $fields) {
-  return Database::getConnection()->schema()->addIndex($table, $name, $fields);
+function db_add_index($table, $name, $fields, array $spec) {
+  return Database::getConnection()->schema()->addIndex($table, $name, $fields, $spec);
 }
 
 /**
@@ -896,6 +937,17 @@ function db_add_index($table, $name, $fields) {
  *   The table to be altered.
  * @param $name
  *   The name of the index.
+ *
+ * @return bool
+ *   TRUE if the index was successfully dropped, FALSE if there was no index
+ *   by that name to begin with.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call dropIndex() on it. For example,
+ *   $injected_database->schema()->dropIndex($table, $name);
+ *
+ * @see \Drupal\Core\Database\Schema::dropIndex()
  */
 function db_drop_index($table, $name) {
   return Database::getConnection()->schema()->dropIndex($table, $name);
@@ -956,10 +1008,17 @@ function db_drop_index($table, $name) {
  *   change the name).
  * @param $spec
  *   The field specification for the new field.
- * @param $keys_new
+ * @param array $keys_new
  *   (optional) Keys and indexes specification to be created on the table along
  *   with changing the field. The format is the same as a table specification
  *   but without the 'fields' element.
+ *
+ * @deprecated as of Drupal 8.0.x, will be removed in Drupal 9.0.0. Instead, get
+ *   a database connection injected into your service from the container, get
+ *   its schema driver, and call changeField() on it. For example,
+ *   $injected_database->schema()->changeField($table, $field, $field_new, $spec, $keys_new);
+ *
+ * @see \Drupal\Core\Database\Schema::changeField()
  */
 function db_change_field($table, $field, $field_new, $spec, $keys_new = array()) {
   return Database::getConnection()->schema()->changeField($table, $field, $field_new, $spec, $keys_new);
@@ -973,7 +1032,7 @@ function db_change_field($table, $field, $field_new, $spec, $keys_new = array())
  * Sets a session variable specifying the lag time for ignoring a replica
  * server (A replica server is traditionally referred to as
  * a "slave" in database server documentation).
- * @see http://drupal.org/node/2275877
+ * @see https://www.drupal.org/node/2275877
  */
 function db_ignore_replica() {
   $connection_info = Database::getConnectionInfo();

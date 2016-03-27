@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\system\Tests\Database\ConnectionUnitTest.
+ * Contains \Drupal\system\Tests\Database\ConnectionUnitTest.
  */
 
 namespace Drupal\system\Tests\Database;
@@ -33,7 +33,7 @@ class ConnectionUnitTest extends KernelTestBase {
     // Determine whether the database driver is MySQL. If it is not, the test
     // methods will not be executed.
     // @todo Make this test driver-agnostic, or find a proper way to skip it.
-    // @see http://drupal.org/node/1273478
+    //   See https://www.drupal.org/node/1273478.
     $connection_info = Database::getConnectionInfo('default');
     $this->skipTest = (bool) ($connection_info['default']['driver'] != 'mysql');
     if ($this->skipTest) {
@@ -66,7 +66,7 @@ class ConnectionUnitTest extends KernelTestBase {
   /**
    * Returns the connection ID of the current test connection.
    *
-   * @return integer
+   * @return int
    */
   protected function getConnectionID() {
     return (int) Database::getConnection($this->target, $this->key)->query('SELECT CONNECTION_ID()')->fetchField();
@@ -75,7 +75,7 @@ class ConnectionUnitTest extends KernelTestBase {
   /**
    * Asserts that a connection ID exists.
    *
-   * @param integer $id
+   * @param int $id
    *   The connection ID to verify.
    */
   protected function assertConnection($id) {
@@ -86,7 +86,7 @@ class ConnectionUnitTest extends KernelTestBase {
   /**
    * Asserts that a connection ID does not exist.
    *
-   * @param integer $id
+   * @param int $id
    *   The connection ID to verify.
    */
   protected function assertNoConnection($id) {
@@ -216,58 +216,6 @@ class ConnectionUnitTest extends KernelTestBase {
 
     // Verify that we are back to the original connection count.
     $this->assertNoConnection($id);
-  }
-
-  /**
-   * Tests the serialization and unserialization of a database connection.
-   */
-  public function testConnectionSerialization() {
-    $db = Database::getConnection('default', 'default');
-
-    try {
-      $serialized = serialize($db);
-      $this->pass('The database connection can be serialized.');
-
-      $unserialized = unserialize($serialized);
-      $this->assertTrue(get_class($unserialized) === get_class($db));
-    }
-    catch (\Exception $e) {
-      $this->fail('The database connection cannot be serialized.');
-    }
-
-    // Ensure that all properties on the unserialized object are the same.
-    $db_reflection = new \ReflectionObject($db);
-    $unserialized_reflection = new \ReflectionObject($unserialized);
-    foreach ($db_reflection->getProperties() as $value) {
-      $value->setAccessible(TRUE);
-
-      // Skip properties that are lazily populated on access.
-      if ($value->getName() === 'driverClasses' || $value->getName() === 'schema') {
-        continue;
-      }
-
-      $unserialized_property = $unserialized_reflection->getProperty($value->getName());
-      $unserialized_property->setAccessible(TRUE);
-      // For the PDO object, just check the statement class attribute.
-      if ($value->getName() == 'connection') {
-        $db_statement_class = $unserialized_property->getValue($db)->getAttribute(\PDO::ATTR_STATEMENT_CLASS);
-        $unserialized_statement_class = $unserialized_property->getValue($unserialized)->getAttribute(\PDO::ATTR_STATEMENT_CLASS);
-        // Assert the statement class.
-        $this->assertEqual($unserialized_statement_class[0], $db_statement_class[0]);
-        // Assert the connection argument that is passed into the statement.
-        $this->assertEqual(get_class($unserialized_statement_class[1][0]), get_class($db_statement_class[1][0]));
-      }
-      else {
-        $actual = $unserialized_property->getValue($unserialized);
-        $expected = $value->getValue($db);
-        $this->assertEqual($actual, $expected, vsprintf('Unserialized Connection property %s value %s is equal to expected %s', array(
-          var_export($value->getName(), TRUE),
-          is_object($actual) ? print_r($actual, TRUE) : var_export($actual, TRUE),
-          is_object($expected) ? print_r($expected, TRUE) : var_export($expected, TRUE),
-        )));
-      }
-    }
-
   }
 
   /**

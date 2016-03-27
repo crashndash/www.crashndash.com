@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views_test_data\Plugin\views\row\RowTest.
+ * Contains \Drupal\views_test_data\Plugin\views\row\RowTest.
  */
 
 namespace Drupal\views_test_data\Plugin\views\row;
@@ -33,7 +33,7 @@ class RowTest extends RowPluginBase {
   public $output;
 
   /**
-   * Overrides Drupal\views\Plugin\views\row\RowPluginBase::defineOptions().
+   * {@inheritdoc}
    */
   protected function defineOptions() {
     $options = parent::defineOptions();
@@ -43,7 +43,7 @@ class RowTest extends RowPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\row\RowPluginBase::buildOptionsForm().
+   * {@inheritdoc}
    */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
@@ -76,10 +76,19 @@ class RowTest extends RowPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\row\RowPluginBase::render()
+   * {@inheritdoc}
    */
   public function render($row) {
     return $this->getOutput();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    return [
+      'content' => ['RowTest'],
+    ];
   }
 
 }

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\rest\Plugin\Type\ResourcePluginManager.
+ * Contains \Drupal\rest\Plugin\Type\ResourcePluginManager.
  */
 
 namespace Drupal\rest\Plugin\Type;
@@ -40,7 +40,7 @@ class ResourcePluginManager extends DefaultPluginManager {
   }
 
   /**
-   * Overrides Drupal\Component\Plugin\PluginManagerBase::getInstance().
+   * {@inheritdoc}
    */
   public function getInstance(array $options){
     if (isset($options['id'])) {

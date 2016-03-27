@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\Core\DependencyInjection\Container.
+ * Contains \Drupal\Core\DependencyInjection\ContainerBuilder.
  */
 
 namespace Drupal\Core\DependencyInjection;
@@ -30,19 +30,6 @@ class ContainerBuilder extends SymfonyContainerBuilder {
   }
 
   /**
-   * {@inheritdoc}
-   */
-  public function get($id, $invalidBehavior = self::EXCEPTION_ON_INVALID_REFERENCE) {
-    $service = parent::get($id, $invalidBehavior);
-    // Some services are called but do not exist, so the parent returns nothing.
-    if (is_object($service)) {
-      $service->_serviceId = $id;
-    }
-
-    return $service;
-  }
-
-  /**
    * Overrides Symfony\Component\DependencyInjection\ContainerBuilder::set().
    *
    * Drupal's container builder can be used at runtime after compilation, so we
@@ -54,38 +41,35 @@ class ContainerBuilder extends SymfonyContainerBuilder {
    *   services in a frozen builder.
    */
   public function set($id, $service, $scope = self::SCOPE_CONTAINER) {
+    if (strtolower($id) !== $id) {
+      throw new \InvalidArgumentException("Service ID names must be lowercase: $id");
+    }
     SymfonyContainer::set($id, $service, $scope);
 
-    if ($this->hasDefinition($id) && ($definition = $this->getDefinition($id)) && $definition->isSynchronized()) {
-      $this->synchronize($id);
+    // Ensure that the _serviceId property is set on synthetic services as well.
+    if (isset($this->services[$id]) && is_object($this->services[$id]) && !isset($this->services[$id]->_serviceId)) {
+      $this->services[$id]->_serviceId = $id;
     }
   }
 
   /**
-   * Synchronizes a service change.
-   *
-   * This method is a copy of the ContainerBuilder of symfony.
-   *
-   * This method updates all services that depend on the given
-   * service by calling all methods referencing it.
-   *
-   * @param string $id A service id
+   * {@inheritdoc}
    */
-  private function synchronize($id) {
-    foreach ($this->getDefinitions() as $definitionId => $definition) {
-      // only check initialized services
-      if (!$this->initialized($definitionId)) {
-        continue;
-      }
-
-      foreach ($definition->getMethodCalls() as $call) {
-        foreach ($call[1] as $argument) {
-          if ($argument instanceof Reference && $id == (string) $argument) {
-            $this->callMethod($this->get($definitionId), $call);
-          }
-        }
-      }
+  public function register($id, $class = null) {
+    if (strtolower($id) !== $id) {
+      throw new \InvalidArgumentException("Service ID names must be lowercase: $id");
     }
+    return parent::register($id, $class);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setParameter($name, $value) {
+    if (strtolower($name) !== $name) {
+      throw new \InvalidArgumentException("Parameter names must be lowercase: $name");
+    }
+    parent::setParameter($name, $value);
   }
 
   /**
@@ -107,7 +91,7 @@ class ContainerBuilder extends SymfonyContainerBuilder {
    * {@inheritdoc}
    */
   public function __sleep() {
-    trigger_error('The container was serialized.', E_USER_ERROR);
+    assert(FALSE, 'The container was serialized.');
     return array_keys(get_object_vars($this));
   }
 

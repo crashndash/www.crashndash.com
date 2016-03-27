@@ -2,10 +2,15 @@
 
 /**
  * @file
- * Definition of Drupal\node\Tests\NodeBlockFunctionalTest.
+ * Contains \Drupal\node\Tests\NodeBlockFunctionalTest.
  */
 
 namespace Drupal\node\Tests;
+
+use Drupal\block\Entity\Block;
+use Drupal\Core\EventSubscriber\MainContentViewSubscriber;
+use Drupal\system\Tests\Cache\AssertPageCacheContextsAndTagsTrait;
+use Drupal\user\RoleInterface;
 
 /**
  * Tests node block functionality.
@@ -13,6 +18,8 @@ namespace Drupal\node\Tests;
  * @group node
  */
 class NodeBlockFunctionalTest extends NodeTestBase {
+
+  use AssertPageCacheContextsAndTagsTrait;
 
   /**
    * An administrative user for testing.
@@ -39,7 +46,7 @@ class NodeBlockFunctionalTest extends NodeTestBase {
     parent::setUp();
 
     // Create users and test node.
-    $this->adminUser = $this->drupalCreateUser(array('administer content types', 'administer nodes', 'administer blocks'));
+    $this->adminUser = $this->drupalCreateUser(array('administer content types', 'administer nodes', 'administer blocks', 'access content overview'));
     $this->webUser = $this->drupalCreateUser(array('access content', 'create article content'));
   }
 
@@ -50,7 +57,7 @@ class NodeBlockFunctionalTest extends NodeTestBase {
     $this->drupalLogin($this->adminUser);
 
     // Disallow anonymous users to view content.
-    user_role_change_permissions(DRUPAL_ANONYMOUS_RID, array(
+    user_role_change_permissions(RoleInterface::ANONYMOUS_ID, array(
       'access content' => FALSE,
     ));
 
@@ -94,7 +101,7 @@ class NodeBlockFunctionalTest extends NodeTestBase {
     $this->assertText($node3->label(), 'Node found in block.');
 
     // Check to make sure nodes are in the right order.
-    $this->assertTrue($this->xpath('//div[@id="block-test-block"]//table/tbody/tr[position() = 1]/td/a[text() = "' . $node3->label() . '"]'), 'Nodes were ordered correctly in block.');
+    $this->assertTrue($this->xpath('//div[@id="block-test-block"]//div[@class="item-list"]/ul/li[1]/div/span/a[text() = "' . $node3->label() . '"]'), 'Nodes were ordered correctly in block.');
 
     $this->drupalLogout();
     $this->drupalLogin($this->adminUser);
@@ -113,16 +120,18 @@ class NodeBlockFunctionalTest extends NodeTestBase {
     $this->assertText($node3->label(), 'Node found in block.');
     $this->assertText($node4->label(), 'Node found in block.');
 
+    $this->assertCacheContexts(['languages:language_content', 'languages:language_interface', 'theme', 'url.query_args:' . MainContentViewSubscriber::WRAPPER_FORMAT, 'user']);
+
     // Enable the "Powered by Drupal" block only on article nodes.
-    $block = $this->drupalPlaceBlock('system_powered_by_block', array(
-      'visibility' => array(
-        'node_type' => array(
-          'bundles' => array(
-            'article' => 'article',
-          ),
-        ),
-      ),
-    ));
+    $edit = [
+      'id' => strtolower($this->randomMachineName()),
+      'region' => 'sidebar_first',
+      'visibility[node_type][bundles][article]' => 'article',
+    ];
+    $theme =  \Drupal::service('theme_handler')->getDefault();
+    $this->drupalPostForm("admin/structure/block/add/system_powered_by_block/$theme", $edit, t('Save block'));
+
+    $block = Block::load($edit['id']);
     $visibility = $block->getVisibility();
     $this->assertTrue(isset($visibility['node_type']['bundles']['article']), 'Visibility settings were saved to configuration');
 
@@ -136,12 +145,16 @@ class NodeBlockFunctionalTest extends NodeTestBase {
     $this->drupalGet('');
     $label = $block->label();
     $this->assertNoText($label, 'Block was not displayed on the front page.');
+    $this->assertCacheContexts(['languages:language_content', 'languages:language_interface', 'theme', 'url.query_args:' . MainContentViewSubscriber::WRAPPER_FORMAT, 'user', 'route']);
     $this->drupalGet('node/add/article');
     $this->assertText($label, 'Block was displayed on the node/add/article page.');
+    $this->assertCacheContexts(['languages:language_content', 'languages:language_interface', 'session', 'theme', 'url.path', 'url.query_args', 'user', 'route']);
     $this->drupalGet('node/' . $node1->id());
     $this->assertText($label, 'Block was displayed on the node/N when node is of type article.');
+    $this->assertCacheContexts(['languages:language_content', 'languages:language_interface', 'theme', 'url.query_args:' . MainContentViewSubscriber::WRAPPER_FORMAT, 'user', 'route', 'timezone']);
     $this->drupalGet('node/' . $node5->id());
     $this->assertNoText($label, 'Block was not displayed on nodes of type page.');
+    $this->assertCacheContexts(['languages:language_content', 'languages:language_interface', 'theme', 'url.query_args:' . MainContentViewSubscriber::WRAPPER_FORMAT, 'user', 'route', 'timezone']);
 
     $this->drupalLogin($this->adminUser);
     $this->drupalGet('admin/structure/block');

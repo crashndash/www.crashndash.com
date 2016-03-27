@@ -7,7 +7,6 @@
 
 namespace Drupal\config_translation\Controller;
 
-use Drupal\Component\Utility\String;
 use Drupal\config_translation\ConfigMapperInterface;
 use Drupal\Core\Controller\ControllerBase;
 use Symfony\Component\DependencyInjection\ContainerInterface;
@@ -46,7 +45,7 @@ class ConfigTranslationMapperList extends ControllerBase {
   }
 
   /**
-   * Builds the mappers as a renderable array for theme_table().
+   * Builds the mappers as a renderable array for table.html.twig.
    *
    * @return array
    *   Renderable array with config translation mappers.
@@ -94,7 +93,7 @@ class ConfigTranslationMapperList extends ControllerBase {
    *   A render array structure of fields for this mapper.
    */
   public function buildRow(ConfigMapperInterface $mapper) {
-    $row['label'] = String::checkPlain($mapper->getTypeLabel());
+    $row['label'] = $mapper->getTypeLabel();
     $row['operations']['data'] = $this->buildOperations($mapper);
     return $row;
   }

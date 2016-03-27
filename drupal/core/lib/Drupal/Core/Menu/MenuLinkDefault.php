@@ -7,7 +7,6 @@
 
 namespace Drupal\Core\Menu;
 
-use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -68,26 +67,14 @@ class MenuLinkDefault extends MenuLinkBase implements ContainerFactoryPluginInte
    * {@inheritdoc}
    */
   public function getTitle() {
-    // Subclasses may pull in the request or specific attributes as parameters.
-    $options = array();
-    if (!empty($this->pluginDefinition['title_context'])) {
-      $options['context'] = $this->pluginDefinition['title_context'];
-    }
-    $args = array();
-    if (isset($this->pluginDefinition['title_arguments']) && $title_arguments = $this->pluginDefinition['title_arguments']) {
-      $args = (array) $title_arguments;
-    }
-    return $this->t($this->pluginDefinition['title'], $args, $options);
+    return (string) $this->pluginDefinition['title'];
   }
 
   /**
    * {@inheritdoc}
    */
   public function getDescription() {
-    if ($this->pluginDefinition['description']) {
-      return $this->t($this->pluginDefinition['description']);
-    }
-    return '';
+    return (string) $this->pluginDefinition['description'];
   }
 
   /**
@@ -95,8 +82,7 @@ class MenuLinkDefault extends MenuLinkBase implements ContainerFactoryPluginInte
    */
   public function isResettable() {
     // The link can be reset if it has an override.
-    // @todo This will be cacheable after https://www.drupal.org/node/2040135.
-    return AccessResult::allowedIf($this->staticOverride->loadOverride($this->getPluginId()))->setCacheable(FALSE);
+    return (bool) $this->staticOverride->loadOverride($this->getPluginId());
   }
 
   /**
@@ -110,7 +96,7 @@ class MenuLinkDefault extends MenuLinkBase implements ContainerFactoryPluginInte
     if ($persist) {
       // Always save the menu name as an override to avoid defaulting to tools.
       $overrides['menu_name'] = $this->pluginDefinition['menu_name'];
-      $this->staticOverride->saveOverride($this->getPluginId(), $overrides);
+      $this->staticOverride->saveOverride($this->getPluginId(), $this->pluginDefinition);
     }
     return $this->pluginDefinition;
   }

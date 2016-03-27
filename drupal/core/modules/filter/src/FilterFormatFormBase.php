@@ -7,7 +7,6 @@
 
 namespace Drupal\filter;
 
-use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityForm;
 use Drupal\Core\Entity\Query\QueryFactory;
 use Drupal\Core\Form\FormStateInterface;
@@ -79,7 +78,7 @@ abstract class FilterFormatFormBase extends EntityForm {
     $form['roles'] = array(
       '#type' => 'checkboxes',
       '#title' => $this->t('Roles'),
-      '#options' => array_map('\Drupal\Component\Utility\String::checkPlain', user_role_names()),
+      '#options' => array_map('\Drupal\Component\Utility\Html::escape', user_role_names()),
       '#disabled' => $is_fallback,
       '#weight' => -10,
     );
@@ -89,12 +88,6 @@ abstract class FilterFormatFormBase extends EntityForm {
     if (!$format->isNew()) {
       // If editing an existing text format, pre-select its current permissions.
       $form['roles']['#default_value'] = array_keys(filter_get_roles_by_format($format));
-    }
-    elseif ($admin_role = $this->config('user.settings')->get('admin_role')) {
-      // If adding a new text format and the site has an administrative role,
-      // pre-select that role so as to grant administrators access to the new
-      // text format permission by default.
-      $form['roles']['#default_value'] = array($admin_role);
     }
 
     // Create filter plugin instances for all available filters, including both
@@ -117,7 +110,7 @@ abstract class FilterFormatFormBase extends EntityForm {
       '#suffix' => '</div>',
       // This item is used as a pure wrapping container with heading. Ignore its
       // value, since 'filters' should only contain filter definitions.
-      // @see http://drupal.org/node/1829202
+      // See https://www.drupal.org/node/1829202.
       '#input' => FALSE,
     );
     // Filter order (tabledrag).
@@ -210,16 +203,16 @@ abstract class FilterFormatFormBase extends EntityForm {
   /**
    * {@inheritdoc}
    */
-  public function validate(array $form, FormStateInterface $form_state) {
-    parent::validate($form, $form_state);
+  public function validateForm(array &$form, FormStateInterface $form_state) {
+    parent::validateForm($form, $form_state);
 
     // @todo Move trimming upstream.
     $format_format = trim($form_state->getValue('format'));
     $format_name = trim($form_state->getValue('name'));
 
     // Ensure that the values to be saved later are exactly the ones validated.
-    form_set_value($form['format'], $format_format, $form_state);
-    form_set_value($form['name'], $format_name, $form_state);
+    $form_state->setValueForElement($form['format'], $format_format);
+    $form_state->setValueForElement($form['name'], $format_name);
 
     $format_exists = $this->queryFactory
       ->get('filter_format')

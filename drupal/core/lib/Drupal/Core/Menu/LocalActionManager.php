@@ -8,6 +8,9 @@
 namespace Drupal\Core\Menu;
 
 use Drupal\Core\Access\AccessManagerInterface;
+use Drupal\Core\Cache\Cache;
+use Drupal\Core\Cache\CacheableDependencyInterface;
+use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Language\LanguageManagerInterface;
@@ -15,6 +18,7 @@ use Drupal\Core\Plugin\DefaultPluginManager;
 use Drupal\Core\Plugin\Discovery\ContainerDerivativeDiscoveryDecorator;
 use Drupal\Core\Plugin\Discovery\YamlDiscovery;
 use Drupal\Core\Plugin\Factory\ContainerFactory;
+use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Routing\RouteProviderInterface;
 use Drupal\Core\Url;
 use Symfony\Component\HttpFoundation\RequestStack;
@@ -65,6 +69,13 @@ class LocalActionManager extends DefaultPluginManager implements LocalActionMana
   protected $requestStack;
 
   /**
+   * The current route match.
+   *
+   * @var \Drupal\Core\Routing\RouteMatchInterface
+   */
+  protected $routeMatch;
+
+  /**
    * The route provider to load routes by name.
    *
    * @var \Drupal\Core\Routing\RouteProviderInterface
@@ -99,6 +110,8 @@ class LocalActionManager extends DefaultPluginManager implements LocalActionMana
    *   An object to use in introspecting route methods.
    * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
    *   The request stack.
+   * @param \Drupal\Core\Routing\RouteMatchInterface $route_match
+   *   The current route match.
    * @param \Drupal\Core\Routing\RouteProviderInterface $route_provider
    *   The route provider.
    * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler
@@ -112,20 +125,31 @@ class LocalActionManager extends DefaultPluginManager implements LocalActionMana
    * @param \Drupal\Core\Session\AccountInterface $account
    *   The current user.
    */
-  public function __construct(ControllerResolverInterface $controller_resolver, RequestStack $request_stack, RouteProviderInterface $route_provider, ModuleHandlerInterface $module_handler, CacheBackendInterface $cache_backend, LanguageManagerInterface $language_manager, AccessManagerInterface $access_manager, AccountInterface $account) {
+  public function __construct(ControllerResolverInterface $controller_resolver, RequestStack $request_stack, RouteMatchInterface $route_match, RouteProviderInterface $route_provider, ModuleHandlerInterface $module_handler, CacheBackendInterface $cache_backend, LanguageManagerInterface $language_manager, AccessManagerInterface $access_manager, AccountInterface $account) {
     // Skip calling the parent constructor, since that assumes annotation-based
     // discovery.
-    $this->discovery = new YamlDiscovery('links.action', $module_handler->getModuleDirectories());
-    $this->discovery = new ContainerDerivativeDiscoveryDecorator($this->discovery);
     $this->factory = new ContainerFactory($this, 'Drupal\Core\Menu\LocalActionInterface');
     $this->controllerResolver = $controller_resolver;
     $this->requestStack = $request_stack;
+    $this->routeMatch = $route_match;
     $this->routeProvider = $route_provider;
     $this->accessManager = $access_manager;
     $this->moduleHandler = $module_handler;
     $this->account = $account;
     $this->alterInfo('menu_local_actions');
     $this->setCacheBackend($cache_backend, 'local_action_plugins:' . $language_manager->getCurrentLanguage()->getId(), array('local_action'));
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function getDiscovery() {
+    if (!isset($this->discovery)) {
+      $yaml_discovery = new YamlDiscovery('links.action', $this->moduleHandler->getModuleDirectories());
+      $yaml_discovery->addTranslatableProperty('title', 'title_context');
+      $this->discovery = new ContainerDerivativeDiscoveryDecorator($yaml_discovery);
+    }
+    return $this->discovery;
   }
 
   /**
@@ -159,21 +183,36 @@ class LocalActionManager extends DefaultPluginManager implements LocalActionMana
       }
     }
     $links = array();
-    $request = $this->requestStack->getCurrentRequest();
+    /** @var $plugin \Drupal\Core\Menu\LocalActionInterface */
     foreach ($this->instances[$route_appears] as $plugin_id => $plugin) {
+      $cacheability = new CacheableMetadata();
       $route_name = $plugin->getRouteName();
-      $route_parameters = $plugin->getRouteParameters($request);
+      $route_parameters = $plugin->getRouteParameters($this->routeMatch);
+      $access = $this->accessManager->checkNamedRoute($route_name, $route_parameters, $this->account, TRUE);
       $links[$plugin_id] = array(
         '#theme' => 'menu_local_action',
         '#link' => array(
           'title' => $this->getTitle($plugin),
           'url' => Url::fromRoute($route_name, $route_parameters),
-          'localized_options' => $plugin->getOptions($request),
+          'localized_options' => $plugin->getOptions($this->routeMatch),
         ),
-        '#access' => $this->accessManager->checkNamedRoute($route_name, $route_parameters, $this->account),
+        '#access' => $access,
         '#weight' => $plugin->getWeight(),
       );
+      $cacheability->addCacheableDependency($access);
+      // For backward compatibility in 8.0.x, plugins that do not implement
+      // the \Drupal\Core\Cache\CacheableDependencyInterface are assumed
+      // to be cacheable forever.
+      if ($plugin instanceof CacheableDependencyInterface) {
+        $cacheability->addCacheableDependency($plugin);
+      }
+      else {
+        $cacheability->setCacheMaxAge(Cache::PERMANENT);
+      }
+      $cacheability->applyTo($links[$plugin_id]);
     }
+    $links['#cache']['contexts'][] = 'route';
+
     return $links;
   }
 

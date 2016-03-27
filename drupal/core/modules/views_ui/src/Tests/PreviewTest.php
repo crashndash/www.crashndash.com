@@ -21,13 +21,13 @@ class PreviewTest extends UITestBase {
    *
    * @var array
    */
-  public static $testViews = array('test_preview', 'test_pager_full', 'test_mini_pager');
+  public static $testViews = array('test_preview', 'test_preview_error', 'test_pager_full', 'test_mini_pager', 'test_click_sort');
 
   /**
    * Tests contextual links in the preview form.
    */
-  protected function testPreviewContextual() {
-    \Drupal::moduleHandler()->install(array('contextual'));
+  public function testPreviewContextual() {
+    \Drupal::service('module_installer')->install(array('contextual'));
     $this->resetAll();
 
     $this->drupalGet('admin/structure/views/view/test_preview/edit');
@@ -90,6 +90,46 @@ class PreviewTest extends UITestBase {
     $this->drupalPostForm(NULL, array(), t('Update preview'));
     $result = $this->xpath('//div[@id="views-live-preview"]/pre');
     $this->assertTrue(strpos($result[0], '<title>' . $view['page[title]'] . '</title>'), 'The Feed RSS preview was rendered.');
+
+    // Test the non-default UI display options.
+    // Statistics only, no query.
+    $settings = \Drupal::configFactory()->getEditable('views.settings');
+    $settings->set('ui.show.performance_statistics', TRUE)->save();
+    $this->drupalGet('admin/structure/views/view/test_preview/edit');
+    $this->drupalPostForm(NULL, $edit = array('view_args' => '100'), t('Update preview'));
+    $this->assertText(t('Query build time'));
+    $this->assertText(t('Query execute time'));
+    $this->assertText(t('View render time'));
+    $this->assertNoRaw('<strong>Query</strong>');
+
+    // Statistics and query.
+    $settings->set('ui.show.sql_query.enabled', TRUE)->save();
+    $this->drupalPostForm(NULL, $edit = array('view_args' => '100'), t('Update preview'));
+    $this->assertText(t('Query build time'));
+    $this->assertText(t('Query execute time'));
+    $this->assertText(t('View render time'));
+    $this->assertRaw('<strong>Query</strong>');
+    $this->assertText("SELECT views_test_data.name AS views_test_data_name\nFROM \n{views_test_data} views_test_data\nWHERE (( (views_test_data.id = &#039;100&#039; ) ))");
+
+    // Test that the statistics and query are rendered above the preview.
+    $this->assertTrue(strpos($this->getRawContent(), 'views-query-info') < strpos($this->getRawContent(), 'view-test-preview') , 'Statistics shown above the preview.');
+
+    // Test that statistics and query rendered below the preview.
+    $settings->set('ui.show.sql_query.where', 'below')->save();
+    $this->drupalPostForm(NULL, $edit = array('view_args' => '100'), t('Update preview'));
+    $this->assertTrue(strpos($this->getRawContent(), 'view-test-preview') < strpos($this->getRawContent(), 'views-query-info'), 'Statistics shown below the preview.');
+  }
+
+  /**
+   * Tests the taxonomy term preview AJAX.
+   *
+   * This tests a specific regression in the taxonomy term view preview.
+   *
+   * @see https://www.drupal.org/node/2452659
+   */
+  public function testTaxonomyAJAX() {
+    \Drupal::service('module_installer')->install(array('taxonomy'));
+    $this->getPreviewAJAX('taxonomy_term', 'page_1', 0);
   }
 
   /**
@@ -165,47 +205,43 @@ class PreviewTest extends UITestBase {
     $this->getPreviewAJAX('test_mini_pager', 'default', 3);
 
     // Test that the pager is present and rendered.
-    $elements = $this->xpath('//ul[@class = "pager"]/li');
+    $elements = $this->xpath('//ul[contains(@class, :class)]/li', array(':class' => 'pager__items'));
     $this->assertTrue(!empty($elements), 'Mini pager found.');
 
     // Verify elements and links to pages.
-    // We expect to find 3 elements: previous and current pages, with no link,
-    // and next page with a link.
-    $this->assertClass($elements[0], 'pager-previous', 'Element for previous page has .pager-previous class.');
-    $this->assertFalse(isset($elements[0]->a), 'Element for previous page has no link.');
+    // We expect to find current pages element with no link, next page element
+    // with a link, and not to find previous page element.
+    $this->assertClass($elements[0], 'is-active', 'Element for current page has .is-active class.');
 
-    $this->assertClass($elements[1], 'pager-current', 'Element for current page has .pager-current class.');
-    $this->assertFalse(isset($elements[1]->a), 'Element for current page has no link.');
-
-    $this->assertClass($elements[2], 'pager-next', "Element for next page has .pager-next class.");
-    $this->assertTrue($elements[2]->a, "Link to next page found.");
+    $this->assertClass($elements[1], 'pager__item--next', 'Element for next page has .pager__item--next class.');
+    $this->assertTrue($elements[1]->a, 'Link to next page found.');
 
     // Navigate to next page.
-    $elements = $this->xpath('//li[contains(@class, :class)]/a', array(':class' => 'pager-next'));
+    $elements = $this->xpath('//li[contains(@class, :class)]/a', array(':class' => 'pager__item--next'));
     $this->clickPreviewLinkAJAX($elements[0]['href'], 3);
 
     // Test that the pager is present and rendered.
-    $elements = $this->xpath('//ul[@class = "pager"]/li');
+    $elements = $this->xpath('//ul[contains(@class, :class)]/li', array(':class' => 'pager__items'));
     $this->assertTrue(!empty($elements), 'Mini pager found.');
 
     // Verify elements and links to pages.
     // We expect to find 3 elements: previous page with a link, current
     // page with no link, and next page with a link.
-    $this->assertClass($elements[0], 'pager-previous', 'Element for previous page has .pager-previous class.');
-    $this->assertTrue($elements[0]->a, "Link to previous page found.");
+    $this->assertClass($elements[0], 'pager__item--previous', 'Element for previous page has .pager__item--previous class.');
+    $this->assertTrue($elements[0]->a, 'Link to previous page found.');
 
-    $this->assertClass($elements[1], 'pager-current', 'Element for current page has .pager-current class.');
+    $this->assertClass($elements[1], 'is-active', 'Element for current page has .is-active class.');
     $this->assertFalse(isset($elements[1]->a), 'Element for current page has no link.');
 
-    $this->assertClass($elements[2], 'pager-next', "Element for next page has .pager-next class.");
-    $this->assertTrue($elements[2]->a, "Link to next page found.");
+    $this->assertClass($elements[2], 'pager__item--next', 'Element for next page has .pager__item--next class.');
+    $this->assertTrue($elements[2]->a, 'Link to next page found.');
   }
 
   /**
    * Tests the additional information query info area.
    */
   public function testPreviewAdditionalInfo() {
-    \Drupal::moduleHandler()->install(array('views_ui_test'));
+    \Drupal::service('module_installer')->install(array('views_ui_test'));
     $this->resetAll();
 
     $this->drupalGet('admin/structure/views/view/test_preview/edit');
@@ -217,6 +253,47 @@ class PreviewTest extends UITestBase {
     // @see views_ui_test.module
     $elements = $this->xpath('//div[@id="views-live-preview"]/div[contains(@class, views-query-info)]//td[text()=:text]', array(':text' => t('Test row count')));
     $this->assertEqual(count($elements), 1, 'Views Query Preview Info area altered.');
+    // Check that additional assets are attached.
+    $this->assertTrue(strpos($this->getDrupalSettings()['ajaxPageState']['libraries'], 'views_ui_test/views_ui_test.test') !== FALSE, 'Attached library found.');
+    $this->assertRaw('css/views_ui_test.test.css', 'Attached CSS asset found.');
+  }
+
+  /**
+   * Tests view validation error messages in the preview.
+   */
+  public function testPreviewError() {
+    $this->drupalGet('admin/structure/views/view/test_preview_error/edit');
+    $this->assertResponse(200);
+
+    $this->drupalPostForm(NULL, $edit = array(), t('Update preview'));
+
+    $this->assertText('Unable to preview due to validation errors.', 'Preview error text found.');
+  }
+
+  /**
+   * Tests the link to sort in the preview form.
+   */
+  public function testPreviewSortLink() {
+
+    // Get the preview.
+    $this->getPreviewAJAX('test_click_sort', 'page_1', 0);
+
+    // Test that the header label is present.
+    $elements = $this->xpath('//th[contains(@class, :class)]/a', array(':class' => 'views-field views-field-name'));
+    $this->assertTrue(!empty($elements), 'The header label is present.');
+
+    // Verify link.
+    $this->assertLinkByHref('preview/page_1?_wrapper_format=drupal_ajax&order=name&sort=desc', 0, 'The output URL is as expected.');
+
+    // Click link to sort.
+    $this->clickPreviewLinkAJAX($elements[0]['href'], 0);
+
+    // Test that the header label is present.
+    $elements = $this->xpath('//th[contains(@class, :class)]/a', array(':class' => 'views-field views-field-name is-active'));
+    $this->assertTrue(!empty($elements), 'The header label is present.');
+
+    // Verify link.
+    $this->assertLinkByHref('preview/page_1?_wrapper_format=drupal_ajax&order=name&sort=asc', 0, 'The output URL is as expected.');
   }
 
   /**

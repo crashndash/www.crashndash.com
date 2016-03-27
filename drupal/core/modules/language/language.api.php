@@ -13,14 +13,14 @@
 /**
  * Define language types.
  *
- * @return
+ * @return array
  *   An associative array of language type definitions. The keys are the
  *   identifiers, which are also used as names for global variables representing
  *   the types in the bootstrap phase. The values are associative arrays that
  *   may contain the following elements:
  *   - name: The human-readable language type identifier.
  *   - description: A description of the language type.
- *   - locked: A boolean indicating if the user can choose wether to configure
+ *   - locked: A boolean indicating if the user can choose whether to configure
  *     the language type or not using the UI.
  *   - fixed: A fixed array of language negotiation method identifiers to use to
  *     initialize this language. If locked is set to TRUE and fixed is set, it
@@ -29,7 +29,7 @@
  *     used.
  *
  *  @todo Rename the 'fixed' key to something more meaningful, for instance
- *     'negotiation settings'. See https://drupal.org/node/2166879.
+ *     'negotiation settings'. See https://www.drupal.org/node/2166879.
  *
  * @see hook_language_types_info_alter()
  * @ingroup language_negotiation
@@ -51,7 +51,7 @@ function hook_language_types_info() {
 /**
  * Perform alterations on language types.
  *
- * @param $language_types
+ * @param array $language_types
  *   Array of language type definitions.
  *
  * @see hook_language_types_info()
@@ -66,7 +66,7 @@ function hook_language_types_info_alter(array &$language_types) {
 /**
  * Perform alterations on language negotiation methods.
  *
- * @param $negotiation_info
+ * @param array $negotiation_info
  *   Array of language negotiation method definitions.
  *
  * @ingroup language_negotiation

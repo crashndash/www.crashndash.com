@@ -2,22 +2,24 @@
 
 /**
  * @file
- * Definition of Drupal\user\Tests\UserTranslationUITest.
+ * Contains \Drupal\user\Tests\UserTranslationUITest.
  */
 
 namespace Drupal\user\Tests;
 
-use Drupal\content_translation\Tests\ContentTranslationUITest;
+use Drupal\content_translation\Tests\ContentTranslationUITestBase;
 
 /**
  * Tests the User Translation UI.
  *
  * @group user
  */
-class UserTranslationUITest extends ContentTranslationUITest {
+class UserTranslationUITest extends ContentTranslationUITestBase {
 
   /**
    * The user name of the test user.
+   *
+   * @var string
    */
   protected $name;
 
@@ -38,18 +40,41 @@ class UserTranslationUITest extends ContentTranslationUITest {
   }
 
   /**
-   * Overrides \Drupal\content_translation\Tests\ContentTranslationUITest::getTranslatorPermission().
+   * {@inheritdoc}
    */
   protected function getTranslatorPermissions() {
     return array_merge(parent::getTranslatorPermissions(), array('administer users'));
   }
 
   /**
-   * Overrides \Drupal\content_translation\Tests\ContentTranslationUITest::getNewEntityValues().
+   * {@inheritdoc}
    */
   protected function getNewEntityValues($langcode) {
     // User name is not translatable hence we use a fixed value.
     return array('name' => $this->name) + parent::getNewEntityValues($langcode);
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function doTestTranslationEdit() {
+    $entity = entity_load($this->entityTypeId, $this->entityId, TRUE);
+    $languages = $this->container->get('language_manager')->getLanguages();
+
+    foreach ($this->langcodes as $langcode) {
+      // We only want to test the title for non-english translations.
+      if ($langcode != 'en') {
+        $options = array('language' => $languages[$langcode]);
+        $url = $entity->urlInfo('edit-form', $options);
+        $this->drupalGet($url);
+
+        $title = t('@title [%language translation]', array(
+          '@title' => $entity->getTranslation($langcode)->label(),
+          '%language' => $languages[$langcode]->getName(),
+        ));
+        $this->assertRaw($title);
+      }
+    }
   }
 
 }

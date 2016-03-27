@@ -5,8 +5,6 @@
  * @{
  */
 
-use Drupal\Component\Utility\NestedArray;
-
 /**
  * @defgroup field_types Field Types API
  * @{
@@ -80,8 +78,8 @@ function hook_field_storage_config_update_forbid(\Drupal\field\FieldStorageConfi
     // Forbid any update that removes allowed values with actual data.
     $allowed_values = $field_storage->getSetting('allowed_values');
     $prior_allowed_values = $prior_field_storage->getSetting('allowed_values');
-    $lost_keys = array_keys(array_diff_key($prior_allowed_values,$allowed_values));
-    if (_options_values_in_use($field_storage->entity_type, $field_storage->getName(), $lost_keys)) {
+    $lost_keys = array_keys(array_diff_key($prior_allowed_values, $allowed_values));
+    if (_options_values_in_use($field_storage->getTargetEntityTypeId(), $field_storage->getName(), $lost_keys)) {
       throw new \Drupal\Core\Entity\Exception\FieldStorageDefinitionUpdateForbiddenException(t('A list field (@field_name) with existing data cannot have its keys changed.', array('@field_name' => $field_storage->getName())));
     }
   }
@@ -108,9 +106,9 @@ function hook_field_storage_config_update_forbid(\Drupal\field\FieldStorageConfi
  * subclassing \Drupal\Core\Field\WidgetBase). Widget plugins need to be in the
  * namespace \Drupal\{your_module}\Plugin\Field\FieldWidget.
  *
- * Widgets are @link forms_api_reference.html Form API @endlink
- * elements with additional processing capabilities. The methods of the
- * WidgetInterface object are typically called by respective methods in the
+ * Widgets are @link form_api Form API @endlink elements with additional
+ * processing capabilities. The methods of the WidgetInterface object are
+ * typically called by respective methods in the
  * \Drupal\Core\Entity\Entity\EntityFormDisplay class.
  *
  * @see field
@@ -289,7 +287,7 @@ function hook_field_purge_field_storage(\Drupal\field\Entity\FieldStorageConfig 
  * Acts when a field is being purged.
  *
  * In field_purge_field(), after the field definition has been removed
- * from the the system, the entity storage has purged stored field data, and the
+ * from the system, the entity storage has purged stored field data, and the
  * field info cache has been cleared, this hook is invoked on all modules to
  * allow them to respond to the field being purged.
  *

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\user\UserData.
+ * Contains \Drupal\user\UserData.
  */
 
 namespace Drupal\user;
@@ -32,7 +32,7 @@ class UserData implements UserDataInterface {
   }
 
   /**
-   * Implements \Drupal\user\UserDataInterface::get().
+   * {@inheritdoc}
    */
   public function get($module, $uid = NULL, $name = NULL) {
     $query = $this->connection->select('users_data', 'ud')
@@ -80,7 +80,7 @@ class UserData implements UserDataInterface {
   }
 
   /**
-   * Implements \Drupal\user\UserDataInterface::set().
+   * {@inheritdoc}
    */
   public function set($module, $uid, $name, $value) {
     $serialized = 0;
@@ -102,18 +102,19 @@ class UserData implements UserDataInterface {
   }
 
   /**
-   * Implements \Drupal\user\UserDataInterface::delete().
+   * {@inheritdoc}
    */
   public function delete($module = NULL, $uid = NULL, $name = NULL) {
     $query = $this->connection->delete('users_data');
+    // Cast scalars to array so we can consistently use an IN condition.
     if (isset($module)) {
-      $query->condition('module', $module);
+      $query->condition('module', (array) $module, 'IN');
     }
     if (isset($uid)) {
-      $query->condition('uid', $uid);
+      $query->condition('uid', (array) $uid, 'IN');
     }
     if (isset($name)) {
-      $query->condition('name', $name);
+      $query->condition('name', (array) $name, 'IN');
     }
     $query->execute();
   }

@@ -211,4 +211,26 @@ class Entity extends ArgumentValidatorPluginBase {
     return TRUE;
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    $dependencies = parent::calculateDependencies();
+
+    $entity_type_id = $this->definition['entity_type'];
+    $bundle_entity_type = $this->entityManager->getDefinition($entity_type_id)->getBundleEntityType();
+
+    // The bundle entity type might not exist. For example, users do not have
+    // bundles.
+    if ($this->entityManager->hasHandler($bundle_entity_type, 'storage')) {
+      $bundle_entity_storage = $this->entityManager->getStorage($bundle_entity_type);
+
+      foreach ($bundle_entity_storage->loadMultiple(array_keys($this->options['bundles'])) as $bundle_entity) {
+        $dependencies[$bundle_entity->getConfigDependencyKey()][] = $bundle_entity->getConfigDependencyName();
+      }
+    }
+
+    return $dependencies;
+  }
+
 }

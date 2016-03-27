@@ -1,10 +1,10 @@
 (function () {
 
-  "use strict";
+  'use strict';
 
   function findActiveStep(steps) {
     for (var i = 0; i < steps.length; i++) {
-      if (steps[i].className === 'active') {
+      if (steps[i].className === 'is-active') {
         return i + 1;
       }
     }

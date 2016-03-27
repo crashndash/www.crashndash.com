@@ -5,14 +5,17 @@
  * User page callbacks for tracker.module.
  */
 
-use Drupal\Component\Utility\String;
-
+use Drupal\Core\Cache\Cache;
+use Drupal\node\Entity\Node;
 
 /**
  * Page callback: Generates a page of tracked nodes for the site.
  *
  * Queries the database for info, adds RDFa info if applicable, and generates
  * the render array that will be used to render the page.
+ *
+ * @param \Drupal\user\UserInterface $account
+ *   (optional) The user account to track.
  *
  * @return array
  *   A renderable array.
@@ -43,10 +46,11 @@ function tracker_page($account = NULL) {
     ->execute()
     ->fetchAllAssoc('nid');
 
-  $rows = array();
+  $cache_tags = [];
+  $rows = [];
   if (!empty($tracker_data)) {
     // Load nodes into an array with the same order as $tracker_data.
-    $nodes = entity_load_multiple('node', array_keys($tracker_data));
+    $nodes = Node::loadMultiple(array_keys($tracker_data));
 
     // Enrich the node data.
     $result = \Drupal::service('comment.statistics')->read($nodes, 'node', FALSE);
@@ -61,51 +65,91 @@ function tracker_page($account = NULL) {
       else {
         $nodes[$nid]->comment_count += $statistics->comment_count;
       }
-
-      $nodes[$nid]->last_activity = $tracker_data[$nid]->changed;
+      // Make the last comment timestamp reflect the latest comment.
+      if (!isset($nodes[$nid]->last_comment_timestamp)) {
+        $nodes[$nid]->last_comment_timestamp = $statistics->last_comment_timestamp;
+      }
+      else {
+        $nodes[$nid]->last_comment_timestamp = max($nodes[$nid]->last_comment_timestamp, $statistics->last_comment_timestamp);
+      }
     }
 
     // Display the data.
     foreach ($nodes as $node) {
+      // Set the last activity time from tracker data. This also takes into
+      // account comment activity, so getChangedTime() is not used.
+      $node->last_activity = $tracker_data[$node->id()]->changed;
+
       // Determine the number of comments.
       $comments = 0;
       if ($node->comment_count) {
         $comments = $node->comment_count;
-
-        if ($new = \Drupal::service('comment.manager')->getCountNewComments($node)) {
-          $comments .= '<br />';
-          $comments .= \Drupal::l(format_plural($new, '1 new', '@count new'), $node->urlInfo()->setOptions(array('fragment' => 'new')));
-        }
       }
 
-      $mark_build = array(
-        '#theme' => 'mark',
-        '#status' => node_mark($node->id(), $node->getChangedTime()),
-      );
-
       $row = array(
-        'type' => String::checkPlain(node_get_type_label($node)),
-        'title' => array('data' => \Drupal::l($node->getTitle(), $node->urlInfo()) . ' ' . drupal_render($mark_build)),
-        'author' => array('data' => array('#theme' => 'username', '#account' => $node->getOwner())),
-        'replies' => array('class' => array('replies'), 'data' => $comments),
-        'last updated' => array('data' => t('!time ago', array('!time' => \Drupal::service('date.formatter')->formatInterval(REQUEST_TIME - $node->last_activity)))),
+        'type' => node_get_type_label($node),
+        'title' => array(
+          'data' => array(
+            '#type' => 'link',
+            '#url' => $node->urlInfo(),
+            '#title' => $node->getTitle(),
+          ),
+          'data-history-node-id' => $node->id(),
+          'data-history-node-timestamp' => $node->getChangedTime(),
+        ),
+        'author' => array(
+          'data' => array(
+            '#theme' => 'username',
+            '#account' => $node->getOwner(),
+          ),
+        ),
+        'comments' => array(
+          'class' => array('comments'),
+          'data' => $comments,
+          'data-history-node-last-comment-timestamp' => $node->last_comment_timestamp,
+        ),
+        'last updated' => array(
+          'data' => t('@time ago', array(
+            '@time' => \Drupal::service('date.formatter')->formatTimeDiffSince($node->last_activity),
+          )),
+        ),
       );
 
       $rows[] = $row;
+
+      // Add node and node owner to cache tags.
+      $cache_tags = Cache::mergeTags($cache_tags, $node->getCacheTags());
+      if ($node->getOwner()) {
+        $cache_tags = Cache::mergeTags($cache_tags, $node->getOwner()->getCacheTags());
+      }
     }
   }
 
+  // Add the list cache tag for nodes.
+  $cache_tags = Cache::mergeTags($cache_tags, \Drupal::entityManager()->getDefinition('node')->getListCacheTags());
+
   $page['tracker'] = array(
     '#rows' => $rows,
-    '#header' => array(t('Type'), t('Title'), t('Author'), t('Replies'), t('Last updated')),
+    '#header' => array(t('Type'), t('Title'), t('Author'), t('Comments'), t('Last updated')),
     '#type' => 'table',
     '#empty' => t('No content available.'),
   );
   $page['pager'] = array(
-    '#theme' => 'pager',
+    '#type' => 'pager',
     '#weight' => 10,
   );
   $page['#sorted'] = TRUE;
+  $page['#cache']['tags'] = $cache_tags;
+  $page['#cache']['contexts'][] = 'user.node_grants:view';
+
+  // Display the reading history if that module is enabled.
+  if (\Drupal::moduleHandler()->moduleExists('history')) {
+    // Reading history is tracked for authenticated users only.
+    if (\Drupal::currentUser()->isAuthenticated()) {
+      $page['#attached']['library'][] = 'tracker/history';
+    }
+    $page['#cache']['contexts'][] = 'user.roles:authenticated';
+  }
 
   return $page;
 }

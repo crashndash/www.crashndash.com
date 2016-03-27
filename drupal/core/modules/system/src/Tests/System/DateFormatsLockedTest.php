@@ -20,7 +20,7 @@ class DateFormatsLockedTest extends WebTestBase {
    * Tests attempts at listing, editing, and deleting locked date formats.
    */
   public function testDateLocking() {
-    $this->drupalLogin($this->root_user);
+    $this->drupalLogin($this->rootUser);
 
     // Locked date formats are not linked on the listing page, locked date
     // formats are clearly marked as such; unlocked formats are not marked as
@@ -28,7 +28,7 @@ class DateFormatsLockedTest extends WebTestBase {
     $this->drupalGet('admin/config/regional/date-time');
     $this->assertLinkByHref('admin/config/regional/date-time/formats/manage/short');
     $this->assertNoLinkByHref('admin/config/regional/date-time/formats/manage/html_date');
-    $this->assertText('fallback (locked)');
+    $this->assertText('Fallback date format');
     $this->assertNoText('short (locked)');
 
     // Locked date formats are not editable.

@@ -7,11 +7,13 @@
 
 namespace Drupal\Core\Controller;
 
+use Drupal\Core\DependencyInjection\ClassResolverInterface;
 use Drupal\Core\Routing\RouteMatch;
-use Psr\Log\LoggerInterface;
+use Drupal\Core\Routing\RouteMatchInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Symfony\Bridge\PsrHttpMessage\HttpMessageFactoryInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Controller\ControllerResolver as BaseControllerResolver;
-use Drupal\Core\DependencyInjection\ClassResolverInterface;
 
 /**
  * ControllerResolver to enhance controllers beyond Symfony's basic handling.
@@ -31,13 +33,6 @@ use Drupal\Core\DependencyInjection\ClassResolverInterface;
 class ControllerResolver extends BaseControllerResolver implements ControllerResolverInterface {
 
   /**
-   * The PSR-3 logger. (optional)
-   *
-   * @var \Psr\Log\LoggerInterface;
-   */
-  protected $logger;
-
-  /**
    * The class resolver.
    *
    * @var \Drupal\Core\DependencyInjection\ClassResolverInterface
@@ -45,17 +40,24 @@ class ControllerResolver extends BaseControllerResolver implements ControllerRes
   protected $classResolver;
 
   /**
+   * The PSR-7 converter.
+   *
+   * @var \Symfony\Bridge\PsrHttpMessage\HttpMessageFactoryInterface
+   */
+  protected $httpMessageFactory;
+
+  /**
    * Constructs a new ControllerResolver.
+   *
+   * @param \Symfony\Bridge\PsrHttpMessage\HttpMessageFactoryInterface $http_message_factory
+   *   The PSR-7 converter.
    *
    * @param \Drupal\Core\DependencyInjection\ClassResolverInterface $class_resolver
    *   The class resolver.
-   * @param \Psr\Log\LoggerInterface $logger
-   *   (optional) A LoggerInterface instance.
    */
-  public function __construct(ClassResolverInterface $class_resolver, LoggerInterface $logger = NULL) {
+  public function __construct(HttpMessageFactoryInterface $http_message_factory, ClassResolverInterface $class_resolver) {
+    $this->httpMessageFactory = $http_message_factory;
     $this->classResolver = $class_resolver;
-
-    parent::__construct($logger);
   }
 
   /**
@@ -67,11 +69,11 @@ class ControllerResolver extends BaseControllerResolver implements ControllerRes
     }
 
     if (strpos($controller, ':') === FALSE) {
-      if (method_exists($controller, '__invoke')) {
-        return new $controller;
-      }
-      elseif (function_exists($controller)) {
+      if (function_exists($controller)) {
         return $controller;
+      }
+      elseif (method_exists($controller, '__invoke')) {
+        return new $controller;
       }
     }
 
@@ -90,10 +92,6 @@ class ControllerResolver extends BaseControllerResolver implements ControllerRes
    */
   public function getController(Request $request) {
     if (!$controller = $request->attributes->get('_controller')) {
-      if ($this->logger !== NULL) {
-        $this->logger->warning('Unable to look for the controller as the "_controller" parameter is missing');
-      }
-
       return FALSE;
     }
     return $this->getControllerFromDefinition($controller, $request->getPathInfo());
@@ -109,10 +107,10 @@ class ControllerResolver extends BaseControllerResolver implements ControllerRes
    *   A PHP callable.
    *
    * @throws \LogicException
-   *   If the controller cannot be parsed
+   *   If the controller cannot be parsed.
    *
    * @throws \InvalidArgumentException
-   *   If the controller class does not exist
+   *   If the controller class does not exist.
    */
   protected function createController($controller) {
     // Controller in the service:method notation.
@@ -138,15 +136,22 @@ class ControllerResolver extends BaseControllerResolver implements ControllerRes
    */
   protected function doGetArguments(Request $request, $controller, array $parameters) {
     $attributes = $request->attributes->all();
+    $raw_parameters = $request->attributes->has('_raw_variables') ? $request->attributes->get('_raw_variables') : [];
     $arguments = array();
     foreach ($parameters as $param) {
       if (array_key_exists($param->name, $attributes)) {
         $arguments[] = $attributes[$param->name];
       }
+      elseif (array_key_exists($param->name, $raw_parameters)) {
+        $arguments[] = $attributes[$param->name];
+      }
       elseif ($param->getClass() && $param->getClass()->isInstance($request)) {
         $arguments[] = $request;
       }
-      elseif ($param->getClass() && ($param->getClass()->name == 'Drupal\Core\Routing\RouteMatchInterface' || is_subclass_of($param->getClass()->name, 'Drupal\Core\Routing\RouteMatchInterface'))) {
+      elseif ($param->getClass() && $param->getClass()->name === ServerRequestInterface::class) {
+        $arguments[] = $this->httpMessageFactory->createRequest($request);
+      }
+      elseif ($param->getClass() && ($param->getClass()->name == RouteMatchInterface::class || is_subclass_of($param->getClass()->name, RouteMatchInterface::class))) {
         $arguments[] = RouteMatch::createFromRequest($request);
       }
       elseif ($param->isDefaultValueAvailable()) {
@@ -164,21 +169,6 @@ class ControllerResolver extends BaseControllerResolver implements ControllerRes
         }
 
         throw new \RuntimeException(sprintf('Controller "%s" requires that you provide a value for the "$%s" argument (because there is no default value or because there is a non optional argument after this one).', $repr, $param->name));
-      }
-    }
-
-    // The parameter converter overrides the raw request attributes with the
-    // upcasted objects. However, it keeps a backup copy of the original, raw
-    // values in a special request attribute ('_raw_variables'). If a controller
-    // argument has a type hint, we pass it the upcasted object, otherwise we
-    // pass it the original, raw value.
-    if ($request->attributes->has('_raw_variables') && $raw = $request->attributes->get('_raw_variables')->all()) {
-      foreach ($parameters as $parameter) {
-        // Use the raw value if a parameter has no typehint.
-        if (!$parameter->getClass() && isset($raw[$parameter->name])) {
-          $position = $parameter->getPosition();
-          $arguments[$position] = $raw[$parameter->name];
-        }
       }
     }
     return $arguments;

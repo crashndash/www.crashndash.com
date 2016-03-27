@@ -9,13 +9,12 @@ namespace Drupal\Core\Entity;
 
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\Display\EntityViewDisplayInterface;
+use Drupal\Core\Entity\Entity\EntityViewDisplay;
 use Drupal\Core\Field\FieldItemInterface;
 use Drupal\Core\Field\FieldItemListInterface;
-use Drupal\Core\Language\LanguageInterface;
 use Drupal\Core\Language\LanguageManagerInterface;
-use Drupal\Core\TypedData\TranslatableInterface;
 use Drupal\Core\Render\Element;
-use Drupal\Core\Entity\Entity\EntityViewDisplay;
+use Drupal\Core\TypedData\TranslatableInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -59,6 +58,15 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
    * @param \Drupal\Core\Language\LanguageManagerInterface $language_manager
    */
   protected $languageManager;
+
+  /**
+   * The EntityViewDisplay objects created for individual field rendering.
+   *
+   * @see \Drupal\Core\Entity\EntityViewBuilder::getSingleFieldDisplay()
+   *
+   * @param \Drupal\Core\Entity\Display\EntityViewDisplayInterface[]
+   */
+  protected $singleFieldDisplays;
 
   /**
    * Constructs a new EntityViewBuilder.
@@ -108,14 +116,9 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
    * {@inheritdoc}
    */
   public function viewMultiple(array $entities = array(), $view_mode = 'full', $langcode = NULL) {
-    if (!isset($langcode)) {
-      $langcode = $this->languageManager->getCurrentLanguage(LanguageInterface::TYPE_CONTENT)->getId();
-    }
-
     $build_list = array(
       '#sorted' => TRUE,
       '#pre_render' => array(array($this, 'buildMultiple')),
-      '#langcode' => $langcode,
     );
     $weight = 0;
     foreach ($entities as $key => $entity) {
@@ -124,9 +127,9 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
       $entity = $this->entityManager->getTranslationFromContext($entity, $langcode);
 
       // Set build defaults.
-      $build_list[$key] = $this->getBuildDefaults($entity, $view_mode, $langcode);
+      $build_list[$key] = $this->getBuildDefaults($entity, $view_mode);
       $entityType = $this->entityTypeId;
-      $this->moduleHandler()->alter(array($entityType . '_build_defaults', 'entity_build_defaults'), $build_list[$key], $entity, $view_mode, $langcode);
+      $this->moduleHandler()->alter(array($entityType . '_build_defaults', 'entity_build_defaults'), $build_list[$key], $entity, $view_mode);
 
       $build_list[$key]['#weight'] = $weight++;
     }
@@ -141,25 +144,23 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
    *   The entity for which the defaults should be provided.
    * @param string $view_mode
    *   The view mode that should be used.
-   * @param string $langcode
-   *   For which language the entity should be prepared, defaults to
-   *   the current content language.
    *
    * @return array
    */
-  protected function getBuildDefaults(EntityInterface $entity, $view_mode, $langcode) {
+  protected function getBuildDefaults(EntityInterface $entity, $view_mode) {
     // Allow modules to change the view mode.
-    $context = array('langcode' => $langcode);
+    $context = [];
     $this->moduleHandler()->alter('entity_view_mode', $view_mode, $entity, $context);
 
     $build = array(
       '#theme' => $this->entityTypeId,
       "#{$this->entityTypeId}" => $entity,
       '#view_mode' => $view_mode,
-      '#langcode' => $langcode,
       // Collect cache defaults for this entity.
       '#cache' => array(
-        'tags' => Cache::mergeTags($this->getCacheTag(), $entity->getCacheTag()),
+        'tags' => Cache::mergeTags($this->getCacheTags(), $entity->getCacheTags()),
+        'contexts' => $entity->getCacheContexts(),
+        'max-age' => $entity->getCacheMaxAge(),
       ),
     );
 
@@ -172,17 +173,12 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
           $this->entityTypeId,
           $entity->id(),
           $view_mode,
-          'cache_context.theme',
-          'cache_context.user.roles',
-          // @todo Move this out of here and into field formatters that depend
-          //       on the timezone. Blocked on https://drupal.org/node/2099137.
-          'cache_context.timezone',
         ),
         'bin' => $this->cacheBin,
       );
 
       if ($entity instanceof TranslatableInterface && count($entity->getTranslationLanguages()) > 1) {
-        $build['#cache']['keys'][] = $langcode;
+        $build['#cache']['keys'][] = $entity->language()->getId();
       }
     }
 
@@ -208,10 +204,7 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
    * @see drupal_render()
    */
   public function build(array $build) {
-    $build_list = array(
-      '#langcode' => $build['#langcode'],
-    );
-    $build_list[] = $build;
+    $build_list = [$build];
     $build_list = $this->buildMultiple($build_list);
     return $build_list[0];
   }
@@ -237,7 +230,6 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
   public function buildMultiple(array $build_list) {
     // Build the view modes and display objects.
     $view_modes = array();
-    $langcode = $build_list['#langcode'];
     $entity_type_key = "#{$this->entityTypeId}";
     $view_hook = "{$this->entityTypeId}_view";
 
@@ -256,21 +248,21 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
     // Build content for the displays represented by the entities.
     foreach ($view_modes as $view_mode => $view_mode_entities) {
       $displays = EntityViewDisplay::collectRenderDisplays($view_mode_entities, $view_mode);
-      $this->buildComponents($build_list, $view_mode_entities, $displays, $view_mode, $langcode);
+      $this->buildComponents($build_list, $view_mode_entities, $displays, $view_mode);
       foreach (array_keys($view_mode_entities) as $key) {
         // Allow for alterations while building, before rendering.
         $entity = $build_list[$key][$entity_type_key];
         $display = $displays[$entity->bundle()];
 
-        $this->moduleHandler()->invokeAll($view_hook, array(&$build_list[$key], $entity, $display, $view_mode, $langcode));
-        $this->moduleHandler()->invokeAll('entity_view', array(&$build_list[$key], $entity, $display, $view_mode, $langcode));
+        $this->moduleHandler()->invokeAll($view_hook, [&$build_list[$key], $entity, $display, $view_mode]);
+        $this->moduleHandler()->invokeAll('entity_view', [&$build_list[$key], $entity, $display, $view_mode]);
 
-        $this->alterBuild($build_list[$key], $entity, $display, $view_mode, $langcode);
+        $this->alterBuild($build_list[$key], $entity, $display, $view_mode);
 
         // Assign the weights configured in the display.
-        // @todo: Once https://drupal.org/node/1875974 provides the missing API,
-        //   only do it for 'extra fields', since other components have been
-        //   taken care of in EntityViewDisplay::buildMultiple().
+        // @todo: Once https://www.drupal.org/node/1875974 provides the missing
+        //   API, only do it for 'extra fields', since other components have
+        //   been taken care of in EntityViewDisplay::buildMultiple().
         foreach ($display->getComponents() as $name => $options) {
           if (isset($build_list[$key][$name])) {
             $build_list[$key][$name]['#weight'] = $options['weight'];
@@ -288,7 +280,7 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
   /**
    * {@inheritdoc}
    */
-  public function buildComponents(array &$build, array $entities, array $displays, $view_mode, $langcode = NULL) {
+  public function buildComponents(array &$build, array $entities, array $displays, $view_mode) {
     $entities_by_bundle = array();
     foreach ($entities as $id => $entity) {
       // Initialize the field item attributes for the fields being displayed.
@@ -332,16 +324,13 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
    *   entity components.
    * @param string $view_mode
    *   The view mode that should be used to prepare the entity.
-   * @param string $langcode
-   *   (optional) For which language the entity should be prepared, defaults to
-   *   the current content language.
    */
-  protected function alterBuild(array &$build, EntityInterface $entity, EntityViewDisplayInterface $display, $view_mode, $langcode = NULL) { }
+  protected function alterBuild(array &$build, EntityInterface $entity, EntityViewDisplayInterface $display, $view_mode) { }
 
   /**
    * {@inheritdoc}
    */
-  public function getCacheTag() {
+  public function getCacheTags() {
     return array($this->entityTypeId . '_view');
   }
 
@@ -362,17 +351,18 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
     if (isset($entities)) {
       $tags = [];
       foreach ($entities as $entity) {
-        $tags = Cache::mergeTags($tags, $entity->getCacheTag(), $entity->getEntityType()->getListCacheTags());
+        $tags = Cache::mergeTags($tags, $entity->getCacheTags());
+        $tags = Cache::mergeTags($tags, $entity->getEntityType()->getListCacheTags());
       }
       Cache::invalidateTags($tags);
     }
     else {
-      Cache::invalidateTags($this->getCacheTag());
+      Cache::invalidateTags($this->getCacheTags());
     }
   }
 
   /**
-   * Returns TRUE if the view mode is cacheable.
+   * Determines whether the view mode is cacheable.
    *
    * @param string $view_mode
    *   Name of the view mode that should be rendered.
@@ -393,32 +383,11 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
    * {@inheritdoc}
    */
   public function viewField(FieldItemListInterface $items, $display_options = array()) {
-    $output = array();
     $entity = $items->getEntity();
     $field_name = $items->getFieldDefinition()->getName();
+    $display = $this->getSingleFieldDisplay($entity, $field_name, $display_options);
 
-    // Get the display object.
-    if (is_string($display_options)) {
-      $view_mode = $display_options;
-      $display = EntityViewDisplay::collectRenderDisplay($entity, $view_mode);
-      // Hide all fields except the current one.
-      foreach (array_keys($entity->getFieldDefinitions()) as $name) {
-        if ($name != $field_name) {
-          $display->removeComponent($name);
-        }
-      }
-    }
-    else {
-      $view_mode = '_custom';
-      $display = entity_create('entity_view_display', array(
-        'targetEntityType' => $entity->getEntityTypeId(),
-        'bundle' => $entity->bundle(),
-        'mode' => $view_mode,
-        'status' => TRUE,
-      ));
-      $display->setComponent($field_name, $display_options);
-    }
-
+    $output = array();
     $build = $display->build($entity);
     if (isset($build[$field_name])) {
       $output = $build[$field_name];
@@ -449,6 +418,51 @@ class EntityViewBuilder extends EntityHandlerBase implements EntityHandlerInterf
     }
 
     return $output;
+  }
+
+  /**
+   * Gets an EntityViewDisplay for rendering an individual field.
+   *
+   * @param \Drupal\Core\Entity\EntityInterface $entity
+   *   The entity.
+   * @param string $field_name
+   *   The field name.
+   * @param string|array $display_options
+   *   The display options passed to the viewField() method.
+   *
+   * @return \Drupal\Core\Entity\Display\EntityViewDisplayInterface
+   */
+  protected function getSingleFieldDisplay($entity, $field_name, $display_options) {
+    if (is_string($display_options)) {
+      // View mode: use the Display configured for the view mode.
+      $view_mode = $display_options;
+      $display = EntityViewDisplay::collectRenderDisplay($entity, $view_mode);
+      // Hide all fields except the current one.
+      foreach (array_keys($entity->getFieldDefinitions()) as $name) {
+        if ($name != $field_name) {
+          $display->removeComponent($name);
+        }
+      }
+    }
+    else {
+      // Array of custom display options: use a runtime Display for the
+      // '_custom' view mode. Persist the displays created, to reduce the number
+      // of objects (displays and formatter plugins) created when rendering a
+      // series of fields individually for cases such as views tables.
+      $entity_type_id = $entity->getEntityTypeId();
+      $bundle = $entity->bundle();
+      $key = $entity_type_id . ':' . $bundle . ':' . $field_name . ':' . hash('crc32b', serialize($display_options));
+      if (!isset($this->singleFieldDisplays[$key])) {
+        $this->singleFieldDisplays[$key] = EntityViewDisplay::create(array(
+          'targetEntityType' => $entity_type_id,
+          'bundle' => $bundle,
+          'status' => TRUE,
+        ))->setComponent($field_name, $display_options);
+      }
+      $display = $this->singleFieldDisplays[$key];
+    }
+
+    return $display;
   }
 
 }

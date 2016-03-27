@@ -7,6 +7,9 @@
 
 namespace Drupal\file\Tests;
 
+use Drupal\node\Entity\Node;
+use Drupal\file\Entity\File;
+
 /**
  * Tests file listing page functionality.
  *
@@ -21,11 +24,18 @@ class FileListingTest extends FileFieldTestBase {
    */
   public static $modules = array('views', 'file', 'image');
 
+  /**
+   * An authenticated user.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $baseUser;
+
   protected function setUp() {
     parent::setUp();
 
-    $this->admin_user = $this->drupalCreateUser(array('access files overview', 'bypass node access'));
-    $this->base_user = $this->drupalCreateUser();
+    $this->adminUser = $this->drupalCreateUser(array('access files overview', 'bypass node access'));
+    $this->baseUser = $this->drupalCreateUser();
     $this->createFileField('file', 'node', 'article', array(), array('file_extensions' => 'txt png'));
   }
 
@@ -56,12 +66,12 @@ class FileListingTest extends FileFieldTestBase {
   function testFileListingPages() {
     $file_usage = $this->container->get('file.usage');
     // Users without sufficient permissions should not see file listing.
-    $this->drupalLogin($this->base_user);
+    $this->drupalLogin($this->baseUser);
     $this->drupalGet('admin/content/files');
     $this->assertResponse(403);
 
     // Login with user with right permissions and test listing.
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
 
     for ($i = 0; $i < 5; $i++) {
       $nodes[] = $this->drupalCreateNode(array('type' => 'article'));
@@ -88,18 +98,18 @@ class FileListingTest extends FileFieldTestBase {
         'files[file_0]' => drupal_realpath($file->getFileUri()),
       );
       $this->drupalPostForm(NULL, $edit, t('Save'));
-      $node = entity_load('node', $node->id());
+      $node = Node::load($node->id());
     }
 
     $this->drupalGet('admin/content/files');
 
     foreach ($nodes as $node) {
-      $file = entity_load('file', $node->file->target_id);
+      $file = File::load($node->file->target_id);
       $this->assertText($file->getFilename());
       $this->assertLinkByHref(file_create_url($file->getFileUri()));
       $this->assertLinkByHref('admin/content/files/usage/' . $file->id());
     }
-    $this->assertFalse(preg_match('/views-field-status priority-low\">\s*' . t('Temporary') . '/', $this->drupalGetContent()), 'All files are stored as permanent.');
+    $this->assertFalse(preg_match('/views-field-status priority-low\">\s*' . t('Temporary') . '/', $this->getRawContent()), 'All files are stored as permanent.');
 
     // Use one file two times and check usage information.
     $orphaned_file = $nodes[1]->file->target_id;
@@ -108,11 +118,11 @@ class FileListingTest extends FileFieldTestBase {
     $nodes[1]->save();
 
     $this->drupalGet('admin/content/files');
-    $file = entity_load('file', $orphaned_file);
+    $file = File::load($orphaned_file);
     $usage = $this->sumUsages($file_usage->listUsage($file));
     $this->assertRaw('admin/content/files/usage/' . $file->id() . '">' . $usage);
 
-    $file = entity_load('file', $used_file);
+    $file = File::load($used_file);
     $usage = $this->sumUsages($file_usage->listUsage($file));
     $this->assertRaw('admin/content/files/usage/' . $file->id() . '">' . $usage);
 
@@ -121,7 +131,7 @@ class FileListingTest extends FileFieldTestBase {
 
     // Test file usage page.
     foreach ($nodes as $node) {
-      $file = entity_load('file', $node->file->target_id);
+      $file = File::load($node->file->target_id);
       $usage = $file_usage->listUsage($file);
       $this->drupalGet('admin/content/files/usage/' . $file->id());
       $this->assertResponse(200);

@@ -7,11 +7,12 @@
 
 namespace Drupal\filter\Element;
 
-use Drupal\Component\Utility\NestedArray;
 use Drupal\Core\Cache\Cache;
+use Drupal\Core\Render\BubbleableMetadata;
 use Drupal\Core\Render\Element\RenderElement;
 use Drupal\filter\Entity\FilterFormat;
 use Drupal\filter\Plugin\FilterInterface;
+use Drupal\filter\Render\FilteredMarkup;
 
 /**
  * Provides a processed text render element.
@@ -75,10 +76,13 @@ class ProcessedText extends RenderElement {
     if (!isset($format_id)) {
       $format_id = static::configFactory()->get('filter.settings')->get('fallback_format');
     }
-    // If the requested text format does not exist, the text cannot be filtered.
     /** @var \Drupal\filter\Entity\FilterFormat $format **/
-    if (!$format = FilterFormat::load($format_id)) {
-      static::logger('filter')->alert('Missing text format: %format.', array('%format' => $format_id));
+    $format = FilterFormat::load($format_id);
+    // If the requested text format doesn't exist or its disabled, the text
+    // cannot be filtered.
+    if (!$format || !$format->status()) {
+      $message = !$format ? 'Missing text format: %format.' : 'Disabled text format: %format.';
+      static::logger('filter')->alert($message, array('%format' => $format_id));
       $element['#markup'] = '';
       return $element;
     }
@@ -107,44 +111,26 @@ class ProcessedText extends RenderElement {
     }
 
     // Perform filtering.
-    $cache_tags = array();
-    $all_assets = array();
-    $all_post_render_cache_callbacks = array();
+    $metadata = BubbleableMetadata::createFromRenderArray($element);
     foreach ($filters as $filter) {
       if ($filter_must_be_applied($filter)) {
         $result = $filter->process($text, $langcode);
-        $all_assets[] = $result->getAssets();
-        $cache_tags = Cache::mergeTags($cache_tags, $result->getCacheTags());
-        $all_post_render_cache_callbacks[] = $result->getPostRenderCacheCallbacks();
+        $metadata = $metadata->merge($result);
         $text = $result->getProcessedText();
       }
     }
 
-    // Filtering done, store in #markup.
-    $element['#markup'] = $text;
+    // Filtering and sanitizing have been done in
+    // \Drupal\filter\Plugin\FilterInterface. $text is not guaranteed to be
+    // safe, but it has been passed through the filter system and checked with
+    // a text format, so it must be printed as is. (See the note about security
+    // in the method documentation above.)
+    $element['#markup'] = FilteredMarkup::create($text);
 
-    // Collect all cache tags.
-    if (isset($element['#cache']) && isset($element['#cache']['tags'])) {
-      // Merge the original cache tags array.
-      $cache_tags = Cache::mergeTags($cache_tags, $element['#cache']['tags']);
-    }
-    // Prepend the text format's cache tags array.
-    $cache_tags = Cache::mergeTags($cache_tags, $format->getCacheTag());
-    $element['#cache']['tags'] = $cache_tags;
-
-    // Collect all attached assets.
-    if (isset($element['#attached'])) {
-      // Prepend the original attached assets array.
-      array_unshift($all_assets, $element['#attached']);
-    }
-    $element['#attached'] = NestedArray::mergeDeepArray($all_assets);
-
-    // Collect all #post_render_cache callbacks.
-    if (isset($element['#post_render_cache'])) {
-      // Prepend the original attached #post_render_cache array.
-      array_unshift($all_assets, $element['#post_render_cache']);
-    }
-    $element['#post_render_cache'] = NestedArray::mergeDeepArray($all_post_render_cache_callbacks);
+    // Set the updated bubbleable rendering metadata and the text format's
+    // cache tag.
+    $metadata->applyTo($element);
+    $element['#cache']['tags'] = Cache::mergeTags($element['#cache']['tags'], $format->getCacheTags());
 
     return $element;
   }
@@ -152,7 +138,11 @@ class ProcessedText extends RenderElement {
   /**
    * Wraps a logger channel.
    *
+   * @param string $channel
+   *   The name of the channel.
+   *
    * @return \Psr\Log\LoggerInterface
+   *   The logger for this channel.
    */
   protected static function logger($channel) {
     return \Drupal::logger($channel);

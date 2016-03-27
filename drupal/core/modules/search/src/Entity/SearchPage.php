@@ -10,10 +10,9 @@ namespace Drupal\search\Entity;
 use Drupal\Core\Config\Entity\ConfigEntityBase;
 use Drupal\Core\Config\Entity\ConfigEntityInterface;
 use Drupal\Core\Entity\EntityStorageInterface;
-use Drupal\Component\Plugin\ConfigurablePluginInterface;
-use Drupal\Core\Entity\EntityWithPluginBagsInterface;
+use Drupal\Core\Entity\EntityWithPluginCollectionInterface;
 use Drupal\search\Plugin\SearchIndexingInterface;
-use Drupal\search\Plugin\SearchPluginBag;
+use Drupal\search\Plugin\SearchPluginCollection;
 use Drupal\search\SearchPageInterface;
 
 /**
@@ -24,22 +23,22 @@ use Drupal\search\SearchPageInterface;
  *   label = @Translation("Search page"),
  *   handlers = {
  *     "access" = "Drupal\search\SearchPageAccessControlHandler",
- *     "storage" = "Drupal\Core\Config\Entity\ConfigEntityStorage",
  *     "list_builder" = "Drupal\search\SearchPageListBuilder",
  *     "form" = {
  *       "add" = "Drupal\search\Form\SearchPageAddForm",
  *       "edit" = "Drupal\search\Form\SearchPageEditForm",
  *       "search" = "Drupal\search\Form\SearchPageForm",
- *       "delete" = "Drupal\search\Form\SearchPageDeleteForm"
+ *       "delete" = "Drupal\Core\Entity\EntityDeleteForm"
  *     }
  *   },
  *   admin_permission = "administer search",
  *   links = {
- *     "edit-form" = "entity.search_page.edit_form",
- *     "delete-form" = "entity.search_page.delete_form",
- *     "enable" = "entity.search_page.enable",
- *     "disable" = "entity.search_page.disable",
- *     "set-default" = "entity.search_page.set_default"
+ *     "edit-form" = "/admin/config/search/pages/manage/{search_page}",
+ *     "delete-form" = "/admin/config/search/pages/manage/{search_page}/delete",
+ *     "enable" = "/admin/config/search/pages/manage/{search_page}/enable",
+ *     "disable" = "/admin/config/search/pages/manage/{search_page}/disable",
+ *     "set-default" = "/admin/config/search/pages/manage/{search_page}/set-default",
+ *     "collection" = "/admin/config/search/pages",
  *   },
  *   config_prefix = "page",
  *   entity_keys = {
@@ -47,24 +46,32 @@ use Drupal\search\SearchPageInterface;
  *     "label" = "label",
  *     "weight" = "weight",
  *     "status" = "status"
+ *   },
+ *   config_export = {
+ *     "id",
+ *     "label",
+ *     "path",
+ *     "weight",
+ *     "plugin",
+ *     "configuration",
  *   }
  * )
  */
-class SearchPage extends ConfigEntityBase implements SearchPageInterface, EntityWithPluginBagsInterface {
+class SearchPage extends ConfigEntityBase implements SearchPageInterface, EntityWithPluginCollectionInterface {
 
   /**
    * The name (plugin ID) of the search page entity.
    *
    * @var string
    */
-  public $id;
+  protected $id;
 
   /**
    * The label of the search page entity.
    *
    * @var string
    */
-  public $label;
+  protected $label;
 
   /**
    * The configuration of the search page entity.
@@ -97,37 +104,37 @@ class SearchPage extends ConfigEntityBase implements SearchPageInterface, Entity
   protected $weight;
 
   /**
-   * The plugin bag that stores search plugins.
+   * The plugin collection that stores search plugins.
    *
-   * @var \Drupal\search\Plugin\SearchPluginBag
+   * @var \Drupal\search\Plugin\SearchPluginCollection
    */
-  protected $pluginBag;
+  protected $pluginCollection;
 
   /**
    * {@inheritdoc}
    */
   public function getPlugin() {
-    return $this->getPluginBag()->get($this->plugin);
+    return $this->getPluginCollection()->get($this->plugin);
   }
 
   /**
-   * Encapsulates the creation of the search page's PluginBag.
+   * Encapsulates the creation of the search page's LazyPluginCollection.
    *
-   * @return \Drupal\Component\Plugin\PluginBag
-   *   The search page's plugin bag.
+   * @return \Drupal\Component\Plugin\LazyPluginCollection
+   *   The search page's plugin collection.
    */
-  protected function getPluginBag() {
-    if (!$this->pluginBag) {
-      $this->pluginBag = new SearchPluginBag($this->searchPluginManager(), $this->plugin, $this->configuration, $this->id());
+  protected function getPluginCollection() {
+    if (!$this->pluginCollection) {
+      $this->pluginCollection = new SearchPluginCollection($this->searchPluginManager(), $this->plugin, $this->configuration, $this->id());
     }
-    return $this->pluginBag;
+    return $this->pluginCollection;
   }
 
   /**
    * {@inheritdoc}
    */
-  public function getPluginBags() {
-    return array('configuration' => $this->getPluginBag());
+  public function getPluginCollections() {
+    return array('configuration' => $this->getPluginCollection());
   }
 
   /**
@@ -135,7 +142,7 @@ class SearchPage extends ConfigEntityBase implements SearchPageInterface, Entity
    */
   public function setPlugin($plugin_id) {
     $this->plugin = $plugin_id;
-    $this->getPluginBag()->addInstanceID($plugin_id);
+    $this->getPluginCollection()->addInstanceID($plugin_id);
   }
 
   /**
@@ -172,8 +179,8 @@ class SearchPage extends ConfigEntityBase implements SearchPageInterface, Entity
   public function postCreate(EntityStorageInterface $storage) {
     parent::postCreate($storage);
 
-    // @todo Use self::applyDefaultValue() once https://drupal.org/node/2004756
-    //   is in.
+    // @todo Use self::applyDefaultValue() once
+    //   https://www.drupal.org/node/2004756 is in.
     if (!isset($this->weight)) {
       $this->weight = $this->isDefaultSearch() ? -10 : 0;
     }
@@ -184,7 +191,7 @@ class SearchPage extends ConfigEntityBase implements SearchPageInterface, Entity
    */
   public function postSave(EntityStorageInterface $storage, $update = TRUE) {
     parent::postSave($storage, $update);
-    $this->routeBuilderIndicator()->setRebuildNeeded();
+    $this->routeBuilder()->setRebuildNeeded();
   }
 
   /**
@@ -216,11 +223,11 @@ class SearchPage extends ConfigEntityBase implements SearchPageInterface, Entity
   /**
    * Wraps the route builder.
    *
-   * @return \Drupal\Core\Routing\RouteBuilderIndicatorInterface
+   * @return \Drupal\Core\Routing\RouteBuilderInterface
    *   An object for state storage.
    */
-  protected function routeBuilderIndicator() {
-    return \Drupal::service('router.builder_indicator');
+  protected function routeBuilder() {
+    return \Drupal::service('router.builder');
   }
 
   /**

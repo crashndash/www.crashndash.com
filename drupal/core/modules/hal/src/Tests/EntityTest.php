@@ -2,10 +2,12 @@
 
 /**
  * @file
- * Contains \Drupal\hal\Tests\NormalizeTest.
+ * Contains \Drupal\hal\Tests\EntityTest.
  */
 
 namespace Drupal\hal\Tests;
+
+use Drupal\comment\Tests\CommentTestTrait;
 
 /**
  * Tests that nodes and terms are correctly normalized and denormalized.
@@ -13,6 +15,8 @@ namespace Drupal\hal\Tests;
  * @group hal
  */
 class EntityTest extends NormalizerTestBase {
+
+  use CommentTestTrait;
 
   /**
    * Modules to enable.
@@ -30,9 +34,8 @@ class EntityTest extends NormalizerTestBase {
     \Drupal::service('router.builder')->rebuild();
     $this->installSchema('system', array('sequences'));
     $this->installSchema('comment', array('comment_entity_statistics'));
-    $this->installEntitySchema('node');
-    $this->installEntitySchema('comment');
     $this->installEntitySchema('taxonomy_term');
+    $this->installConfig(['node', 'comment']);
   }
 
   /**
@@ -52,7 +55,7 @@ class EntityTest extends NormalizerTestBase {
       'target_entity_type_id' => 'node',
     ))->save();
 
-    $this->container->get('comment.manager')->addDefaultField('node', 'example_type');
+    $this->addDefaultCommentField('node', 'example_type');
 
     $node = entity_create('node', array(
       'title' => $this->randomMachineName(),
@@ -94,6 +97,9 @@ class EntityTest extends NormalizerTestBase {
     $vocabulary = entity_create('taxonomy_vocabulary', array('vid' => 'example_vocabulary'));
     $vocabulary->save();
 
+    $account = entity_create('user', array('name' => $this->randomMachineName()));
+    $account->save();
+
     // @todo Until https://www.drupal.org/node/2327935 is fixed, if no parent is
     // set, the test fails because target_id => 0 is reserialized to NULL.
     $term_parent = entity_create('taxonomy_term', array(
@@ -115,9 +121,9 @@ class EntityTest extends NormalizerTestBase {
     $original_values = $term->toArray();
     unset($original_values['tid']);
 
-    $normalized = $this->serializer->normalize($term, $this->format);
+    $normalized = $this->serializer->normalize($term, $this->format, ['account' => $account]);
 
-    $denormalized_term = $this->serializer->denormalize($normalized, 'Drupal\taxonomy\Entity\Term', $this->format);
+    $denormalized_term = $this->serializer->denormalize($normalized, 'Drupal\taxonomy\Entity\Term', $this->format, ['account' => $account]);
 
     // Verify that the ID and revision ID were skipped by the normalizer.
     $this->assertEqual(NULL, $denormalized_term->id());
@@ -135,8 +141,8 @@ class EntityTest extends NormalizerTestBase {
     $node_type = entity_create('node_type', array('type' => 'example_type'));
     $node_type->save();
 
-    $user = entity_create('user', array('name' => $this->randomMachineName()));
-    $user->save();
+    $account = entity_create('user', array('name' => $this->randomMachineName()));
+    $account->save();
 
     // Add comment type.
     $this->container->get('entity.manager')->getStorage('comment_type')->create(array(
@@ -145,11 +151,11 @@ class EntityTest extends NormalizerTestBase {
       'target_entity_type_id' => 'node',
     ))->save();
 
-    $this->container->get('comment.manager')->addDefaultField('node', 'example_type');
+    $this->addDefaultCommentField('node', 'example_type');
 
     $node = entity_create('node', array(
       'title' => $this->randomMachineName(),
-      'uid' => $user->id(),
+      'uid' => $account->id(),
       'type' => $node_type->id(),
       'status' => NODE_PUBLISHED,
       'promote' => 1,
@@ -162,7 +168,7 @@ class EntityTest extends NormalizerTestBase {
     $node->save();
 
     $parent_comment = entity_create('comment', array(
-      'uid' => $user->id(),
+      'uid' => $account->id(),
       'subject' => $this->randomMachineName(),
       'comment_body' => [
         'value' => $this->randomMachineName(),
@@ -175,7 +181,7 @@ class EntityTest extends NormalizerTestBase {
     $parent_comment->save();
 
     $comment = entity_create('comment', array(
-      'uid' => $user->id(),
+      'uid' => $account->id(),
       'subject' => $this->randomMachineName(),
       'comment_body' => [
         'value' => $this->randomMachineName(),
@@ -191,10 +197,17 @@ class EntityTest extends NormalizerTestBase {
     $comment->save();
 
     $original_values = $comment->toArray();
-    unset($original_values['cid']);
+    // cid will not exist and hostname will always be denied view access.
+    // No value will exist for name as this is only for anonymous users.
+    unset($original_values['cid'], $original_values['hostname'], $original_values['name']);
 
-    $normalized = $this->serializer->normalize($comment, $this->format);
-    $denormalized_comment = $this->serializer->denormalize($normalized, 'Drupal\comment\Entity\Comment', $this->format);
+    $normalized = $this->serializer->normalize($comment, $this->format, ['account' => $account]);
+
+    // Assert that the hostname field does not appear at all in the normalized
+    // data.
+    $this->assertFalse(array_key_exists('hostname', $normalized), 'Hostname was not found in normalized comment data.');
+
+    $denormalized_comment = $this->serializer->denormalize($normalized, 'Drupal\comment\Entity\Comment', $this->format, ['account' => $account]);
 
     // Verify that the ID and revision ID were skipped by the normalizer.
     $this->assertEqual(NULL, $denormalized_comment->id());

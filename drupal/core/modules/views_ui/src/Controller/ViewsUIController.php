@@ -7,12 +7,10 @@
 
 namespace Drupal\views_ui\Controller;
 
-use Drupal\Component\Utility\SafeMarkup;
-use Drupal\Component\Utility\String;
 use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Url;
 use Drupal\views\ViewExecutable;
-use Drupal\views\ViewStorageInterface;
+use Drupal\views\ViewEntityInterface;
 use Drupal\views\Views;
 use Drupal\views_ui\ViewUI;
 use Drupal\views\ViewsData;
@@ -21,6 +19,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\ReplaceCommand;
+use Drupal\Component\Utility\Html;
 
 /**
  * Returns responses for Views UI routes.
@@ -90,11 +89,16 @@ class ViewsUIController extends ControllerBase {
     $header = array(t('Field name'), t('Used in'));
     $rows = array();
     foreach ($fields as $field_name => $views) {
-      $rows[$field_name]['data'][0] = String::checkPlain($field_name);
+      $rows[$field_name]['data'][0]['data']['#plain_text'] = $field_name;
       foreach ($views as $view) {
         $rows[$field_name]['data'][1][] = $this->l($view, new Url('entity.view.edit_form', array('view' => $view)));
       }
-      $rows[$field_name]['data'][1] = SafeMarkup::set(implode(', ', $rows[$field_name]['data'][1]));
+      $item_list = [
+        '#theme' => 'item_list',
+        '#items' => $rows[$field_name]['data'][1],
+        '#context' => ['list_style' => 'comma-list'],
+      ];
+      $rows[$field_name]['data'][1] = ['data' => $item_list];
     }
 
     // Sort rows by field name.
@@ -118,11 +122,17 @@ class ViewsUIController extends ControllerBase {
   public function reportPlugins() {
     $rows = Views::pluginList();
     foreach ($rows as &$row) {
+      $views = [];
       // Link each view name to the view itself.
       foreach ($row['views'] as $row_name => $view) {
-        $row['views'][$row_name] = $this->l($view, new Url('entity.view.edit_form', array('view' => $view)));
+        $views[] = $this->l($view, new Url('entity.view.edit_form', array('view' => $view)));
       }
-      $row['views'] = SafeMarkup::set(implode(', ', $row['views']));
+      unset($row['views']);
+      $row['views']['data'] = [
+        '#theme' => 'item_list',
+        '#items' => $views,
+        '#context' => ['list_style' => 'comma-list'],
+      ];
     }
 
     // Sort rows by field name.
@@ -138,7 +148,7 @@ class ViewsUIController extends ControllerBase {
   /**
    * Calls a method on a view and reloads the listing page.
    *
-   * @param \Drupal\views\ViewStorageInterface $view
+   * @param \Drupal\views\ViewEntityInterface $view
    *   The view being acted upon.
    * @param string $op
    *   The operation to perform, e.g., 'enable' or 'disable'.
@@ -150,7 +160,7 @@ class ViewsUIController extends ControllerBase {
    *   back to the listing page.
    *
    */
-  public function ajaxOperation(ViewStorageInterface $view, $op, Request $request) {
+  public function ajaxOperation(ViewEntityInterface $view, $op, Request $request) {
     // Perform the operation.
     $view->$op()->save();
 
@@ -158,12 +168,12 @@ class ViewsUIController extends ControllerBase {
     if ($request->request->get('js')) {
       $list = $this->entityManager()->getListBuilder('view')->render();
       $response = new AjaxResponse();
-      $response->addCommand(new ReplaceCommand('#views-entity-list', drupal_render($list)));
+      $response->addCommand(new ReplaceCommand('#views-entity-list', $list));
       return $response;
     }
 
     // Otherwise, redirect back to the page.
-    return $this->redirect('views_ui.list');
+    return $this->redirect('entity.view.collection');
   }
 
   /**
@@ -180,12 +190,17 @@ class ViewsUIController extends ControllerBase {
     $string = $request->query->get('q');
     // Get matches from default views.
     $views = $this->entityManager()->getStorage('view')->loadMultiple();
+    // Keep track of previously processed tags so they can be skipped.
+    $tags = [];
     foreach ($views as $view) {
       $tag = $view->get('tag');
-      if ($tag && strpos($tag, $string) === 0) {
-        $matches[$tag] = $tag;
-        if (count($matches) >= 10) {
-          break;
+      if ($tag && !in_array($tag, $tags)) {
+        $tags[] = $tag;
+        if (strpos($tag, $string) === 0) {
+          $matches[] = ['value' => $tag, 'label' => Html::escape($tag)];
+          if (count($matches) >= 10) {
+            break;
+          }
         }
       }
     }
@@ -197,7 +212,7 @@ class ViewsUIController extends ControllerBase {
    * Returns the form to edit a view.
    *
    * @param \Drupal\views_ui\ViewUI $view
-   *   The view being deleted.
+   *   The view to be edited.
    * @param string|null $display_id
    *   (optional) The display ID being edited. Defaults to NULL, which will load
    *   the first available display.

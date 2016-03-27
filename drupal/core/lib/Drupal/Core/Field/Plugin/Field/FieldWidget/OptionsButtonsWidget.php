@@ -18,6 +18,7 @@ use Drupal\Core\Form\FormStateInterface;
  *   label = @Translation("Check boxes/radio buttons"),
  *   field_types = {
  *     "boolean",
+ *     "entity_reference",
  *     "list_integer",
  *     "list_float",
  *     "list_string",
@@ -66,9 +67,9 @@ class OptionsButtonsWidget extends OptionsWidgetBase {
   /**
    * {@inheritdoc}
    */
-  protected function getEmptyOption() {
+  protected function getEmptyLabel() {
     if (!$this->required && !$this->multiple) {
-      return static::OPTIONS_EMPTY_NONE;
+      return t('N/A');
     }
   }
 

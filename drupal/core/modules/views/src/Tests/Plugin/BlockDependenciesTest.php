@@ -7,14 +7,14 @@
 
 namespace Drupal\views\Tests\Plugin;
 
-use Drupal\views\Tests\ViewUnitTestBase;
+use Drupal\views\Tests\ViewKernelTestBase;
 
 /**
  * Tests views block config dependencies functionality.
  *
  * @group views
  */
-class BlockDependenciesTest extends ViewUnitTestBase {
+class BlockDependenciesTest extends ViewKernelTestBase {
 
   /**
    * Views used by this test.
@@ -28,7 +28,7 @@ class BlockDependenciesTest extends ViewUnitTestBase {
    *
    * @var array
    */
-  public static $modules = array('node', 'block', 'user');
+  public static $modules = array('node', 'block', 'user', 'field');
 
   /**
    * Tests that exposed filter blocks have the correct dependencies.
@@ -37,9 +37,9 @@ class BlockDependenciesTest extends ViewUnitTestBase {
    */
   public function testExposedBlock() {
     $block = $this->createBlock('views_exposed_filter_block:test_exposed_block-page_1');
-    $dependencies = $block->calculateDependencies();
+    $dependencies = $block->calculateDependencies()->getDependencies();
     $expected = array(
-      'entity' => array('views.view.test_exposed_block'),
+      'config' => array('views.view.test_exposed_block'),
       'module' => array('views'),
       'theme' => array('stark')
     );
@@ -53,9 +53,9 @@ class BlockDependenciesTest extends ViewUnitTestBase {
    */
   public function testViewsBlock() {
     $block = $this->createBlock('views_block:content_recent-block_1');
-    $dependencies = $block->calculateDependencies();
+    $dependencies = $block->calculateDependencies()->getDependencies();
     $expected = array(
-      'entity' => array('views.view.content_recent'),
+      'config' => array('views.view.content_recent'),
       'module' => array('views'),
       'theme' => array('stark')
     );
@@ -82,7 +82,6 @@ class BlockDependenciesTest extends ViewUnitTestBase {
    *   - region: 'sidebar_first'.
    *   - theme: The default theme.
    *   - visibility: Empty array.
-   *   - cache: array('max_age' => 0).
    *
    * @return \Drupal\block\Entity\Block
    *   The block entity.
@@ -92,21 +91,19 @@ class BlockDependenciesTest extends ViewUnitTestBase {
       'plugin' => $plugin_id,
       'region' => 'sidebar_first',
       'id' => strtolower($this->randomMachineName(8)),
-      'theme' => \Drupal::config('system.theme')->get('default'),
+      'theme' => $this->config('system.theme')->get('default'),
       'label' => $this->randomMachineName(8),
       'visibility' => array(),
       'weight' => 0,
-      'cache' => array(
-        'max_age' => 0,
-      ),
     );
-    foreach (array('region', 'id', 'theme', 'plugin', 'weight') as $key) {
+    $values = [];
+    foreach (array('region', 'id', 'theme', 'plugin', 'weight', 'visibility') as $key) {
       $values[$key] = $settings[$key];
       // Remove extra values that do not belong in the settings array.
       unset($settings[$key]);
     }
-    foreach ($settings['visibility'] as $id => $visibility) {
-      $settings['visibility'][$id]['id'] = $id;
+    foreach ($values['visibility'] as $id => $visibility) {
+      $values['visibility'][$id]['id'] = $id;
     }
     $values['settings'] = $settings;
     $block = entity_create('block', $values);

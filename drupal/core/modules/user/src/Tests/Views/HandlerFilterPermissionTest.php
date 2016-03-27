@@ -7,8 +7,7 @@
 
 namespace Drupal\user\Tests\Views;
 
-use Drupal\Component\Utility\String;
-use Drupal\user\Tests\Views\UserUnitTestBase;
+use Drupal\Component\Utility\Html;
 use Drupal\views\Views;
 
 /**
@@ -17,7 +16,7 @@ use Drupal\views\Views;
  * @group user
  * @see \Drupal\user\Plugin\views\filter\Permissions
  */
-class HandlerFilterPermissionTest extends UserUnitTestBase {
+class HandlerFilterPermissionTest extends UserKernelTestBase {
 
   /**
    * Views used by this test.
@@ -63,6 +62,31 @@ class HandlerFilterPermissionTest extends UserUnitTestBase {
     $this->assertIdenticalResultset($view, $expected, $column_map);
     $view->destroy();
 
+    // Filter by not a permission.
+    $view->initHandlers();
+    $view->filter['permission']->operator = 'not';
+    $view->filter['permission']->value = array('administer users');
+    $this->executeView($view);
+    $this->assertEqual(count($view->result), 3);
+    $expected = array();
+    $expected[] = array('uid' => 1);
+    $expected[] = array('uid' => 2);
+    $expected[] = array('uid' => 3);
+    $this->assertIdenticalResultset($view, $expected, $column_map);
+    $view->destroy();
+
+    // Filter by not multiple permissions, that are present in multiple roles.
+    $view->initHandlers();
+    $view->filter['permission']->operator = 'not';
+    $view->filter['permission']->value = array('administer users', 'administer permissions');
+    $this->executeView($view);
+    $this->assertEqual(count($view->result), 2);
+    $expected = array();
+    $expected[] = array('uid' => 1);
+    $expected[] = array('uid' => 2);
+    $this->assertIdenticalResultset($view, $expected, $column_map);
+    $view->destroy();
+
     // Filter by another permission of a role with multiple permissions.
     $view->initHandlers();
     $view->filter['permission']->value = array('administer users');
@@ -75,7 +99,6 @@ class HandlerFilterPermissionTest extends UserUnitTestBase {
 
     $view->initDisplay();
     $view->initHandlers();
-    $view->filter['permission']->getValueOptions();
 
     // Test the value options.
     $value_options = $view->filter['permission']->getValueOptions();
@@ -87,7 +110,7 @@ class HandlerFilterPermissionTest extends UserUnitTestBase {
     }
     foreach (array('system' => 'System', 'user' => 'User') as $module => $title) {
       $expected = array_map(function ($permission) {
-        return String::checkPlain(strip_tags($permission['title']));
+        return Html::escape(strip_tags($permission['title']));
       }, $permission_by_module[$module]);
 
       $this->assertEqual($expected, $value_options[$title], 'Ensure the all permissions are available');

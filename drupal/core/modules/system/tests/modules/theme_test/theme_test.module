@@ -55,6 +55,12 @@ function theme_test_theme($existing, $type, $theme, $path) {
   $info['test_theme_not_existing_function'] = array(
     'function' => 'test_theme_not_existing_function',
   );
+  $items['theme_test_preprocess_suggestions'] = [
+    'variables' => [
+      'foo' => '',
+      'bar' => '',
+    ],
+  ];
   return $items;
 }
 
@@ -69,24 +75,51 @@ function theme_test_preprocess_html(&$variables) {
 }
 
 /**
- * Implements hook_page_alter().
+ * Implements hook_page_bottom().
  */
-function theme_test_page_alter(&$page) {
-  $page['page_bottom']['theme_test_page_bottom'] = array('#markup' => 'theme test page bottom markup');
+function theme_test_page_bottom(array &$page_bottom) {
+  $page_bottom['theme_test_page_bottom'] = array('#markup' => 'theme test page bottom markup');
 }
 
 /**
- * Theme function for testing _theme('theme_test_foo').
+ * Implements template_preprocess_HOOK() for theme_test_function_suggestions theme functions.
+ */
+function template_preprocess_theme_test_function_suggestions(&$variables) {
+}
+
+/**
+ * Theme function for hook theme_test_foo.
  */
 function theme_theme_test_foo($variables) {
   return $variables['foo'];
 }
 
 /**
- * Theme function for testing _theme('theme_test_function_template_override').
+ * Theme function for hook theme_test_function_template_override.
  */
 function theme_theme_test_function_template_override($variables) {
   return 'theme_test_function_template_override test failed.';
+}
+
+/**
+ * Implements hook_theme_suggestions_HOOK().
+ */
+function theme_test_theme_suggestions_theme_test_preprocess_suggestions($variables) {
+  return ['theme_test_preprocess_suggestions__' . $variables['foo']];
+}
+
+/**
+ * Implements hook_preprocess_HOOK().
+ */
+function theme_test_preprocess_theme_test_preprocess_suggestions(&$variables) {
+  $variables['foo'] = 'Theme hook implementor=theme_theme_test_preprocess_suggestions().';
+}
+
+/**
+ * Tests a module overriding a default hook with a suggestion.
+ */
+function theme_test_preprocess_theme_test_preprocess_suggestions__monkey(&$variables) {
+  $variables['foo'] = 'Monkey';
 }
 
 /**
@@ -107,7 +140,8 @@ function template_preprocess_theme_test_render_element(&$variables) {
  *
  * Theme hooks defining a 'render element' add an internal '#render_children'
  * property. When this property is found, drupal_render() avoids calling
- * _theme() on the top-level element to prevent infinite recursion.
+ * the 'theme.manager' service 'render' method on the top-level element to
+ * prevent infinite recursion.
  *
  * @param array $variables
  *   An associative array containing:
@@ -163,4 +197,14 @@ function theme_test_system_info_alter(array &$info, Extension $file, $type) {
     $info += ['libraries' => []];
     $info['libraries'][] = 'core/backbone';
   }
+}
+
+/**
+ * Implements hook_theme_suggestions_HOOK().
+ */
+function theme_test_theme_suggestions_node(array $variables) {
+  $xss = '<script type="text/javascript">alert(\'yo\');</script>';
+  $suggestions[] = 'node__' . $xss;
+
+  return $suggestions;
 }

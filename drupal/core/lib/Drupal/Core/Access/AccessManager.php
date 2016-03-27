@@ -87,8 +87,9 @@ class AccessManager implements AccessManagerInterface {
     try {
       $route = $this->routeProvider->getRouteByName($route_name, $parameters);
 
-      // ParamConverterManager relies on the route object being available
-      // from the parameters array.
+      // ParamConverterManager relies on the route name and object being
+      // available from the parameters array.
+      $parameters[RouteObjectInterface::ROUTE_NAME] = $route_name;
       $parameters[RouteObjectInterface::ROUTE_OBJECT] = $route;
       $upcasted_parameters = $this->paramConverterManager->convert($parameters + $route->getDefaults());
 
@@ -97,13 +98,13 @@ class AccessManager implements AccessManagerInterface {
     }
     catch (RouteNotFoundException $e) {
       // Cacheable until extensions change.
-      $result = AccessResult::forbidden()->addCacheTags(array('extension'));
+      $result = AccessResult::forbidden()->addCacheTags(['config:core.extension']);
       return $return_as_object ? $result : $result->isAllowed();
     }
     catch (ParamNotConvertedException $e) {
       // Uncacheable because conversion of the parameter may not have been
       // possible due to dynamic circumstances.
-      $result = AccessResult::forbidden()->setCacheable(FALSE);
+      $result = AccessResult::forbidden()->setCacheMaxAge(0);
       return $return_as_object ? $result : $result->isAllowed();
     }
   }
@@ -125,7 +126,6 @@ class AccessManager implements AccessManagerInterface {
     }
     $route = $route_match->getRouteObject();
     $checks = $route->getOption('_access_checks') ?: array();
-    $conjunction = $route->getOption('_access_mode') ?: static::ACCESS_MODE_ALL;
 
     // Filter out checks which require the incoming request.
     if (!isset($request)) {
@@ -135,63 +135,16 @@ class AccessManager implements AccessManagerInterface {
     $result = AccessResult::neutral();
     if (!empty($checks)) {
       $arguments_resolver = $this->argumentsResolverFactory->getArgumentsResolver($route_match, $account, $request);
-      if ($conjunction == static::ACCESS_MODE_ALL) {
-        $result = $this->checkAll($checks, $arguments_resolver);
+
+      if (!$checks) {
+        return AccessResult::neutral();
       }
-      else {
-        $result = $this->checkAny($checks, $arguments_resolver);
+      $result = AccessResult::allowed();
+      foreach ($checks as $service_id) {
+        $result = $result->andIf($this->performCheck($service_id, $arguments_resolver));
       }
     }
     return $return_as_object ? $result : $result->isAllowed();
-  }
-
-  /**
-   * Checks access so that every checker should allow access.
-   *
-   * @param array $checks
-   *   Contains the list of checks on the route definition.
-   * @param \Drupal\Component\Utility\ArgumentsResolverInterface $arguments_resolver
-   *   The parametrized arguments resolver instance.
-   *
-   * @return \Drupal\Core\Access\AccessResultInterface
-   *   The access result.
-   *
-   * @see \Drupal\Core\Access\AccessResultInterface::andIf()
-   */
-  protected function checkAll(array $checks, ArgumentsResolverInterface $arguments_resolver) {
-    // Without checks no opinion can be formed.
-    if (!$checks) {
-      return AccessResult::neutral();
-    }
-    $result = AccessResult::allowed();
-    foreach ($checks as $service_id) {
-      $result = $result->andIf($this->performCheck($service_id, $arguments_resolver));
-    }
-    return $result;
-  }
-
-  /**
-   * Checks access so that at least one checker should allow access.
-   *
-   * @param array $checks
-   *   Contains the list of checks on the route definition.
-   * @param \Drupal\Component\Utility\ArgumentsResolverInterface $arguments_resolver
-   *   The parametrized arguments resolver instance.
-   *
-   * @return \Drupal\Core\Access\AccessResultInterface
-   *   The access result.
-   *
-   * @see \Drupal\Core\Access\AccessResultInterface::orIf()
-   */
-  protected function checkAny(array $checks, ArgumentsResolverInterface $arguments_resolver) {
-    // No opinion by default.
-    $result = AccessResult::neutral();
-
-    foreach ($checks as $service_id) {
-      $result = $result->orIf($this->performCheck($service_id, $arguments_resolver));
-    }
-
-    return $result;
   }
 
   /**
@@ -202,11 +155,11 @@ class AccessManager implements AccessManagerInterface {
    * @param \Drupal\Component\Utility\ArgumentsResolverInterface $arguments_resolver
    *   The parametrized arguments resolver instance.
    *
-   * @throws \Drupal\Core\Access\AccessException
-   *   Thrown when the access check returns an invalid value.
-   *
    * @return \Drupal\Core\Access\AccessResultInterface
    *   The access result.
+   *
+   * @throws \Drupal\Core\Access\AccessException
+   *   Thrown when the access check returns an invalid value.
    */
   protected function performCheck($service_id, ArgumentsResolverInterface $arguments_resolver) {
     $callable = $this->checkProvider->loadCheck($service_id);

@@ -2,14 +2,12 @@
 
 /**
  * @file
- * Contains Drupal\system\Tests\Routing\RouterPermissionTest.
+ * Contains \Drupal\system\Tests\Routing\RouterPermissionTest.
  */
 
 namespace Drupal\system\Tests\Routing;
 
-use Drupal\Core\Routing\RequestHelper;
 use Drupal\simpletest\WebTestBase;
-use Symfony\Component\Routing\Exception\ResourceNotFoundException;
 
 /**
  * Function Tests for the routing permission system.
@@ -42,10 +40,5 @@ class RouterPermissionTest extends WebTestBase {
     $this->assertResponse(200);
     $this->assertNoRaw('Access denied');
     $this->assertRaw('test7text', 'The correct string was returned because the route was successful.');
-
-    $this->drupalGet('router_test/test9');
-    $this->assertResponse(200);
-    $this->assertNoRaw('Access denied');
-    $this->assertRaw('test8', 'The correct string was returned because the route was successful.');
   }
 }

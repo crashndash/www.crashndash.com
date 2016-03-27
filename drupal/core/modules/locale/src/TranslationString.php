@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\locale\TranslationString.
+ * Contains \Drupal\locale\TranslationString.
  */
 
 namespace Drupal\locale;
@@ -12,7 +12,7 @@ namespace Drupal\locale;
  *
  * This class represents a translation of a source string to a given language,
  * thus it must have at least a 'language' which is the language code and a
- * 'translation' property which is the translated text of the the source string
+ * 'translation' property which is the translated text of the source string
  * in the specified language.
  */
 class TranslationString extends StringBase {
@@ -45,7 +45,7 @@ class TranslationString extends StringBase {
   protected $isNew;
 
   /**
-   * Overrides Drupal\locale\StringBase::__construct().
+   * {@inheritdoc}
    */
   public function __construct($values = array()) {
     parent::__construct($values);
@@ -72,28 +72,28 @@ class TranslationString extends StringBase {
   }
 
   /**
-   * Implements Drupal\locale\StringInterface::isSource().
+   * {@inheritdoc}
    */
   public function isSource() {
     return FALSE;
   }
 
   /**
-   * Implements Drupal\locale\StringInterface::isTranslation().
+   * {@inheritdoc}
    */
   public function isTranslation() {
     return !empty($this->lid) && !empty($this->language) && isset($this->translation);
   }
 
   /**
-   * Implements Drupal\locale\StringInterface::getString().
+   * {@inheritdoc}
    */
   public function getString() {
     return isset($this->translation) ? $this->translation : '';
   }
 
   /**
-   * Implements Drupal\locale\StringInterface::setString().
+   * {@inheritdoc}
    */
   public function setString($string) {
     $this->translation = $string;
@@ -101,14 +101,14 @@ class TranslationString extends StringBase {
   }
 
   /**
-   * Implements Drupal\locale\StringInterface::isNew().
+   * {@inheritdoc}
    */
   public function isNew() {
     return $this->isNew;
   }
 
   /**
-   * Implements Drupal\locale\StringInterface::save().
+   * {@inheritdoc}
    */
   public function save() {
     parent::save();
@@ -117,7 +117,7 @@ class TranslationString extends StringBase {
   }
 
   /**
-   * Implements Drupal\locale\StringInterface::delete().
+   * {@inheritdoc}
    */
   public function delete() {
     parent::delete();

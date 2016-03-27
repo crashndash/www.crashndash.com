@@ -2,24 +2,34 @@
 
 /**
  * @file
- * Definition of Drupal\Core\CoreServiceProvider.
+ * Contains \Drupal\Core\CoreServiceProvider.
  */
 
 namespace Drupal\Core;
 
-use Drupal\Core\Cache\CacheContextsPass;
+use Drupal\Core\Cache\Context\CacheContextsPass;
 use Drupal\Core\Cache\ListCacheBinsPass;
 use Drupal\Core\DependencyInjection\Compiler\BackendCompilerPass;
+use Drupal\Core\DependencyInjection\Compiler\GuzzleMiddlewarePass;
+use Drupal\Core\DependencyInjection\Compiler\ContextProvidersPass;
+use Drupal\Core\DependencyInjection\Compiler\ProxyServicesPass;
+use Drupal\Core\DependencyInjection\Compiler\RegisterLazyRouteEnhancers;
+use Drupal\Core\DependencyInjection\Compiler\RegisterLazyRouteFilters;
+use Drupal\Core\DependencyInjection\Compiler\DependencySerializationTraitPass;
 use Drupal\Core\DependencyInjection\Compiler\StackedKernelPass;
+use Drupal\Core\DependencyInjection\Compiler\StackedSessionHandlerPass;
 use Drupal\Core\DependencyInjection\Compiler\RegisterStreamWrappersPass;
+use Drupal\Core\DependencyInjection\Compiler\TwigExtensionPass;
 use Drupal\Core\DependencyInjection\ServiceProviderInterface;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Drupal\Core\DependencyInjection\Compiler\ModifyServiceDefinitionsPass;
 use Drupal\Core\DependencyInjection\Compiler\TaggedHandlersPass;
-use Drupal\Core\DependencyInjection\Compiler\RegisterKernelListenersPass;
+use Drupal\Core\DependencyInjection\Compiler\RegisterEventSubscribersPass;
 use Drupal\Core\DependencyInjection\Compiler\RegisterAccessChecksPass;
 use Drupal\Core\DependencyInjection\Compiler\RegisterServicesForDestructionPass;
 use Drupal\Core\Plugin\PluginManagerPass;
+use Drupal\Core\Render\MainContent\MainContentRenderersPass;
+use Drupal\Core\Site\Settings;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 
 /**
@@ -40,28 +50,43 @@ class CoreServiceProvider implements ServiceProviderInterface  {
    * {@inheritdoc}
    */
   public function register(ContainerBuilder $container) {
-    $container->setParameter('app.root', DRUPAL_ROOT);
-
     $this->registerUuid($container);
     $this->registerTest($container);
+
+    // Only register the private file stream wrapper if a file path has been set.
+    if (Settings::get('file_private_path')) {
+      $container->register('stream_wrapper.private', 'Drupal\Core\StreamWrapper\PrivateStream')
+        ->addTag('stream_wrapper', ['scheme' => 'private']);
+    }
 
     // Add the compiler pass that lets service providers modify existing
     // service definitions. This pass must come first so that later
     // list-building passes are operating on the post-alter services list.
     $container->addCompilerPass(new ModifyServiceDefinitionsPass());
 
+    $container->addCompilerPass(new ProxyServicesPass());
+
     $container->addCompilerPass(new BackendCompilerPass());
 
     $container->addCompilerPass(new StackedKernelPass());
 
+    $container->addCompilerPass(new StackedSessionHandlerPass());
+
+    $container->addCompilerPass(new MainContentRenderersPass());
+
     // Collect tagged handler services as method calls on consumer services.
     $container->addCompilerPass(new TaggedHandlersPass());
     $container->addCompilerPass(new RegisterStreamWrappersPass());
+    $container->addCompilerPass(new GuzzleMiddlewarePass());
+
+    $container->addCompilerPass(new TwigExtensionPass());
 
     // Add a compiler pass for registering event subscribers.
-    $container->addCompilerPass(new RegisterKernelListenersPass(), PassConfig::TYPE_AFTER_REMOVING);
+    $container->addCompilerPass(new RegisterEventSubscribersPass(), PassConfig::TYPE_AFTER_REMOVING);
 
     $container->addCompilerPass(new RegisterAccessChecksPass());
+    $container->addCompilerPass(new RegisterLazyRouteEnhancers());
+    $container->addCompilerPass(new RegisterLazyRouteFilters());
 
     // Add a compiler pass for registering services needing destruction.
     $container->addCompilerPass(new RegisterServicesForDestructionPass());
@@ -69,16 +94,19 @@ class CoreServiceProvider implements ServiceProviderInterface  {
     // Add the compiler pass that will process the tagged services.
     $container->addCompilerPass(new ListCacheBinsPass());
     $container->addCompilerPass(new CacheContextsPass());
+    $container->addCompilerPass(new ContextProvidersPass());
 
     // Register plugin managers.
     $container->addCompilerPass(new PluginManagerPass());
+
+    $container->addCompilerPass(new DependencySerializationTraitPass());
   }
 
   /**
    * Determines and registers the UUID service.
    *
-   * @param \Symfony\Component\DependencyInjection\ContainerBuilder $container
-   *   The container.
+   * @param \Drupal\Core\DependencyInjection\ContainerBuilder $container
+   *   The container builder.
    *
    * @return string
    *   Class name for the UUID service.
@@ -103,16 +131,19 @@ class CoreServiceProvider implements ServiceProviderInterface  {
 
   /**
    * Registers services and event subscribers for a site under test.
+   *
+   * @param \Drupal\Core\DependencyInjection\ContainerBuilder $container
+   *   The container builder.
    */
   protected function registerTest(ContainerBuilder $container) {
     // Do nothing if we are not in a test environment.
     if (!drupal_valid_test_ua()) {
       return;
     }
-    // Add the HTTP request subscriber to Guzzle.
+    // Add the HTTP request middleware to Guzzle.
     $container
-      ->register('test.http_client.request_subscriber', 'Drupal\Core\Test\EventSubscriber\HttpRequestSubscriber')
-      ->addTag('http_client_subscriber');
+      ->register('test.http_client.middleware', 'Drupal\Core\Test\HttpClientMiddleware\TestHttpClientMiddleware')
+      ->addTag('http_client_middleware');
   }
 
 }

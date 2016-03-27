@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\Core\Entity\Plugin\Field\FieldType\TimestampItem.
+ * Contains \Drupal\Core\Field\Plugin\Field\FieldType\TimestampItem.
  */
 
 namespace Drupal\Core\Field\Plugin\Field\FieldType;
@@ -19,6 +19,7 @@ use Drupal\Core\TypedData\DataDefinition;
  *   label = @Translation("Timestamp"),
  *   description = @Translation("An entity field containing a UNIX timestamp value."),
  *   no_ui = TRUE,
+ *   default_widget = "datetime_default",
  *   default_formatter = "timestamp",
  *   constraints = {
  *     "ComplexData" = {
@@ -40,7 +41,8 @@ class TimestampItem extends FieldItemBase {
    */
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
     $properties['value'] = DataDefinition::create('timestamp')
-      ->setLabel(t('Timestamp value'));
+      ->setLabel(t('Timestamp value'))
+      ->setRequired(TRUE);
     return $properties;
   }
 
@@ -52,7 +54,6 @@ class TimestampItem extends FieldItemBase {
       'columns' => array(
         'value' => array(
           'type' => 'int',
-          'not null' => FALSE,
         ),
       ),
     );

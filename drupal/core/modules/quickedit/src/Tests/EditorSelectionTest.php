@@ -7,7 +7,6 @@
 
 namespace Drupal\quickedit\Tests;
 
-use Drupal\Core\Language\LanguageInterface;
 use Drupal\quickedit\EditorSelector;
 
 /**
@@ -43,7 +42,7 @@ class EditorSelectionTest extends QuickEditTestBase {
    */
   protected function getSelectedEditor($entity_id, $field_name, $view_mode = 'default') {
     $entity = entity_load('entity_test', $entity_id, TRUE);
-    $items = $entity->getTranslation(LanguageInterface::LANGCODE_NOT_SPECIFIED)->get($field_name);
+    $items = $entity->get($field_name);
     $options = entity_get_display('entity_test', 'entity_test', $view_mode)->getComponent($field_name);
     return $this->editorSelector->getEditor($options['type'], $items);
   }
@@ -58,7 +57,7 @@ class EditorSelectionTest extends QuickEditTestBase {
       // Instance settings.
       array(),
       // Widget type & settings.
-      'string',
+      'string_textfield',
       array('size' => 42),
       // 'default' formatter type & settings.
       'string',
@@ -74,7 +73,7 @@ class EditorSelectionTest extends QuickEditTestBase {
     $this->assertEqual('plain_text', $this->getSelectedEditor($entity->id(), $field_name), "With cardinality 1, the 'plain_text' editor is selected.");
 
     // With cardinality >1
-    $this->fields->field_text_field_storage->cardinality = 2;
+    $this->fields->field_text_field_storage->setCardinality(2);
     $this->fields->field_text_field_storage->save();
     $this->assertEqual('form', $this->getSelectedEditor($entity->id(), $field_name), "With cardinality >1, the 'form' editor is selected.");
 
@@ -119,7 +118,7 @@ class EditorSelectionTest extends QuickEditTestBase {
     $this->assertEqual('wysiwyg', $this->getSelectedEditor($entity->id(), $field_name), "With cardinality 1, and the full_html text format, the 'wysiwyg' editor is selected.");
 
     // Editor selection with text field, cardinality >1.
-    $this->fields->field_textarea_field_storage->cardinality = 2;
+    $this->fields->field_textarea_field_storage->setCardinality(2);
     $this->fields->field_textarea_field_storage->save();
     $this->assertEqual('form', $this->getSelectedEditor($entity->id(), $field_name), "With cardinality >1, and both items using the full_html text format, the 'form' editor is selected.");
   }
@@ -150,7 +149,7 @@ class EditorSelectionTest extends QuickEditTestBase {
     $this->assertEqual('form', $this->getSelectedEditor($entity->id(), $field_name), "With cardinality 1, the 'form' editor is selected.");
 
     // Editor selection with cardinality >1.
-    $this->fields->field_nr_field_storage->cardinality = 2;
+    $this->fields->field_nr_field_storage->setCardinality(2);
     $this->fields->field_nr_field_storage->save();
     $this->assertEqual('form', $this->getSelectedEditor($entity->id(), $field_name), "With cardinality >1, the 'form' editor is selected.");
   }

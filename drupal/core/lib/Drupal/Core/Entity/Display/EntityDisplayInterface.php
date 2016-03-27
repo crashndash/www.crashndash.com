@@ -8,12 +8,12 @@
 namespace Drupal\Core\Entity\Display;
 
 use Drupal\Core\Config\Entity\ConfigEntityInterface;
-use Drupal\Core\Config\Entity\ThirdPartySettingsInterface;
+use Drupal\Core\Entity\EntityWithPluginCollectionInterface;
 
 /**
  * Provides a common interface for entity displays.
  */
-interface EntityDisplayInterface extends ThirdPartySettingsInterface, ConfigEntityInterface {
+interface EntityDisplayInterface extends ConfigEntityInterface, EntityWithPluginCollectionInterface {
 
   /**
    * Creates a duplicate of the entity display object on a different view mode.
@@ -21,10 +21,11 @@ interface EntityDisplayInterface extends ThirdPartySettingsInterface, ConfigEnti
    * The new object necessarily has the same $targetEntityType and $bundle
    * properties than the original one.
    *
-   * @param $view_mode
+   * @param string $view_mode
    *   The view mode for the new object.
    *
    * @return static
+   *   A duplicate of this object with the given view mode.
    */
   public function createCopy($view_mode);
 
@@ -71,7 +72,7 @@ interface EntityDisplayInterface extends ThirdPartySettingsInterface, ConfigEnti
   public function removeComponent($name);
 
   /**
-   * Returns the highest weight of the components in the display.
+   * Gets the highest weight of the components in the display.
    *
    * @return int|null
    *   The highest weight of the components in the display, or NULL if the
@@ -80,7 +81,7 @@ interface EntityDisplayInterface extends ThirdPartySettingsInterface, ConfigEnti
   public function getHighestWeight();
 
   /**
-   * Returns the renderer plugin for a field (e.g. widget, formatter).
+   * Gets the renderer plugin for a field (e.g. widget, formatter).
    *
    * @param string $field_name
    *   The field name.
@@ -89,5 +90,47 @@ interface EntityDisplayInterface extends ThirdPartySettingsInterface, ConfigEnti
    *   A widget or formatter plugin or NULL if the field does not exist.
    */
   public function getRenderer($field_name);
+
+  /**
+   * Gets the entity type for which this display is used.
+   *
+   * @return string
+   *   The entity type id.
+   */
+  public function getTargetEntityTypeId();
+
+  /**
+   * Gets the view or form mode to be displayed.
+   *
+   * @return string
+   *   The mode to be displayed.
+   */
+  public function getMode();
+
+  /**
+   * Gets the original view or form mode that was requested.
+   *
+   * @return string
+   *   The original mode that was requested.
+   */
+  public function getOriginalMode();
+
+  /**
+   * Gets the bundle to be displayed.
+   *
+   * @return string
+   *   The bundle to be displayed.
+   */
+  public function getTargetBundle();
+
+  /**
+   * Sets the bundle to be displayed.
+   *
+   * @param string $bundle
+   *   The bundle to be displayed.
+   *
+   * @return $this
+   */
+  public function setTargetBundle($bundle);
 
 }

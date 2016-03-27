@@ -2,13 +2,14 @@
 
 /**
  * @file
- * Definition of Drupal\views\Tests\Wizard\BasicTest.
+ * Contains \Drupal\views\Tests\Wizard\BasicTest.
  */
 
 namespace Drupal\views\Tests\Wizard;
 
 use Drupal\Component\Serialization\Json;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\Core\Url;
 use Drupal\views\Views;
 
 /**
@@ -17,6 +18,12 @@ use Drupal\views\Views;
  * @group views
  */
 class BasicTest extends WizardTestBase {
+
+  protected function setUp() {
+    parent::setUp();
+
+    $this->drupalPlaceBlock('page_title_block');
+  }
 
   function testViewsWizardAndListing() {
     $this->drupalCreateContentType(array('type' => 'article'));
@@ -74,7 +81,9 @@ class BasicTest extends WizardTestBase {
     $this->assertText($node2->label());
 
     // Check if we have the feed.
-    $this->assertLinkByHref(_url($view2['page[feed_properties][path]']));
+    $this->assertLinkByHref(Url::fromRoute('view.' . $view2['id'] . '.feed_1')->toString());
+    $elements = $this->cssSelect('link[href="' . Url::fromRoute('view.' . $view2['id'] . '.feed_1', [], ['absolute' => TRUE])->toString() . '"]');
+    $this->assertEqual(count($elements), 1, 'Feed found.');
     $this->drupalGet($view2['page[feed_properties][path]']);
     $this->assertRaw('<rss version="2.0"');
     // The feed should have the same title and nodes as the page.
@@ -88,7 +97,7 @@ class BasicTest extends WizardTestBase {
     $this->drupalGet('admin/structure/views');
     $this->assertText($view2['label']);
     $this->assertText($view2['description']);
-    $this->assertLinkByHref(_url($view2['page[path]']));
+    $this->assertLinkByHref(Url::fromRoute('view.' . $view2['id'] . '.page_1')->toString());
 
     // The view should not have a REST export display.
     $this->assertNoText('REST export', 'If only the page option was enabled in the wizard, the resulting view does not have a REST export display.');
@@ -123,13 +132,14 @@ class BasicTest extends WizardTestBase {
     $this->drupalGet('admin/structure/views');
     $this->assertText($view3['label']);
     $this->assertText($view3['description']);
-    $this->assertLinkByHref(_url($view3['page[path]']));
+    $this->assertLinkByHref(Url::fromRoute('view.' . $view3['id'] . '.page_1')->toString());
 
     // The view should not have a REST export display.
     $this->assertNoText('REST export', 'If only the page and block options were enabled in the wizard, the resulting view does not have a REST export display.');
 
     // Confirm that the block is available in the block administration UI.
-    $this->drupalGet('admin/structure/block/list/' . \Drupal::config('system.theme')->get('default'));
+    $this->drupalGet('admin/structure/block/list/' . $this->config('system.theme')->get('default'));
+    $this->clickLinkPartialName('Place block');
     $this->assertText($view3['label']);
 
     // Place the block.
@@ -154,6 +164,7 @@ class BasicTest extends WizardTestBase {
     $view4['rest_export[create]'] = 1;
     $view4['rest_export[path]'] = $this->randomMachineName(16);
     $this->drupalPostForm('admin/structure/views/add', $view4, t('Save and edit'));
+    $this->assertRaw(t('The view %view has been saved.', array('%view' => $view4['label'])));
 
     // Check that the REST export path works.
     $this->drupalGet($view4['rest_export[path]']);
@@ -169,7 +180,7 @@ class BasicTest extends WizardTestBase {
    *
    * @see \Drupal\views_ui\ViewAddForm::form()
    */
-  protected function testWizardForm() {
+  public function testWizardForm() {
     $this->drupalGet('admin/structure/views/add');
 
     $result = $this->xpath('//small[@id = "edit-label-machine-name-suffix"]');
@@ -178,7 +189,10 @@ class BasicTest extends WizardTestBase {
     $this->drupalPostAjaxForm(NULL, array('show[wizard_key]' => 'users'), 'show[wizard_key]');
     $this->assertNoFieldByName('show[type]', NULL, 'The "of type" filter is not added for users.');
     $this->drupalPostAjaxForm(NULL, array('show[wizard_key]' => 'node'), 'show[wizard_key]');
-    $this->assertFieldByName('show[type]', 'all', 'The "of type" filter is added for nodes.');
+    $this->assertNoFieldByName('show[type]', 'all', 'The "of type" filter is not added for nodes when there are no node types.');
+    $this->drupalCreateContentType(array('type' => 'page'));
+    $this->drupalPostAjaxForm(NULL, array('show[wizard_key]' => 'node'), 'show[wizard_key]');
+    $this->assertFieldByName('show[type]', 'all', 'The "of type" filter is added for nodes when there is at least one node type.');
   }
 
   /**
@@ -198,16 +212,13 @@ class BasicTest extends WizardTestBase {
 
     // Make sure the plugin types that should not have empty options don't have.
     // Test against all values is unit tested.
-    // @see \Drupal\views\Tests\Plugin\DisplayUnitTest
+    // @see \Drupal\views\Tests\Plugin\DisplayKernelTest
     $view = Views::getView($random_id);
     $displays = $view->storage->get('display');
 
     foreach ($displays as $display) {
-      $this->assertIdentical($display['provider'], 'views', 'Expected provider found for display.');
-
       foreach (array('query', 'exposed_form', 'pager', 'style', 'row') as $type) {
-        $this->assertFalse(empty($display['display_options'][$type]['options']), String::format('Default options found for @plugin.', array('@plugin' => $type)));
-        $this->assertIdentical($display['display_options'][$type]['provider'], 'views', String::format('Expected provider found for @plugin.', array('@plugin' => $type)));
+        $this->assertFalse(empty($display['display_options'][$type]['options']), SafeMarkup::format('Default options found for @plugin.', array('@plugin' => $type)));
       }
     }
   }

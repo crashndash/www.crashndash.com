@@ -52,8 +52,8 @@ class FeedViewBuilder extends EntityViewBuilder {
   /**
    * {@inheritdoc}
    */
-  public function buildComponents(array &$build, array $entities, array $displays, $view_mode, $langcode = NULL) {
-    parent::buildComponents($build, $entities, $displays, $view_mode, $langcode);
+  public function buildComponents(array &$build, array $entities, array $displays, $view_mode) {
+    parent::buildComponents($build, $entities, $displays, $view_mode);
 
     foreach ($entities as $id => $entity) {
       $bundle = $entity->bundle();
@@ -69,17 +69,18 @@ class FeedViewBuilder extends EntityViewBuilder {
 
         $build[$id]['items'] = $this->entityManager
           ->getViewBuilder('aggregator_item')
-          ->viewMultiple($items, $view_mode, $langcode);
+          ->viewMultiple($items, $view_mode, $entity->language()->getId());
 
         if ($view_mode == 'full') {
           // Also add the pager.
-          $build[$id]['pager'] = array('#theme' => 'pager');
+          $build[$id]['pager'] = array('#type' => 'pager');
         }
       }
 
       if ($display->getComponent('description')) {
         $build[$id]['description'] = array(
-          '#markup' => aggregator_filter_xss($entity->getDescription()),
+          '#markup' => $entity->getDescription(),
+          '#allowed_tags' => _aggregator_allowed_tags(),
           '#prefix' => '<div class="feed-description">',
           '#suffix' => '</div>',
         );
@@ -94,7 +95,7 @@ class FeedViewBuilder extends EntityViewBuilder {
         if ($image && $label && $link_href) {
           $link_title = array(
             '#theme' => 'image',
-            '#path' => $image,
+            '#uri' => $image,
             '#alt' => $label,
           );
           $image_link = array(
@@ -103,7 +104,6 @@ class FeedViewBuilder extends EntityViewBuilder {
             '#url' => Url::fromUri($link_href),
             '#options' => array(
               'attributes' => array('class' => array('feed-image')),
-              'html' => TRUE,
             ),
           );
         }
@@ -114,7 +114,7 @@ class FeedViewBuilder extends EntityViewBuilder {
         $build[$id]['feed_icon'] = array(
           '#theme' => 'feed_icon',
           '#url' => $entity->getUrl(),
-          '#title' => t('!title feed', array('!title' => $entity->label())),
+          '#title' => t('@title feed', array('@title' => $entity->label())),
         );
       }
 
@@ -127,7 +127,6 @@ class FeedViewBuilder extends EntityViewBuilder {
           )),
           '#url' => Url::fromRoute('entity.aggregator_feed.canonical', ['aggregator_feed' => $entity->id()]),
           '#options' => array(
-            'html' => TRUE,
             'attributes' => array(
               'title' => $title_stripped,
             ),

@@ -22,6 +22,24 @@ class Cache {
   const PERMANENT = CacheBackendInterface::CACHE_PERMANENT;
 
   /**
+   * Merges arrays of cache contexts and removes duplicates.
+   *
+   * @param array $a
+   *    Cache contexts array to merge.
+   * @param array $b
+   *    Cache contexts array to merge.
+   *
+   * @return string[]
+   *   The merged array of cache contexts.
+   */
+  public static function mergeContexts(array $a = [], array $b = []) {
+    $cache_contexts = array_unique(array_merge($a, $b));
+    assert('\Drupal::service(\'cache_contexts_manager\')->assertValidTokens($cache_contexts)');
+    sort($cache_contexts);
+    return $cache_contexts;
+  }
+
+  /**
    * Merges arrays of cache tags and removes duplicates.
    *
    * The cache tags array is returned in a format that is valid for
@@ -32,22 +50,46 @@ class Cache {
    * allows items to be invalidated based on all tags attached to the content
    * they're constituted from.
    *
-   * @param string[] …
-   *   Arrays of cache tags to merge.
+   * @param array $a
+   *    Cache tags array to merge.
+   * @param array $b
+   *    Cache tags array to merge.
    *
    * @return string[]
    *   The merged array of cache tags.
    */
-  public static function mergeTags() {
-    $cache_tag_arrays = func_get_args();
-    $cache_tags = [];
-    foreach ($cache_tag_arrays as $tags) {
-      static::validateTags($tags);
-      $cache_tags = array_merge($cache_tags, $tags);
-    }
-    $cache_tags = array_unique($cache_tags);
+  public static function mergeTags(array $a = [], array $b = []) {
+    assert('\Drupal\Component\Assertion\Inspector::assertAllStrings($a) && \Drupal\Component\Assertion\Inspector::assertAllStrings($b)', 'Cache tags must be valid strings');
+
+    $cache_tags = array_unique(array_merge($a, $b));
     sort($cache_tags);
     return $cache_tags;
+  }
+
+  /**
+   * Merges max-age values (expressed in seconds), finds the lowest max-age.
+   *
+   * Ensures infinite max-age (Cache::PERMANENT) is taken into account.
+   *
+   * @param int $a
+   *    Max age value to merge.
+   * @param int $b
+   *    Max age value to merge.
+   *
+   * @return int
+   *   The minimum max-age value.
+   */
+  public static function mergeMaxAges($a = Cache::PERMANENT, $b = Cache::PERMANENT) {
+    // If one of the values is Cache::PERMANENT, return the other value.
+    if ($a === Cache::PERMANENT){
+      return $b;
+    }
+    if ($b === Cache::PERMANENT){
+      return $a;
+    }
+
+    // If none or the values are Cache::PERMANENT, return the minimum value.
+    return min($a, $b);
   }
 
   /**
@@ -57,6 +99,9 @@ class Cache {
    *
    * @param string[] $tags
    *   An array of cache tags.
+   *
+   * @deprecated
+   *   Use assert('\Drupal\Component\Assertion\Inspector::assertAllStrings($tags)');
    *
    * @throws \LogicException
    */
@@ -81,56 +126,28 @@ class Cache {
    *   A prefix string.
    * @param array $suffixes
    *   An array of suffixes. Will be cast to strings.
+   * @param string $glue
+   *   A string to be used as glue for concatenation. Defaults to a colon.
    *
    * @return string[]
    *   An array of cache tags.
    */
-  public static function buildTags($prefix, array $suffixes) {
+  public static function buildTags($prefix, array $suffixes, $glue = ':') {
     $tags = [];
     foreach ($suffixes as $suffix) {
-      $tags[] = $prefix . ':' . $suffix;
+      $tags[] = $prefix . $glue . $suffix;
     }
     return $tags;
   }
 
   /**
-   * Deletes items from all bins with any of the specified tags.
-   *
-   * Many sites have more than one active cache backend, and each backend may
-   * use a different strategy for storing tags against cache items, and
-   * deleting cache items associated with a given tag.
-   *
-   * When deleting a given list of tags, we iterate over each cache backend, and
-   * and call deleteTags() on each.
-   *
-   * @param string[] $tags
-   *   The list of tags to delete cache items for.
-   */
-  public static function deleteTags(array $tags) {
-    static::validateTags($tags);
-    foreach (static::getBins() as $cache_backend) {
-      $cache_backend->deleteTags($tags);
-    }
-  }
-
-  /**
    * Marks cache items from all bins with any of the specified tags as invalid.
-   *
-   * Many sites have more than one active cache backend, and each backend my use
-   * a different strategy for storing tags against cache items, and invalidating
-   * cache items associated with a given tag.
-   *
-   * When invalidating a given list of tags, we iterate over each cache backend,
-   * and call invalidateTags() on each.
    *
    * @param string[] $tags
    *   The list of tags to invalidate cache items for.
    */
   public static function invalidateTags(array $tags) {
-    static::validateTags($tags);
-    foreach (static::getBins() as $cache_backend) {
-      $cache_backend->invalidateTags($tags);
-    }
+    \Drupal::service('cache_tags.invalidator')->invalidateTags($tags);
   }
 
   /**

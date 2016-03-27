@@ -2,14 +2,18 @@
 
 /**
  * @file
- * Definition of Drupal\field\Tests\FormTest.
+ * Contains \Drupal\field\Tests\FormTest.
  */
 
 namespace Drupal\field\Tests;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\Html;
+use Drupal\Core\Entity\Entity\EntityFormDisplay;
 use Drupal\Core\Field\FieldStorageDefinitionInterface;
 use Drupal\Core\Form\FormState;
+use Drupal\entity_test\Entity\EntityTestBaseFieldDisplay;
+use Drupal\field\Entity\FieldConfig;
+use Drupal\field\Entity\FieldStorageConfig;
 
 /**
  * Tests field form handling.
@@ -21,9 +25,11 @@ class FormTest extends FieldTestBase {
   /**
    * Modules to enable.
    *
+   * Locale is installed so that TranslatableMarkup actually does something.
+   *
    * @var array
    */
-  public static $modules = array('node', 'field_test', 'options', 'entity_test');
+  public static $modules = array('node', 'field_test', 'options', 'entity_test', 'locale');
 
   /**
    * An array of values defining a field single.
@@ -103,7 +109,7 @@ class FormTest extends FieldTestBase {
     $this->drupalGet('entity_test/add');
 
     // Create token value expected for description.
-    $token_description = String::checkPlain(\Drupal::config('system.site')->get('name')) . '_description';
+    $token_description = Html::escape($this->config('system.site')->get('name')) . '_description';
     $this->assertText($token_description, 'Token replacement for description is displayed');
     $this->assertFieldByName("{$field_name}[0][value]", '', 'Widget is displayed');
     $this->assertNoField("{$field_name}[1][value]", 'No extraneous widget is displayed');
@@ -133,7 +139,7 @@ class FormTest extends FieldTestBase {
     $this->assertEqual($entity->{$field_name}->value, $value, 'Field value was saved');
 
     // Display edit form.
-    $this->drupalGet('entity_test/manage/' . $id);
+    $this->drupalGet('entity_test/manage/' . $id . '/edit');
     $this->assertFieldByName("{$field_name}[0][value]", $value, 'Widget is displayed with the correct default value');
     $this->assertNoField("{$field_name}[1][value]", 'No extraneous widget is displayed');
 
@@ -153,7 +159,7 @@ class FormTest extends FieldTestBase {
     $edit = array(
       "{$field_name}[0][value]" => $value
     );
-    $this->drupalPostForm('entity_test/manage/' . $id, $edit, t('Save'));
+    $this->drupalPostForm('entity_test/manage/' . $id . '/edit', $edit, t('Save'));
     $this->assertText(t('entity_test @id has been updated.', array('@id' => $id)), 'Entity was updated');
     $this->container->get('entity.manager')->getStorage('entity_test')->resetCache(array($id));
     $entity = entity_load('entity_test', $id);
@@ -206,7 +212,7 @@ class FormTest extends FieldTestBase {
     // Submit with missing required value.
     $edit = array();
     $this->drupalPostForm('entity_test/add', $edit, t('Save'));
-    $this->assertRaw(t('!name field is required.', array('!name' => $this->field['label'])), 'Required field with no value fails validation');
+    $this->assertRaw(t('@name field is required.', array('@name' => $this->field['label'])), 'Required field with no value fails validation');
 
     // Create an entity
     $value = mt_rand(1, 127);
@@ -225,8 +231,8 @@ class FormTest extends FieldTestBase {
     $edit = array(
       "{$field_name}[0][value]" => $value,
     );
-    $this->drupalPostForm('entity_test/manage/' . $id, $edit, t('Save'));
-    $this->assertRaw(t('!name field is required.', array('!name' => $this->field['label'])), 'Required field with no value fails validation');
+    $this->drupalPostForm('entity_test/manage/' . $id . '/edit', $edit, t('Save'));
+    $this->assertRaw(t('@name field is required.', array('@name' => $this->field['label'])), 'Required field with no value fails validation');
   }
 
 //  function testFieldFormMultiple() {
@@ -252,12 +258,16 @@ class FormTest extends FieldTestBase {
     $this->assertFieldByName("{$field_name}[0][value]", '', 'Widget 1 is displayed');
     $this->assertNoField("{$field_name}[1][value]", 'No extraneous widget is displayed');
 
+    // Check if aria-describedby attribute is placed on multiple value widgets.
+    $elements = $this->xpath('//table[@id="field-unlimited-values" and @aria-describedby="edit-field-unlimited--description"]');
+    $this->assertTrue(isset($elements[0]), t('aria-describedby attribute is properly placed on multiple value widgets.'));
+
     // Press 'add more' button -> 2 widgets.
     $this->drupalPostForm(NULL, array(), t('Add another item'));
     $this->assertFieldByName("{$field_name}[0][value]", '', 'Widget 1 is displayed');
     $this->assertFieldByName("{$field_name}[1][value]", '', 'New widget is displayed');
     $this->assertNoField("{$field_name}[2][value]", 'No extraneous widget is displayed');
-    // TODO : check that non-field inpurs are preserved ('title')...
+    // TODO : check that non-field inputs are preserved ('title'), etc.
 
     // Yet another time so that we can play with more values -> 3 widgets.
     $this->drupalPostForm(NULL, array(), t('Add another item'));
@@ -314,6 +324,30 @@ class FormTest extends FieldTestBase {
     // Re-submit: check that the field can be emptied.
 
     // Test with several multiple fields in a form
+  }
+
+  /**
+   * Tests the position of the required label.
+   */
+  public function testFieldFormUnlimitedRequired() {
+    $field_name = $this->fieldStorageUnlimited['field_name'];
+    $this->field['field_name'] = $field_name;
+    $this->field['required'] = TRUE;
+    FieldStorageConfig::create($this->fieldStorageUnlimited)->save();
+    FieldConfig::create($this->field)->save();
+    entity_get_form_display($this->field['entity_type'], $this->field['bundle'], 'default')
+      ->setComponent($field_name)
+      ->save();
+
+    // Display creation form -> 1 widget.
+    $this->drupalGet('entity_test/add');
+    // Check that the Required symbol is present for the multifield label.
+    $element = $this->xpath('//h4[contains(@class, "label") and contains(@class, "js-form-required") and contains(text(), :value)]', array(':value' => $this->field['label']));
+    $this->assertTrue(isset($element[0]), 'Required symbol added field label.');
+    // Check that the label of the field input is visually hidden and contains
+    // the field title and an indication of the delta for a11y.
+    $element = $this->xpath('//label[@for=:for and contains(@class, "js-form-required") and contains(text(), :value)]', array(':for' => 'edit-field-unlimited-0-value', ':value' => $this->field['label'] . ' (value 1)'));
+    $this->assertTrue(isset($element[0]), 'Required symbol not added for field input.');
   }
 
   /**
@@ -409,7 +443,7 @@ class FormTest extends FieldTestBase {
     // Press 'add more' button through Ajax, and place the expected HTML result
     // as the tested content.
     $commands = $this->drupalPostAjaxForm(NULL, $edit, $field_name . '_add_more');
-    $this->setRawContent($commands[1]['data']);
+    $this->setRawContent($commands[2]['data']);
 
     for ($delta = 0; $delta <= $delta_range; $delta++) {
       $this->assertFieldByName("{$field_name}[$delta][value]", $values[$delta], "Widget $delta is displayed and has the right value");
@@ -457,7 +491,7 @@ class FormTest extends FieldTestBase {
     $this->assertFieldValues($entity_init, $field_name, array(1, 2, 3));
 
     // Display the form, check that the values are correctly filled in.
-    $this->drupalGet('entity_test/manage/' . $id);
+    $this->drupalGet('entity_test/manage/' . $id . '/edit');
     $this->assertFieldByName($field_name, '1, 2, 3', 'Widget is displayed.');
 
     // Submit the form with more values than the field accepts.
@@ -540,7 +574,7 @@ class FormTest extends FieldTestBase {
       "{$field_name}[0][value]" => 2,
       'revision' => TRUE,
     );
-    $this->drupalPostForm($entity_type . '/manage/' . $id, $edit, t('Save'));
+    $this->drupalPostForm($entity_type . '/manage/' . $id . '/edit', $edit, t('Save'));
 
     // Check that the new revision has the expected values.
     $this->container->get('entity.manager')->getStorage($entity_type)->resetCache(array($id));
@@ -587,16 +621,16 @@ class FormTest extends FieldTestBase {
 
     // Update the field to remove the default value, and switch to the default
     // widget.
-    $this->field->default_value = NULL;
+    $this->field->setDefaultValue(array());
     $this->field->save();
-    entity_get_form_display($entity_type, $this->field->bundle, 'default')
+    entity_get_form_display($entity_type, $this->field->getTargetBundle(), 'default')
       ->setComponent($this->field->getName(), array(
         'type' => 'test_field_widget',
       ))
       ->save();
 
     // Display edit form.
-    $this->drupalGet($entity_type . '/manage/' . $id);
+    $this->drupalGet($entity_type . '/manage/' . $id . '/edit');
     $this->assertFieldByName("{$field_name}[0][value]", 99, 'Widget is displayed with the correct default value');
 
     // Update the entity.
@@ -609,18 +643,54 @@ class FormTest extends FieldTestBase {
     $this->assertEqual($entity->{$field_name}->value, $value, 'Field value was updated');
 
     // Set the field back to hidden.
-    entity_get_form_display($entity_type, $this->field->bundle, 'default')
+    entity_get_form_display($entity_type, $this->field->getTargetBundle(), 'default')
       ->removeComponent($this->field->getName())
       ->save();
 
     // Create a new revision.
     $edit = array('revision' => TRUE);
-    $this->drupalPostForm($entity_type . '/manage/' . $id, $edit, t('Save'));
+    $this->drupalPostForm($entity_type . '/manage/' . $id . '/edit', $edit, t('Save'));
 
     // Check that the expected value has been carried over to the new revision.
     \Drupal::entityManager()->getStorage($entity_type)->resetCache(array($id));
     $entity = entity_load($entity_type, $id);
     $this->assertEqual($entity->{$field_name}->value, $value, 'New revision has the expected value for the field with the Hidden widget');
+  }
+
+  /**
+   * Tests the form display of the label for multi-value fields.
+   */
+  public function testLabelOnMultiValueFields() {
+    $user = $this->drupalCreateUser(['administer entity_test content']);
+    $this->drupalLogin($user);
+
+    FieldStorageConfig::create([
+      'entity_type' => 'entity_test_base_field_display',
+      'field_name' => 'foo',
+      'type' => 'text',
+      'cardinality' => FieldStorageConfig::CARDINALITY_UNLIMITED,
+    ])->save();
+    FieldConfig::create([
+      'entity_type' => 'entity_test_base_field_display',
+      'bundle' => 'bar',
+      'field_name' => 'foo',
+      // Set a dangerous label to test XSS filtering.
+      'label' => "<script>alert('a configurable field');</script>",
+    ])->save();
+    EntityFormDisplay::create([
+      'targetEntityType' => 'entity_test_base_field_display',
+      'bundle' => 'bar',
+      'mode' => 'default',
+    ])->setComponent('foo', ['type' => 'text_textfield'])->enable()->save();
+
+    $entity = EntityTestBaseFieldDisplay::create(['type' => 'bar']);
+    $entity->save();
+
+    $this->drupalGet('entity_test_base_field_display/manage/' . $entity->id());
+    $this->assertResponse(200);
+    $this->assertText('A field with multiple values');
+    // Test if labels were XSS filtered.
+    $this->assertEscaped("<script>alert('a configurable field');</script>");
   }
 
 }

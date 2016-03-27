@@ -7,10 +7,7 @@
 
 namespace Drupal\Component\Gettext;
 
-use Drupal\Component\Gettext\PoReaderInterface;
-use Drupal\Component\Gettext\PoStreamInterface;
-use Drupal\Component\Gettext\PoHeader;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
 
 /**
  * Implements Gettext PO stream reader.
@@ -94,7 +91,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
   /**
    * Indicator of whether the stream reading is finished.
    *
-   * @var boolean
+   * @var bool
    */
   private $_finished;
 
@@ -106,21 +103,21 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
   private $_errors;
 
   /**
-   * Implements Drupal\Component\Gettext\PoMetadataInterface::getLangcode().
+   * {@inheritdoc}
    */
   public function getLangcode() {
     return $this->_langcode;
   }
 
   /**
-   * Implements Drupal\Component\Gettext\PoMetadataInterface::setLangcode().
+   * {@inheritdoc}
    */
   public function setLangcode($langcode) {
     $this->_langcode = $langcode;
   }
 
   /**
-   * Implements Drupal\Component\Gettext\PoMetadataInterface::getHeader().
+   * {@inheritdoc}
    */
   public function getHeader() {
     return $this->_header;
@@ -135,14 +132,14 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
   }
 
   /**
-   * Implements Drupal\Component\Gettext\PoStreamInterface::getURI().
+   * {@inheritdoc}
    */
   public function getURI() {
     return $this->_uri;
   }
 
   /**
-   * Implements Drupal\Component\Gettext\PoStreamInterface::setURI().
+   * {@inheritdoc}
    */
   public function setURI($uri) {
     $this->_uri = $uri;
@@ -183,7 +180,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
   }
 
   /**
-   * Implements Drupal\Component\Gettext\PoReaderInterface::readItem().
+   * {@inheritdoc}
    */
   public function readItem() {
     // Clear out the last item.
@@ -208,7 +205,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
   }
 
   /**
-   * Returns the pointer position of the current PO stream.
+   * Gets the pointer position of the current PO stream.
    */
   public function getSeek() {
     return ftell($this->_fd);
@@ -298,7 +295,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         }
         else {
           // A comment following any other context is a syntax error.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: "msgstr" was expected but not found on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: "msgstr" was expected but not found on line %line.', $log_vars);
           return FALSE;
         }
         return;
@@ -308,7 +305,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
 
         if ($this->_context != 'MSGID') {
           // A plural form can only be added to an msgid directly.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: "msgid_plural" was expected but not found on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: "msgid_plural" was expected but not found on line %line.', $log_vars);
           return FALSE;
         }
 
@@ -319,7 +316,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         $quoted = $this->parseQuoted($line);
         if ($quoted === FALSE) {
           // The plural form must be wrapped in quotes.
-          $this->_errors[] = String::format('The translation stream %uri contains a syntax error on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains a syntax error on line %line.', $log_vars);
           return FALSE;
         }
 
@@ -346,7 +343,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         }
         elseif ($this->_context == 'MSGID') {
           // We are currently already in the context, meaning we passed an id with no data.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: "msgid" is unexpected on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: "msgid" is unexpected on line %line.', $log_vars);
           return FALSE;
         }
 
@@ -357,7 +354,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         $quoted = $this->parseQuoted($line);
         if ($quoted === FALSE) {
           // The message id must be wrapped in quotes.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: invalid format for "msgid" on line %line.', $log_vars, $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: invalid format for "msgid" on line %line.', $log_vars, $log_vars);
           return FALSE;
         }
 
@@ -375,7 +372,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         }
         elseif (!empty($this->_current_item['msgctxt'])) {
           // A context cannot apply to another context.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: "msgctxt" is unexpected on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: "msgctxt" is unexpected on line %line.', $log_vars);
           return FALSE;
         }
 
@@ -386,7 +383,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         $quoted = $this->parseQuoted($line);
         if ($quoted === FALSE) {
           // The context string must be quoted.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: invalid format for "msgctxt" on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: invalid format for "msgctxt" on line %line.', $log_vars);
           return FALSE;
         }
 
@@ -404,13 +401,13 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
             ($this->_context != 'MSGSTR_ARR')) {
           // Plural message strings must come after msgid, msgxtxt,
           // msgid_plural, or other msgstr[] entries.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: "msgstr[]" is unexpected on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: "msgstr[]" is unexpected on line %line.', $log_vars);
           return FALSE;
         }
 
         // Ensure the plurality is terminated.
         if (strpos($line, ']') === FALSE) {
-          $this->_errors[] = String::format('The translation stream %uri contains an error: invalid format for "msgstr[]" on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: invalid format for "msgstr[]" on line %line.', $log_vars);
           return FALSE;
         }
 
@@ -425,7 +422,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         $quoted = $this->parseQuoted($line);
         if ($quoted === FALSE) {
           // The string must be quoted.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: invalid format for "msgstr[]" on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: invalid format for "msgstr[]" on line %line.', $log_vars);
           return FALSE;
         }
         if (!isset($this->_current_item['msgstr']) || !is_array($this->_current_item['msgstr'])) {
@@ -442,7 +439,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
 
         if (($this->_context != 'MSGID') && ($this->_context != 'MSGCTXT')) {
           // Strings are only valid within an id or context scope.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: "msgstr" is unexpected on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: "msgstr" is unexpected on line %line.', $log_vars);
           return FALSE;
         }
 
@@ -453,7 +450,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         $quoted = $this->parseQuoted($line);
         if ($quoted === FALSE) {
           // The string must be quoted.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: invalid format for "msgstr" on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: invalid format for "msgstr" on line %line.', $log_vars);
           return FALSE;
         }
 
@@ -468,7 +465,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         $quoted = $this->parseQuoted($line);
         if ($quoted === FALSE) {
           // This string must be quoted.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: string continuation expected on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: string continuation expected on line %line.', $log_vars);
           return FALSE;
         }
 
@@ -498,7 +495,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
         }
         else {
           // No valid context to append to.
-          $this->_errors[] = String::format('The translation stream %uri contains an error: unexpected string on line %line.', $log_vars);
+          $this->_errors[] = SafeMarkup::format('The translation stream %uri contains an error: unexpected string on line %line.', $log_vars);
           return FALSE;
         }
         return;
@@ -511,7 +508,7 @@ class PoStreamReader implements PoStreamInterface, PoReaderInterface {
       $this->_current_item = array();
     }
     elseif ($this->_context != 'COMMENT') {
-      $this->_errors[] = String::format('The translation stream %uri ended unexpectedly at line %line.', $log_vars);
+      $this->_errors[] = SafeMarkup::format('The translation stream %uri ended unexpectedly at line %line.', $log_vars);
       return FALSE;
     }
   }

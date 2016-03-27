@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\taxonomy\Form\OverviewTerms
+ * Contains \Drupal\taxonomy\Form\OverviewTerms.
  */
 
 namespace Drupal\taxonomy\Form;
@@ -80,7 +80,8 @@ class OverviewTerms extends FormBase {
    *   The form structure.
    */
   public function buildForm(array $form, FormStateInterface $form_state, VocabularyInterface $taxonomy_vocabulary = NULL) {
-    // @todo Remove global variables when http://drupal.org/node/2044435 is in.
+    // @todo Remove global variables when https://www.drupal.org/node/2044435 is
+    //   in.
     global $pager_page_array, $pager_total, $pager_total_items;
 
     $form_state->set(['taxonomy', 'vocabulary'], $taxonomy_vocabulary);
@@ -200,13 +201,13 @@ class OverviewTerms extends FormBase {
     }
 
     $errors = $form_state->getErrors();
-    $destination = drupal_get_destination();
+    $destination = $this->getDestinationArray();
     $row_position = 0;
     // Build the actual form.
     $form['terms'] = array(
       '#type' => 'table',
       '#header' => array($this->t('Name'), $this->t('Weight'), $this->t('Operations')),
-      '#empty' => $this->t('No terms available. <a href="@link">Add term</a>.', array('@link' => $this->url('entity.taxonomy_term.add_form', array('taxonomy_vocabulary' => $taxonomy_vocabulary->id())))),
+      '#empty' => $this->t('No terms available. <a href=":link">Add term</a>.', array(':link' => $this->url('entity.taxonomy_term.add_form', array('taxonomy_vocabulary' => $taxonomy_vocabulary->id())))),
       '#attributes' => array(
         'id' => 'taxonomy',
       ),
@@ -227,7 +228,7 @@ class OverviewTerms extends FormBase {
         '#title' => $term->getName(),
         '#url' => $term->urlInfo(),
       );
-      if ($taxonomy_vocabulary->hierarchy != TAXONOMY_HIERARCHY_MULTIPLE && count($tree) > 1) {
+      if ($taxonomy_vocabulary->getHierarchy() != TAXONOMY_HIERARCHY_MULTIPLE && count($tree) > 1) {
         $parent_fields = TRUE;
         $form['terms'][$key]['term']['tid'] = array(
           '#type' => 'hidden',
@@ -333,10 +334,10 @@ class OverviewTerms extends FormBase {
         'hidden' => FALSE,
       );
       $form['terms']['#attached']['library'][] = 'taxonomy/drupal.taxonomy';
-      $form['terms']['#attached']['js'][] = array(
-        'data' => array('taxonomy' => array('backStep' => $back_step, 'forwardStep' => $forward_step)),
-        'type' => 'setting',
-      );
+      $form['terms']['#attached']['drupalSettings']['taxonomy'] = [
+        'backStep' => $back_step,
+        'forwardStep' => $forward_step,
+      ];
     }
     $form['terms']['#tabledrag'][] = array(
       'action' => 'order',
@@ -344,7 +345,7 @@ class OverviewTerms extends FormBase {
       'group' => 'term-weight',
     );
 
-    if ($taxonomy_vocabulary->hierarchy != TAXONOMY_HIERARCHY_MULTIPLE && count($tree) > 1) {
+    if ($taxonomy_vocabulary->getHierarchy() != TAXONOMY_HIERARCHY_MULTIPLE && count($tree) > 1) {
       $form['actions'] = array('#type' => 'actions', '#tree' => FALSE);
       $form['actions']['submit'] = array(
         '#type' => 'submit',
@@ -358,6 +359,7 @@ class OverviewTerms extends FormBase {
       );
     }
 
+    $form['pager_pager'] = ['#type' => 'pager'];
     return $form;
   }
 
@@ -388,9 +390,7 @@ class OverviewTerms extends FormBase {
     $hierarchy = TAXONOMY_HIERARCHY_DISABLED;
 
     $changed_terms = array();
-    // @todo taxonomy_get_tree needs to be converted to a service and injected.
-    //   Will be fixed in http://drupal.org/node/1976298.
-    $tree = taxonomy_get_tree($vocabulary->id(), 0, NULL, TRUE);
+    $tree = $this->storageController->loadTree($vocabulary->id(), 0, NULL, TRUE);
 
     if (empty($tree)) {
       return;
@@ -454,8 +454,8 @@ class OverviewTerms extends FormBase {
     }
 
     // Update the vocabulary hierarchy to flat or single hierarchy.
-    if ($vocabulary->hierarchy != $hierarchy) {
-      $vocabulary->hierarchy = $hierarchy;
+    if ($vocabulary->getHierarchy() != $hierarchy) {
+      $vocabulary->setHierarchy($hierarchy);
       $vocabulary->save();
     }
     drupal_set_message($this->t('The configuration options have been saved.'));

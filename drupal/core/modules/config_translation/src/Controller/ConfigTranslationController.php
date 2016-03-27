@@ -13,6 +13,7 @@ use Drupal\Core\Controller\ControllerBase;
 use Drupal\Core\Language\Language;
 use Drupal\Core\Language\LanguageManagerInterface;
 use Drupal\Core\PathProcessor\InboundPathProcessorInterface;
+use Drupal\Core\Routing\RouteMatch;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Url;
@@ -122,28 +123,25 @@ class ConfigTranslationController extends ControllerBase {
   public function itemPage(Request $request, RouteMatchInterface $route_match, $plugin_id) {
     /** @var \Drupal\config_translation\ConfigMapperInterface $mapper */
     $mapper = $this->configMapperManager->createInstance($plugin_id);
-    $mapper->populateFromRequest($request);
+    $mapper->populateFromRouteMatch($route_match);
 
     $page = array();
     $page['#title'] = $this->t('Translations for %label', array('%label' => $mapper->getTitle()));
 
-    // It is possible the original language this configuration was saved with is
-    // not on the system. For example, the configuration shipped in English but
-    // the site has no English configured. Represent the original language in
-    // the table even if it is not currently configured.
     $languages = $this->languageManager->getLanguages();
+    if (count($languages) == 1) {
+      drupal_set_message($this->t('In order to translate configuration, the website must have at least two <a href=":url">languages</a>.', array(':url' => $this->url('entity.configurable_language.collection'))), 'warning');
+    }
     $original_langcode = $mapper->getLangcode();
     if (!isset($languages[$original_langcode])) {
+      // If the language is not configured on the site, create a dummy language
+      // object for this listing only to ensure the user gets useful info.
       $language_name = $this->languageManager->getLanguageName($original_langcode);
-      if ($original_langcode == 'en') {
-        $language_name = $this->t('Built-in English');
-      }
-      // Create a dummy language object for this listing only.
       $languages[$original_langcode] = new Language(array('id' => $original_langcode, 'name' => $language_name));
     }
 
     // We create a fake request object to pass into
-    // ConfigMapperInterface::populateFromRequest() for the different languages.
+    // ConfigMapperInterface::populateFromRouteMatch() for the different languages.
     // Creating a separate request for each language and route is neither easily
     // possible nor performant.
     $fake_request = $request->duplicate();
@@ -158,13 +156,14 @@ class ConfigTranslationController extends ControllerBase {
       // This is needed because
       // ConfigMapperInterface::getAddRouteParameters(), for example,
       // needs to return the correct language code for each table row.
-      $fake_request->attributes->set('langcode', $langcode);
-      $mapper->populateFromRequest($fake_request);
+      $fake_route_match = RouteMatch::createFromRequest($fake_request);
+      $mapper->populateFromRouteMatch($fake_route_match);
+      $mapper->setLangcode($langcode);
 
       // Prepare the language name and the operations depending on whether this
       // is the original language or not.
       if ($langcode == $original_langcode) {
-        $language_name = '<strong>' . $this->t('@language (original)', array('@language' => $language->name)) . '</strong>';
+        $language_name = '<strong>' . $this->t('@language (original)', array('@language' => $language->getName())) . '</strong>';
 
         // Check access for the path/route for editing, so we can decide to
         // include a link to edit or not.
@@ -180,7 +179,7 @@ class ConfigTranslationController extends ControllerBase {
         }
       }
       else {
-        $language_name = $language->name;
+        $language_name = $language->getName();
 
         $operations = array();
         // If no translation exists for this language, link to add one.

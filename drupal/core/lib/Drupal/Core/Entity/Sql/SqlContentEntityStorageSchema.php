@@ -7,8 +7,9 @@
 
 namespace Drupal\Core\Entity\Sql;
 
-use Drupal\Component\Utility\String;
 use Drupal\Core\Database\Connection;
+use Drupal\Core\Database\DatabaseException;
+use Drupal\Core\DependencyInjection\DependencySerializationTrait;
 use Drupal\Core\Entity\ContentEntityTypeInterface;
 use Drupal\Core\Entity\EntityManagerInterface;
 use Drupal\Core\Entity\EntityStorageException;
@@ -28,6 +29,8 @@ use Drupal\field\FieldStorageConfigInterface;
  * a single field.
  */
 class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorageSchemaInterface {
+
+  use DependencySerializationTrait;
 
   /**
    * The entity manager.
@@ -107,7 +110,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   }
 
   /**
-   * Returns the keyvalue collection for tracking the installed schema.
+   * Gets the keyvalue collection for tracking the installed schema.
    *
    * @return \Drupal\Core\KeyValueStore\KeyValueStoreInterface
    *
@@ -127,11 +130,47 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
    */
   public function requiresEntityStorageSchemaChanges(EntityTypeInterface $entity_type, EntityTypeInterface $original) {
     return
-      $entity_type->getStorageClass() != $original->getStorageClass() ||
-      $entity_type->isRevisionable() != $original->isRevisionable() ||
-      $entity_type->isTranslatable() != $original->isTranslatable() ||
+      $this->hasSharedTableStructureChange($entity_type, $original) ||
       // Detect changes in key or index definitions.
       $this->getEntitySchemaData($entity_type, $this->getEntitySchema($entity_type, TRUE)) != $this->loadEntitySchemaData($original);
+  }
+
+  /**
+   * Detects whether there is a change in the shared table structure.
+   *
+   * @param \Drupal\Core\Entity\EntityTypeInterface $entity_type
+   *   The new entity type.
+   * @param \Drupal\Core\Entity\EntityTypeInterface $original
+   *   The origin entity type.
+   *
+   * @return bool
+   *   Returns TRUE if either the revisionable or translatable flag changes or
+   *   a table has been renamed.
+   */
+  protected function hasSharedTableStructureChange(EntityTypeInterface $entity_type, EntityTypeInterface $original) {
+    return
+      $entity_type->isRevisionable() != $original->isRevisionable() ||
+      $entity_type->isTranslatable() != $original->isTranslatable() ||
+      $this->hasSharedTableNameChanges($entity_type, $original);
+  }
+
+  /**
+   * Detects whether any table name got renamed in an entity type update.
+   *
+   * @param \Drupal\Core\Entity\EntityTypeInterface $entity_type
+   *   The new entity type.
+   * @param \Drupal\Core\Entity\EntityTypeInterface $original
+   *   The origin entity type.
+   *
+   * @return bool
+   *   Returns TRUE if there have been changes.
+   */
+  protected function hasSharedTableNameChanges(EntityTypeInterface $entity_type, EntityTypeInterface $original) {
+    return
+      $entity_type->getBaseTable() != $original->getBaseTable() ||
+      $entity_type->getDataTable() != $original->getDataTable() ||
+      $entity_type->getRevisionTable() != $original->getRevisionTable() ||
+      $entity_type->getRevisionDataTable() != $original->getRevisionDataTable();
   }
 
   /**
@@ -144,57 +183,72 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
       $storage_definition->hasCustomStorage() != $original->hasCustomStorage() ||
       $storage_definition->getSchema() != $original->getSchema() ||
       $storage_definition->isRevisionable() != $original->isRevisionable() ||
-      $storage_definition->isTranslatable() != $original->isTranslatable() ||
       $table_mapping->allowsSharedTableStorage($storage_definition) != $table_mapping->allowsSharedTableStorage($original) ||
       $table_mapping->requiresDedicatedTableStorage($storage_definition) != $table_mapping->requiresDedicatedTableStorage($original)
     ) {
       return TRUE;
     }
 
-    if ($table_mapping->requiresDedicatedTableStorage($storage_definition)) {
-      return $this->getDedicatedTableSchema($storage_definition) != $this->loadFieldSchemaData($original);
-    }
-    elseif ($table_mapping->allowsSharedTableStorage($storage_definition)) {
-      $field_name = $storage_definition->getName();
-      $schema = array();
-      foreach (array_diff($table_mapping->getTableNames(), $table_mapping->getDedicatedTableNames()) as $table_name) {
-        if (in_array($field_name, $table_mapping->getFieldNames($table_name))) {
-          $column_names = $table_mapping->getColumnNames($storage_definition->getName());
-          $schema[$table_name] = $this->getSharedTableFieldSchema($storage_definition, $table_name, $column_names);
-        }
-      }
-      return $schema != $this->loadFieldSchemaData($original);
-    }
-    else {
+    if ($storage_definition->hasCustomStorage()) {
       // The field has custom storage, so we don't know if a schema change is
       // needed or not, but since per the initial checks earlier in this
       // function, nothing about the definition changed that we manage, we
       // return FALSE.
       return FALSE;
     }
+
+    return $this->getSchemaFromStorageDefinition($storage_definition) != $this->loadFieldSchemaData($original);
+  }
+
+  /**
+   * Gets the schema data for the given field storage definition.
+   *
+   * @param \Drupal\Core\Field\FieldStorageDefinitionInterface $storage_definition
+   *   The field storage definition. The field that must not have custom
+   *   storage, i.e. the storage must take care of storing the field.
+   *
+   * @return array
+   *   The schema data.
+   */
+  protected function getSchemaFromStorageDefinition(FieldStorageDefinitionInterface $storage_definition) {
+    assert('!$storage_definition->hasCustomStorage();');
+    $table_mapping = $this->storage->getTableMapping();
+    $schema = [];
+    if ($table_mapping->requiresDedicatedTableStorage($storage_definition)) {
+      $schema = $this->getDedicatedTableSchema($storage_definition);
+    }
+    elseif ($table_mapping->allowsSharedTableStorage($storage_definition)) {
+      $field_name = $storage_definition->getName();
+      foreach (array_diff($table_mapping->getTableNames(), $table_mapping->getDedicatedTableNames()) as $table_name) {
+        if (in_array($field_name, $table_mapping->getFieldNames($table_name))) {
+          $column_names = $table_mapping->getColumnNames($storage_definition->getName());
+          $schema[$table_name] = $this->getSharedTableFieldSchema($storage_definition, $table_name, $column_names);
+        }
+      }
+    }
+    return $schema;
   }
 
   /**
    * {@inheritdoc}
    */
   public function requiresEntityDataMigration(EntityTypeInterface $entity_type, EntityTypeInterface $original) {
-    // If we're updating from NULL storage, then there's no stored data that
-    // requires migration.
-    // @todo Remove in https://www.drupal.org/node/2335879.
+    // If the original storage has existing entities, or it is impossible to
+    // determine if that is the case, require entity data to be migrated.
     $original_storage_class = $original->getStorageClass();
-    $null_storage_class = 'Drupal\Core\Entity\ContentEntityNullStorage';
-    if ($original_storage_class == $null_storage_class || is_subclass_of($original_storage_class, $null_storage_class)) {
+    if (!class_exists($original_storage_class)) {
+      return TRUE;
+    }
+
+    // Data migration is not needed when only indexes changed, as they can be
+    // applied if there is data.
+    if (!$this->hasSharedTableStructureChange($entity_type, $original)) {
       return FALSE;
     }
 
-    return
-      // If the original storage class is different, then there might be
-      // existing entities in that storage even if the new storage's base
-      // table is empty.
-      // @todo Ask the old storage handler rather than assuming:
-      //   https://www.drupal.org/node/2335879.
-      $entity_type->getStorageClass() != $original_storage_class ||
-      !$this->isTableEmpty($this->storage->getBaseTable());
+    // Use the original entity type since the storage has not been updated.
+    $original_storage = $this->entityManager->createHandlerInstance($original_storage_class, $original);
+    return $original_storage->hasData();
   }
 
   /**
@@ -251,7 +305,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
 
     // If a migration is required, we can't proceed.
     if ($this->requiresEntityDataMigration($entity_type, $original)) {
-      throw new EntityStorageException(String::format('The SQL storage cannot change the schema for an existing entity type with data.'));
+      throw new EntityStorageException('The SQL storage cannot change the schema for an existing entity type (' . $entity_type->id() . ') with data.');
     }
 
     // If we have no data just recreate the entity schema from scratch.
@@ -277,36 +331,12 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
       }
     }
     else {
-      $schema_handler = $this->database->schema();
-
       // Drop original indexes and unique keys.
-      foreach ($this->loadEntitySchemaData($entity_type) as $table_name => $schema) {
-        if (!empty($schema['indexes'])) {
-          foreach ($schema['indexes'] as $name => $specifier) {
-            $schema_handler->dropIndex($table_name, $name);
-          }
-        }
-        if (!empty($schema['unique keys'])) {
-          foreach ($schema['unique keys'] as $name => $specifier) {
-            $schema_handler->dropUniqueKey($table_name, $name);
-          }
-        }
-      }
+      $this->deleteEntitySchemaIndexes($this->loadEntitySchemaData($entity_type));
 
       // Create new indexes and unique keys.
       $entity_schema = $this->getEntitySchema($entity_type, TRUE);
-      foreach ($this->getEntitySchemaData($entity_type, $entity_schema) as $table_name => $schema) {
-        if (!empty($schema['indexes'])) {
-          foreach ($schema['indexes'] as $name => $specifier) {
-            $schema_handler->addIndex($table_name, $name, $specifier);
-          }
-        }
-        if (!empty($schema['unique keys'])) {
-          foreach ($schema['unique keys'] as $name => $specifier) {
-            $schema_handler->addUniqueKey($table_name, $name, $specifier);
-          }
-        }
-      }
+      $this->createEntitySchemaIndexes($entity_schema);
 
       // Store the updated entity schema.
       $this->saveEntitySchemaData($entity_type, $entity_schema);
@@ -337,8 +367,13 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
     $this->originalDefinitions = $field_storage_definitions;
     $table_mapping = $this->storage->getTableMapping($field_storage_definitions);
     foreach ($field_storage_definitions as $field_storage_definition) {
+      // If we have a field having dedicated storage we need to drop it,
+      // otherwise we just remove the related schema data.
       if ($table_mapping->requiresDedicatedTableStorage($field_storage_definition)) {
         $this->deleteDedicatedTableSchema($field_storage_definition);
+      }
+      elseif ($table_mapping->allowsSharedTableStorage($field_storage_definition)) {
+        $this->deleteFieldSchemaData($field_storage_definition);
       }
     }
     $this->originalDefinitions = NULL;
@@ -375,8 +410,17 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
     // Only configurable fields currently support purging, so prevent deletion
     // of ones we can't purge if they have existing data.
     // @todo Add purging to all fields: https://www.drupal.org/node/2282119.
-    if (!($storage_definition instanceof FieldStorageConfigInterface) && $this->storage->countFieldData($storage_definition, TRUE)) {
-      throw new FieldStorageDefinitionUpdateForbiddenException('Unable to delete a field with data that can\'t be purged.');
+    try {
+      if (!($storage_definition instanceof FieldStorageConfigInterface) && $this->storage->countFieldData($storage_definition, TRUE)) {
+        throw new FieldStorageDefinitionUpdateForbiddenException('Unable to delete a field (' . $storage_definition->getName() . ' in ' . $storage_definition->getTargetEntityTypeId() . ' entity) with data that cannot be purged.');
+      }
+    }
+    catch (DatabaseException $e) {
+      // This may happen when changing field storage schema, since we are not
+      // able to use a table mapping matching the passed storage definition.
+      // @todo Revisit this once we are able to instantiate the table mapping
+      //   properly. See https://www.drupal.org/node/2274017.
+      return;
     }
 
     // Retrieve a table mapping which contains the deleted field still.
@@ -423,13 +467,13 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
    */
   protected function checkEntityType(EntityTypeInterface $entity_type) {
     if ($entity_type->id() != $this->entityType->id()) {
-      throw new EntityStorageException(String::format('Unsupported entity type @id', array('@id' => $entity_type->id())));
+      throw new EntityStorageException("Unsupported entity type {$entity_type->id()}");
     }
     return TRUE;
   }
 
   /**
-   * Returns the entity schema for the specified entity type.
+   * Gets the entity schema for the specified entity type.
    *
    * Entity types may override this method in order to optimize the generated
    * schema of the entity tables. However, only cross-field optimizations should
@@ -486,20 +530,13 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
         }
         foreach ($table_mapping->getFieldNames($table_name) as $field_name) {
           if (!isset($storage_definitions[$field_name])) {
-            throw new FieldException(String::format('Field storage definition for "@field_name" could not be found.', array('@field_name' => $field_name)));
+            throw new FieldException("Field storage definition for '$field_name' could not be found.");
           }
           // Add the schema for base field definitions.
           elseif ($table_mapping->allowsSharedTableStorage($storage_definitions[$field_name])) {
             $column_names = $table_mapping->getColumnNames($field_name);
             $storage_definition = $storage_definitions[$field_name];
             $schema[$table_name] = array_merge_recursive($schema[$table_name], $this->getSharedTableFieldSchema($storage_definition, $table_name, $column_names));
-          }
-        }
-
-        // Add the schema for extra fields.
-        foreach ($table_mapping->getExtraColumns($table_name) as $column_name) {
-          if ($column_name == 'default_langcode') {
-            $this->addDefaultLangcodeSchema($schema[$table_name]);
           }
         }
       }
@@ -541,7 +578,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   }
 
   /**
-   * Returns entity schema definitions for index and key definitions.
+   * Gets entity schema definitions for index and key definitions.
    *
    * @param \Drupal\Core\Entity\ContentEntityTypeInterface $entity_type
    *   The entity type definition.
@@ -554,22 +591,36 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
    *   storage definitions.
    */
   protected function getEntitySchemaData(ContentEntityTypeInterface $entity_type, array $schema) {
-    $schema_data = array();
     $entity_type_id = $entity_type->id();
-    $keys = array('indexes', 'unique keys');
-    $unused_keys = array_flip(array('description', 'fields', 'foreign keys'));
 
+    // Collect all possible field schema identifiers for shared table fields.
+    // These will be used to detect entity schema data in the subsequent loop.
+    $field_schema_identifiers = [];
+    $storage_definitions = $this->entityManager->getFieldStorageDefinitions($entity_type_id);
+    $table_mapping = $this->storage->getTableMapping($storage_definitions);
+    foreach ($storage_definitions as $field_name => $storage_definition) {
+      if ($table_mapping->allowsSharedTableStorage($storage_definition)) {
+        // Make sure both base identifier names and suffixed names are listed.
+        $name = $this->getFieldSchemaIdentifierName($entity_type_id, $field_name);
+        $field_schema_identifiers[$name] = $name;
+        foreach ($storage_definition->getColumns() as $key => $columns) {
+          $name = $this->getFieldSchemaIdentifierName($entity_type_id, $field_name, $key);
+          $field_schema_identifiers[$name] = $name;
+        }
+      }
+    }
+
+    // Extract entity schema data from the Schema API definition.
+    $schema_data = [];
+    $keys = ['indexes', 'unique keys'];
+    $unused_keys = array_flip(['description', 'fields', 'foreign keys']);
     foreach ($schema as $table_name => $table_schema) {
       $table_schema = array_diff_key($table_schema, $unused_keys);
       foreach ($keys as $key) {
         // Exclude data generated from field storage definitions, we will check
         // that separately.
-        if (!empty($table_schema[$key])) {
-          $data_keys = array_keys($table_schema[$key]);
-          $entity_keys = array_filter($data_keys, function ($key) use ($entity_type_id) {
-            return strpos($key, $entity_type_id . '_field__') !== 0;
-          });
-          $table_schema[$key] = array_intersect_key($table_schema[$key], array_flip($entity_keys));
+        if ($field_schema_identifiers && !empty($table_schema[$key])) {
+          $table_schema[$key] = array_diff_key($table_schema[$key], $field_schema_identifiers);
         }
       }
       $schema_data[$table_name] = array_filter($table_schema);
@@ -579,7 +630,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   }
 
   /**
-   * Returns an index schema array for a given field.
+   * Gets an index schema array for a given field.
    *
    * @param string $field_name
    *   The name of the field.
@@ -596,7 +647,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   }
 
   /**
-   * Returns a unique key schema array for a given field.
+   * Gets a unique key schema array for a given field.
    *
    * @param string $field_name
    *   The name of the field.
@@ -613,7 +664,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   }
 
   /**
-   * Returns field schema data for the given key.
+   * Gets field schema data for the given key.
    *
    * @param string $field_name
    *   The name of the field.
@@ -683,7 +734,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   }
 
   /**
-   * Returns field foreign keys.
+   * Gets field foreign keys.
    *
    * @param string $field_name
    *   The name of the field.
@@ -713,25 +764,6 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
     }
 
     return $foreign_keys;
-  }
-
-  /**
-   * Returns the schema for the 'default_langcode' metadata field.
-   *
-   * @param array $schema
-   *   The table schema to add the field schema to, passed by reference.
-   *
-   * @return array
-   *   A schema field array for the 'default_langcode' metadata field.
-   */
-  protected function addDefaultLangcodeSchema(&$schema) {
-    $schema['fields']['default_langcode'] =  array(
-      'description' => 'Boolean indicating whether field values are in the default entity language.',
-      'type' => 'int',
-      'size' => 'tiny',
-      'not null' => TRUE,
-      'default' => 1,
-    );
   }
 
   /**
@@ -887,10 +919,10 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
 
     $schema = array(
       'description' => "The data table for $entity_type_id entities.",
-      // @todo Use the language entity key when https://drupal.org/node/2143729
-      //   is in.
-      'primary key' => array($id_key, 'langcode'),
-      'indexes' => array(),
+      'primary key' => array($id_key, $entity_type->getKey('langcode')),
+      'indexes' => array(
+        $entity_type_id . '__id__default_langcode__langcode' => array($id_key, $entity_type->getKey('default_langcode'), $entity_type->getKey('langcode')),
+      ),
       'foreign keys' => array(
         $entity_type_id => array(
           'table' => $this->storage->getBaseTable(),
@@ -925,10 +957,10 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
 
     $schema = array(
       'description' => "The revision data table for $entity_type_id entities.",
-      // @todo Use the language entity key when https://drupal.org/node/2143729
-      //   is in.
-      'primary key' => array($revision_key, 'langcode'),
-      'indexes' => array(),
+      'primary key' => array($revision_key, $entity_type->getKey('langcode')),
+      'indexes' => array(
+        $entity_type_id . '__id__default_langcode__langcode' => array($id_key, $entity_type->getKey('default_langcode'), $entity_type->getKey('langcode')),
+      ),
       'foreign keys' => array(
         $entity_type_id => array(
           'table' => $this->storage->getBaseTable(),
@@ -1003,6 +1035,9 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
    *   A partial schema array for the base table.
    */
   protected function processDataTable(ContentEntityTypeInterface $entity_type, array &$schema) {
+    // Marking the respective fields as NOT NULL makes the indexes more
+    // performant.
+    $schema['fields'][$entity_type->getKey('default_langcode')]['not null'] = TRUE;
   }
 
   /**
@@ -1017,6 +1052,9 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
    *   A partial schema array for the base table.
    */
   protected function processRevisionDataTable(ContentEntityTypeInterface $entity_type, array &$schema) {
+    // Marking the respective fields as NOT NULL makes the indexes more
+    // performant.
+    $schema['fields'][$entity_type->getKey('default_langcode')]['not null'] = TRUE;
   }
 
   /**
@@ -1031,6 +1069,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
     if ($schema['fields'][$key]['type'] == 'int') {
       $schema['fields'][$key]['type'] = 'serial';
     }
+    $schema['fields'][$key]['not null'] = TRUE;
     unset($schema['fields'][$key]['default']);
   }
 
@@ -1067,7 +1106,11 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   protected function createDedicatedTableSchema(FieldStorageDefinitionInterface $storage_definition) {
     $schema = $this->getDedicatedTableSchema($storage_definition);
     foreach ($schema as $name => $table) {
-      $this->database->schema()->createTable($name, $table);
+      // Check if the table exists because it might already have been
+      // created as part of the earlier entity type update event.
+      if (!$this->database->schema()->tableExists($name)) {
+        $this->database->schema()->createTable($name, $table);
+      }
     }
     $this->saveFieldSchemaData($storage_definition, $schema);
   }
@@ -1100,11 +1143,17 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
           $schema[$table_name] = $this->getSharedTableFieldSchema($storage_definition, $table_name, $column_names);
           if (!$only_save) {
             foreach ($schema[$table_name]['fields'] as $name => $specifier) {
-              $schema_handler->addField($table_name, $name, $specifier);
+              // Check if the field exists because it might already have been
+              // created as part of the earlier entity type update event.
+              if (!$schema_handler->fieldExists($table_name, $name)) {
+                $schema_handler->addField($table_name, $name, $specifier);
+              }
             }
             if (!empty($schema[$table_name]['indexes'])) {
               foreach ($schema[$table_name]['indexes'] as $name => $specifier) {
-                $schema_handler->addIndex($table_name, $name, $specifier);
+                // Check if the index exists because it might already have been
+                // created as part of the earlier entity type update event.
+                $this->addIndex($table_name, $name, $specifier, $schema[$table_name]);
               }
             }
             if (!empty($schema[$table_name]['unique keys'])) {
@@ -1118,7 +1167,14 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
         }
       }
     }
+
     $this->saveFieldSchemaData($storage_definition, $schema);
+
+    if (!$only_save) {
+      // Make sure any entity index involving this field is re-created if
+      // needed.
+      $this->createEntitySchemaIndexes($this->getEntitySchema($this->entityType), $storage_definition);
+    }
   }
 
   /**
@@ -1149,6 +1205,9 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
    *   The storage definition of the field being deleted.
    */
   protected function deleteSharedTableSchema(FieldStorageDefinitionInterface $storage_definition) {
+    // Make sure any entity index involving this field is dropped.
+    $this->deleteEntitySchemaIndexes($this->loadEntitySchemaData($this->entityType), $storage_definition);
+
     $deleted_field_name = $storage_definition->getName();
     $table_mapping = $this->storage->getTableMapping(
       $this->entityManager->getLastInstalledFieldStorageDefinitions($this->entityType->id())
@@ -1227,8 +1286,8 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
       }
     }
     else {
-      if ($storage_definition->getColumns() != $original->getColumns()) {
-        throw new FieldStorageDefinitionUpdateForbiddenException("The SQL storage cannot change the schema for an existing field with data.");
+      if ($this->hasColumnChanges($storage_definition, $original)) {
+        throw new FieldStorageDefinitionUpdateForbiddenException('The SQL storage cannot change the schema for an existing field (' . $storage_definition->getName() . ' in ' . $storage_definition->getTargetEntityTypeId() . ' entity) with data.');
       }
       // There is data, so there are no column changes. Drop all the prior
       // indexes and create all the new ones, except for all the priors that
@@ -1237,8 +1296,12 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
       $table = $table_mapping->getDedicatedDataTableName($original);
       $revision_table = $table_mapping->getDedicatedRevisionTableName($original);
 
+      // Get the field schemas.
       $schema = $storage_definition->getSchema();
       $original_schema = $original->getSchema();
+
+      // Gets the SQL schema for a dedicated tables.
+      $actual_schema = $this->getDedicatedTableSchema($storage_definition);
 
       foreach ($original_schema['indexes'] as $name => $columns) {
         if (!isset($schema['indexes'][$name]) || $columns != $schema['indexes'][$name]) {
@@ -1266,8 +1329,10 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
               $real_columns[] = $table_mapping->getFieldColumnName($storage_definition, $column_name);
             }
           }
-          $this->database->schema()->addIndex($table, $real_name, $real_columns);
-          $this->database->schema()->addIndex($revision_table, $real_name, $real_columns);
+          // Check if the index exists because it might already have been
+          // created as part of the earlier entity type update event.
+          $this->addIndex($table, $real_name, $real_columns, $actual_schema[$table]);
+          $this->addIndex($revision_table, $real_name, $real_columns, $actual_schema[$revision_table]);
         }
       }
       $this->saveFieldSchemaData($storage_definition, $this->getDedicatedTableSchema($storage_definition));
@@ -1312,8 +1377,8 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
       }
     }
     else {
-      if ($storage_definition->getColumns() != $original->getColumns()) {
-        throw new FieldStorageDefinitionUpdateForbiddenException("The SQL storage cannot change the schema for an existing field with data.");
+      if ($this->hasColumnChanges($storage_definition, $original)) {
+        throw new FieldStorageDefinitionUpdateForbiddenException('The SQL storage cannot change the schema for an existing field (' . $storage_definition->getName() . ' in ' . $storage_definition->getTargetEntityTypeId() . ' entity) with data.');
       }
 
       $updated_field_name = $storage_definition->getName();
@@ -1330,6 +1395,20 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
           if ($field_name == $updated_field_name) {
             $schema[$table_name] = $this->getSharedTableFieldSchema($storage_definition, $table_name, $column_names);
 
+            // Handle NOT NULL constraints.
+            foreach ($schema[$table_name]['fields'] as $column_name => $specifier) {
+              $not_null = !empty($specifier['not null']);
+              $original_not_null = !empty($original_schema[$table_name]['fields'][$column_name]['not null']);
+              if ($not_null !== $original_not_null) {
+                if ($not_null && $this->hasNullFieldPropertyData($table_name, $column_name)) {
+                  throw new EntityStorageException("The $column_name column cannot have NOT NULL constraints as it holds NULL values.");
+                }
+                $column_schema = $original_schema[$table_name]['fields'][$column_name];
+                $column_schema['not null'] = $not_null;
+                $schema_handler->changeField($table_name, $field_name, $field_name, $column_schema);
+              }
+            }
+
             // Drop original indexes and unique keys.
             if (!empty($original_schema[$table_name]['indexes'])) {
               foreach ($original_schema[$table_name]['indexes'] as $name => $specifier) {
@@ -1344,7 +1423,10 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
             // Create new indexes and unique keys.
             if (!empty($schema[$table_name]['indexes'])) {
               foreach ($schema[$table_name]['indexes'] as $name => $specifier) {
-                $schema_handler->addIndex($table_name, $name, $specifier);
+                // Check if the index exists because it might already have been
+                // created as part of the earlier entity type update event.
+                $this->addIndex($table_name, $name, $specifier, $schema[$table_name]);
+
               }
             }
             if (!empty($schema[$table_name]['unique keys'])) {
@@ -1362,7 +1444,121 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   }
 
   /**
-   * Returns the schema for a single field definition.
+   * Creates the specified entity schema indexes and keys.
+   *
+   * @param array $entity_schema
+   *   The entity schema definition.
+   * @param \Drupal\Core\Field\FieldStorageDefinitionInterface|NULL $storage_definition
+   *   (optional) If a field storage definition is specified, only indexes and
+   *   keys involving its columns will be processed. Otherwise all defined
+   *   entity indexes and keys will be processed.
+   */
+  protected function createEntitySchemaIndexes(array $entity_schema, FieldStorageDefinitionInterface $storage_definition = NULL) {
+    $schema_handler = $this->database->schema();
+
+    if ($storage_definition) {
+      $table_mapping = $this->storage->getTableMapping();
+      $column_names = $table_mapping->getColumnNames($storage_definition->getName());
+    }
+
+    $index_keys = [
+      'indexes' => 'addIndex',
+      'unique keys' => 'addUniqueKey',
+    ];
+
+    foreach ($this->getEntitySchemaData($this->entityType, $entity_schema) as $table_name => $schema) {
+      // Add fields schema because database driver may depend on this data to
+      // perform index normalization.
+      $schema['fields'] = $entity_schema[$table_name]['fields'];
+
+      foreach ($index_keys as $key => $add_method) {
+        if (!empty($schema[$key])) {
+          foreach ($schema[$key] as $name => $specifier) {
+            // If a set of field columns were specified we process only indexes
+            // involving them. Only indexes for which all columns exist are
+            // actually created.
+            $create = FALSE;
+            $specifier_columns = array_map(function($item) { return is_string($item) ? $item : reset($item); }, $specifier);
+            if (!isset($column_names) || array_intersect($specifier_columns, $column_names)) {
+              $create = TRUE;
+              foreach ($specifier_columns as $specifier_column_name) {
+                // This may happen when adding more than one field in the same
+                // update run. Eventually when all field columns have been
+                // created the index will be created too.
+                if (!$schema_handler->fieldExists($table_name, $specifier_column_name)) {
+                  $create = FALSE;
+                  break;
+                }
+              }
+            }
+            if ($create) {
+              $this->{$add_method}($table_name, $name, $specifier, $schema);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Deletes the specified entity schema indexes and keys.
+   *
+   * @param array $entity_schema_data
+   *   The entity schema data definition.
+   * @param \Drupal\Core\Field\FieldStorageDefinitionInterface|NULL $storage_definition
+   *   (optional) If a field storage definition is specified, only indexes and
+   *   keys involving its columns will be processed. Otherwise all defined
+   *   entity indexes and keys will be processed.
+   */
+  protected function deleteEntitySchemaIndexes(array $entity_schema_data, FieldStorageDefinitionInterface $storage_definition = NULL) {
+    $schema_handler = $this->database->schema();
+
+    if ($storage_definition) {
+      $table_mapping = $this->storage->getTableMapping();
+      $column_names = $table_mapping->getColumnNames($storage_definition->getName());
+    }
+
+    $index_keys = [
+      'indexes' => 'dropIndex',
+      'unique keys' => 'dropUniqueKey',
+    ];
+
+    foreach ($entity_schema_data as $table_name => $schema) {
+      foreach ($index_keys as $key => $drop_method) {
+        if (!empty($schema[$key])) {
+          foreach ($schema[$key] as $name => $specifier) {
+            $specifier_columns = array_map(function($item) { return is_string($item) ? $item : reset($item); }, $specifier);
+            if (!isset($column_names) || array_intersect($specifier_columns, $column_names)) {
+              $schema_handler->{$drop_method}($table_name, $name);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Checks whether a field property has NULL values.
+   *
+   * @param string $table_name
+   *   The name of the table to inspect.
+   * @param string $column_name
+   *   The name of the column holding the field property data.
+   *
+   * @return bool
+   *   TRUE if NULL data is found, FALSE otherwise.
+   */
+  protected function hasNullFieldPropertyData($table_name, $column_name) {
+    $query = $this->database->select($table_name, 't')
+      ->fields('t', [$column_name])
+      ->range(0, 1);
+    $query->isNull('t.' . $column_name);
+    $result = $query->execute()->fetchAssoc();
+    return (bool) $result;
+  }
+
+  /**
+   * Gets the schema for a single field definition.
    *
    * Entity types may override this method in order to optimize the generated
    * schema for given field. While all optimizations that apply to a single
@@ -1393,32 +1589,39 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
 
     // Check that the schema does not include forbidden column names.
     if (array_intersect(array_keys($field_schema['columns']), $this->storage->getTableMapping()->getReservedColumns())) {
-      throw new FieldException(format_string('Illegal field column names on @field_name', array('@field_name' => $storage_definition->getName())));
+      throw new FieldException("Illegal field column names on {$storage_definition->getName()}");
     }
 
     $field_name = $storage_definition->getName();
-    $field_description = $storage_definition->getDescription();
+    $base_table = $this->storage->getBaseTable();
+
+    // A shared table contains rows for entities where the field is empty
+    // (since other fields stored in the same table might not be empty), thus
+    // the only columns that can be 'not null' are those for required
+    // properties of required fields. However, even those would break in the
+    // case where a new field is added to a table that contains existing rows.
+    // For now, we only hardcode 'not null' to a couple "entity keys", in order
+    // to keep their indexes optimized.
+    // @todo Revisit once we have support for 'initial' in
+    //   https://www.drupal.org/node/2346019.
+    $not_null_keys = $this->entityType->getKeys();
+    // Label fields are not necessarily required.
+    unset($not_null_keys['label']);
+    // Because entity ID and revision ID are both serial fields in the base and
+    // revision table respectively, the revision ID is not known yet, when
+    // inserting data into the base table. Instead the revision ID in the base
+    // table is updated after the data has been inserted into the revision
+    // table. For this reason the revision ID field cannot be marked as NOT
+    // NULL.
+    if ($table_name == $base_table) {
+      unset($not_null_keys['revision']);
+    }
 
     foreach ($column_mapping as $field_column_name => $schema_field_name) {
       $column_schema = $field_schema['columns'][$field_column_name];
 
       $schema['fields'][$schema_field_name] = $column_schema;
-      $schema['fields'][$schema_field_name]['description'] = $field_description;
-      // Only entity keys are required.
-      $keys = $this->entityType->getKeys() + array('langcode' => 'langcode');
-      // The label is an entity key, but label fields are not necessarily
-      // required.
-      // Because entity ID and revision ID are both serial fields in the base
-      // and revision table respectively, the revision ID is not known yet, when
-      // inserting data into the base table. Instead the revision ID in the base
-      // table is updated after the data has been inserted into the revision
-      // table. For this reason the revision ID field cannot be marked as NOT
-      // NULL.
-      unset($keys['label'], $keys['revision']);
-      // Key fields may not be NULL.
-      if (in_array($field_name, $keys)) {
-        $schema['fields'][$schema_field_name]['not null'] = TRUE;
-      }
+      $schema['fields'][$schema_field_name]['not null'] = in_array($field_name, $not_null_keys);
     }
 
     if (!empty($field_schema['indexes'])) {
@@ -1499,7 +1702,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   }
 
   /**
-   * Returns the SQL schema for a dedicated table.
+   * Gets the SQL schema for a dedicated table.
    *
    * @param \Drupal\Core\Field\FieldStorageDefinitionInterface $storage_definition
    *   The field storage definition.
@@ -1534,7 +1737,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
     }
     else {
       $id_schema = array(
-        'type' => 'varchar',
+        'type' => 'varchar_ascii',
         'length' => 128,
         'not null' => TRUE,
         'description' => 'The entity id this data is attached to',
@@ -1567,7 +1770,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
       'description' => $description_current,
       'fields' => array(
         'bundle' => array(
-          'type' => 'varchar',
+          'type' => 'varchar_ascii',
           'length' => 128,
           'not null' => TRUE,
           'default' => '',
@@ -1583,7 +1786,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
         'entity_id' => $id_schema,
         'revision_id' => $revision_id_schema,
         'langcode' => array(
-          'type' => 'varchar',
+          'type' => 'varchar_ascii',
           'length' => 32,
           'not null' => TRUE,
           'default' => '',
@@ -1599,24 +1802,26 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
       'primary key' => array('entity_id', 'deleted', 'delta', 'langcode'),
       'indexes' => array(
         'bundle' => array('bundle'),
-        'deleted' => array('deleted'),
-        'entity_id' => array('entity_id'),
         'revision_id' => array('revision_id'),
-        'langcode' => array('langcode'),
       ),
     );
 
     // Check that the schema does not include forbidden column names.
     $schema = $storage_definition->getSchema();
+    $properties = $storage_definition->getPropertyDefinitions();
     $table_mapping = $this->storage->getTableMapping();
     if (array_intersect(array_keys($schema['columns']), $table_mapping->getReservedColumns())) {
-      throw new FieldException(format_string('Illegal field column names on @field_name', array('@field_name' => $storage_definition->getName())));
+      throw new FieldException("Illegal field column names on {$storage_definition->getName()}");
     }
 
     // Add field columns.
     foreach ($schema['columns'] as $column_name => $attributes) {
       $real_name = $table_mapping->getFieldColumnName($storage_definition, $column_name);
       $data_schema['fields'][$real_name] = $attributes;
+      // A dedicated table only contain rows for actual field values, and no
+      // rows for entities where the field is empty. Thus, we can safely
+      // enforce 'not null' on the columns for the field's required properties.
+      $data_schema['fields'][$real_name]['not null'] = $properties[$column_name]->isRequired();
     }
 
     // Add indexes.
@@ -1664,7 +1869,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   }
 
   /**
-   * Returns the name to be used for the given entity index.
+   * Gets the name to be used for the given entity index.
    *
    * @param \Drupal\Core\Entity\ContentEntityTypeInterface $entity_type
    *   The entity type.
@@ -1693,6 +1898,7 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
   protected function getFieldIndexName(FieldStorageDefinitionInterface $storage_definition, $index) {
     return $storage_definition->getName() . '_' . $index;
   }
+
   /**
    * Checks whether a database table is non-existent or empty.
    *
@@ -1711,6 +1917,93 @@ class SqlContentEntityStorageSchema implements DynamicallyFieldableEntityStorage
         ->range(0, 1)
         ->execute()
         ->fetchField();
+  }
+
+  /**
+   * Compares schemas to check for changes in the column definitions.
+   *
+   * @param \Drupal\Core\Field\FieldStorageDefinitionInterface $storage_definition
+   *   Current field storage definition.
+   * @param \Drupal\Core\Field\FieldStorageDefinitionInterface $original
+   *   The original field storage definition.
+   *
+   * @return bool
+   *   Returns TRUE if there are schema changes in the column definitions.
+   */
+  protected function hasColumnChanges(FieldStorageDefinitionInterface $storage_definition, FieldStorageDefinitionInterface $original) {
+    if ($storage_definition->getColumns() != $original->getColumns()) {
+      // Base field definitions have schema data stored in the original
+      // definition.
+      return TRUE;
+    }
+
+    if (!$storage_definition->hasCustomStorage()) {
+      $keys = array_flip($this->getColumnSchemaRelevantKeys());
+      $definition_schema = $this->getSchemaFromStorageDefinition($storage_definition);
+      foreach ($this->loadFieldSchemaData($original) as $table => $table_schema) {
+        foreach ($table_schema['fields'] as $name => $spec) {
+          $definition_spec = array_intersect_key($definition_schema[$table]['fields'][$name], $keys);
+          $stored_spec = array_intersect_key($spec, $keys);
+          if ($definition_spec != $stored_spec) {
+            return TRUE;
+          }
+        }
+      }
+    }
+
+    return FALSE;
+  }
+
+  /**
+   * Returns a list of column schema keys affecting data storage.
+   *
+   * When comparing schema definitions, only changes in certain properties
+   * actually affect how data is stored and thus, if applied, may imply data
+   * manipulation.
+   *
+   * @return string[]
+   *   An array of key names.
+   */
+  protected function getColumnSchemaRelevantKeys() {
+    return ['type', 'size', 'length', 'unsigned'];
+  }
+
+  /**
+   * Creates an index, dropping it if already existing.
+   *
+   * @param string $table
+   *   The table name.
+   * @param string $name
+   *   The index name.
+   * @param array $specifier
+   *   The fields to index.
+   * @param array $schema
+   *   The table specification.
+   *
+   * @see \Drupal\Core\Database\Schema::addIndex()
+   */
+  protected function addIndex($table, $name, array $specifier, array $schema) {
+    $schema_handler = $this->database->schema();
+    $schema_handler->dropIndex($table, $name);
+    $schema_handler->addIndex($table, $name, $specifier, $schema);
+  }
+
+  /**
+   * Creates a unique key, dropping it if already existing.
+   *
+   * @param string $table
+   *   The table name.
+   * @param string $name
+   *   The index name.
+   * @param array $specifier
+   *   The unique fields.
+   *
+   * @see \Drupal\Core\Database\Schema::addUniqueKey()
+   */
+  protected function addUniqueKey($table, $name, array $specifier) {
+    $schema_handler = $this->database->schema();
+    $schema_handler->dropUniqueKey($table, $name);
+    $schema_handler->addUniqueKey($table, $name, $specifier);
   }
 
 }

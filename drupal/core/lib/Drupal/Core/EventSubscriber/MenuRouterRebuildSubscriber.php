@@ -20,11 +20,6 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 class MenuRouterRebuildSubscriber implements EventSubscriberInterface {
 
   /**
-   * @var \Drupal\Core\Routing\RouteBuilderInterface
-   */
-  protected $routeBuilder;
-
-  /**
    * @var \Drupal\Core\Lock\LockBackendInterface
    */
   protected $lock;
@@ -57,7 +52,7 @@ class MenuRouterRebuildSubscriber implements EventSubscriberInterface {
    */
   public function onRouterRebuild(Event $event) {
     $this->menuLinksRebuild();
-    Cache::deleteTags(array('local_task'));
+    Cache::invalidateTags(array('local_task'));
   }
 
   /**
@@ -91,7 +86,8 @@ class MenuRouterRebuildSubscriber implements EventSubscriberInterface {
    * {@inheritdoc}
    */
   static function getSubscribedEvents() {
-    $events[RoutingEvents::FINISHED][] = array('onRouterRebuild', 200);
+    // Run after CachedRouteRebuildSubscriber.
+    $events[RoutingEvents::FINISHED][] = array('onRouterRebuild', 100);
     return $events;
   }
 

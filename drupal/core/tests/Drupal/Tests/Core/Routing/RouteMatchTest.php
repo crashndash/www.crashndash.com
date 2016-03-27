@@ -2,13 +2,12 @@
 
 /**
  * @file
- * Contains Drupal\Tests\Core\Routing\RouteMatchTest.
+ * Contains \Drupal\Tests\Core\Routing\RouteMatchTest.
  */
 
 namespace Drupal\Tests\Core\Routing;
 
 use Drupal\Core\Routing\RouteMatch;
-use Drupal\Tests\UnitTestCase;
 use Symfony\Cmf\Component\Routing\RouteObjectInterface;
 use Symfony\Component\HttpFoundation\ParameterBag;
 use Symfony\Component\HttpFoundation\Request;
@@ -18,7 +17,7 @@ use Symfony\Component\Routing\Route;
  * @coversDefaultClass \Drupal\Core\Routing\RouteMatch
  * @group Routing
  */
-class RouteMatchTest extends RouteMatchBaseTest {
+class RouteMatchTest extends RouteMatchTestBase {
 
   /**
    * {@inheritdoc}
@@ -30,7 +29,6 @@ class RouteMatchTest extends RouteMatchBaseTest {
   /**
    * @covers ::createFromRequest
    * @covers ::__construct
-   * @covers \Drupal\Core\Routing\NullRouteMatch
    */
   public function testRouteMatchFromRequest() {
     $request = new Request();

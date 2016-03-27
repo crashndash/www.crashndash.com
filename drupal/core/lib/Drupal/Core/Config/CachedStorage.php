@@ -2,12 +2,11 @@
 
 /**
  * @file
- * Contains Drupal\Core\Config\CachedStorage.
+ * Contains \Drupal\Core\Config\CachedStorage.
  */
 
 namespace Drupal\Core\Config;
 
-use Drupal\Core\Cache\Cache;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\DependencyInjection\DependencySerializationTrait;
 
@@ -56,7 +55,7 @@ class CachedStorage implements StorageInterface, StorageCacheInterface {
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::exists().
+   * {@inheritdoc}
    */
   public function exists($name) {
     // The cache would read in the entire data (instead of only checking whether
@@ -66,7 +65,7 @@ class CachedStorage implements StorageInterface, StorageCacheInterface {
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::read().
+   * {@inheritdoc}
    */
   public function read($name) {
     $cache_key = $this->getCacheKey($name);
@@ -124,14 +123,13 @@ class CachedStorage implements StorageInterface, StorageCacheInterface {
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::write().
+   * {@inheritdoc}
    */
   public function write($name, array $data) {
     if ($this->storage->write($name, $data)) {
       // While not all written data is read back, setting the cache instead of
       // just deleting it avoids cache rebuild stampedes.
       $this->cache->set($this->getCacheKey($name), $data);
-      Cache::deleteTags(array($this::FIND_BY_PREFIX_CACHE_TAG));
       $this->findByPrefixCache = array();
       return TRUE;
     }
@@ -139,14 +137,13 @@ class CachedStorage implements StorageInterface, StorageCacheInterface {
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::delete().
+   * {@inheritdoc}
    */
   public function delete($name) {
     // If the cache was the first to be deleted, another process might start
     // rebuilding the cache before the storage is gone.
     if ($this->storage->delete($name)) {
       $this->cache->delete($this->getCacheKey($name));
-      Cache::deleteTags(array($this::FIND_BY_PREFIX_CACHE_TAG));
       $this->findByPrefixCache = array();
       return TRUE;
     }
@@ -154,7 +151,7 @@ class CachedStorage implements StorageInterface, StorageCacheInterface {
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::rename().
+   * {@inheritdoc}
    */
   public function rename($name, $new_name) {
     // If the cache was the first to be deleted, another process might start
@@ -162,7 +159,6 @@ class CachedStorage implements StorageInterface, StorageCacheInterface {
     if ($this->storage->rename($name, $new_name)) {
       $this->cache->delete($this->getCacheKey($name));
       $this->cache->delete($this->getCacheKey($new_name));
-      Cache::deleteTags(array($this::FIND_BY_PREFIX_CACHE_TAG));
       $this->findByPrefixCache = array();
       return TRUE;
     }
@@ -170,14 +166,14 @@ class CachedStorage implements StorageInterface, StorageCacheInterface {
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::encode().
+   * {@inheritdoc}
    */
   public function encode($data) {
     return $this->storage->encode($data);
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::decode().
+   * {@inheritdoc}
    */
   public function decode($raw) {
     return $this->storage->decode($raw);
@@ -213,26 +209,13 @@ class CachedStorage implements StorageInterface, StorageCacheInterface {
   protected function findByPrefix($prefix) {
     $cache_key = $this->getCacheKey($prefix);
     if (!isset($this->findByPrefixCache[$cache_key])) {
-      // The : character is not allowed in config file names, so this can not
-      // conflict.
-      if ($cache = $this->cache->get('find:' . $cache_key)) {
-        $this->findByPrefixCache[$cache_key] = $cache->data;
-      }
-      else {
-        $this->findByPrefixCache[$cache_key] = $this->storage->listAll($prefix);
-        $this->cache->set(
-          'find:' . $cache_key,
-          $this->findByPrefixCache[$cache_key],
-          Cache::PERMANENT,
-          array($this::FIND_BY_PREFIX_CACHE_TAG)
-        );
-      }
+      $this->findByPrefixCache[$cache_key] = $this->storage->listAll($prefix);
     }
     return $this->findByPrefixCache[$cache_key];
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::deleteAll().
+   * {@inheritdoc}
    */
   public function deleteAll($prefix = '') {
     // If the cache was the first to be deleted, another process might start

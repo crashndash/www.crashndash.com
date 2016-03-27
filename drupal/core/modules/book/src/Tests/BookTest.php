@@ -2,13 +2,16 @@
 
 /**
  * @file
- * Definition of Drupal\book\Tests\BookTest.
+ * Contains \Drupal\book\Tests\BookTest.
  */
 
 namespace Drupal\book\Tests;
 
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\simpletest\WebTestBase;
+use Drupal\user\RoleInterface;
 
 /**
  * Create a book, add pages, and test book interface.
@@ -18,16 +21,16 @@ use Drupal\simpletest\WebTestBase;
 class BookTest extends WebTestBase {
 
   /**
-   * Modules to enable.
+   * Modules to install.
    *
    * @var array
    */
-  public static $modules = array('book', 'block', 'node_access_test');
+  public static $modules = array('book', 'block', 'node_access_test', 'book_test');
 
   /**
    * A book node.
    *
-   * @var object
+   * @var \Drupal\node\NodeInterface
    */
   protected $book;
 
@@ -36,40 +39,55 @@ class BookTest extends WebTestBase {
    *
    * @var object
    */
-  protected $book_author;
+  protected $bookAuthor;
 
   /**
    * A user with permission to view a book and access printer-friendly version.
    *
    * @var object
    */
-  protected $web_user;
+  protected $webUser;
 
   /**
    * A user with permission to create and edit books and to administer blocks.
    *
    * @var object
    */
-  protected $admin_user;
+  protected $adminUser;
 
+  /**
+   * A user without the 'node test view' permission.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $webUserWithoutNodeAccess;
+
+  /**
+   * {@inheritdoc}
+   */
   protected function setUp() {
     parent::setUp();
+    $this->drupalPlaceBlock('system_breadcrumb_block');
+    $this->drupalPlaceBlock('page_title_block');
 
     // node_access_test requires a node_access_rebuild().
     node_access_rebuild();
 
     // Create users.
-    $this->book_author = $this->drupalCreateUser(array('create new books', 'create book content', 'edit own book content', 'add content to books'));
-    $this->web_user = $this->drupalCreateUser(array('access printer-friendly version', 'node test view'));
-    $this->admin_user = $this->drupalCreateUser(array('create new books', 'create book content', 'edit own book content', 'add content to books', 'administer blocks', 'administer permissions', 'administer book outlines', 'node test view', 'administer content types', 'administer site configuration'));
+    $this->bookAuthor = $this->drupalCreateUser(array('create new books', 'create book content', 'edit own book content', 'add content to books'));
+    $this->webUser = $this->drupalCreateUser(array('access printer-friendly version', 'node test view'));
+    $this->webUserWithoutNodeAccess = $this->drupalCreateUser(array('access printer-friendly version'));
+    $this->adminUser = $this->drupalCreateUser(array('create new books', 'create book content', 'edit any book content', 'delete any book content', 'add content to books', 'administer blocks', 'administer permissions', 'administer book outlines', 'node test view', 'administer content types', 'administer site configuration'));
   }
 
   /**
    * Creates a new book with a page hierarchy.
+   *
+   * @return \Drupal\node\NodeInterface[]
    */
   function createBook() {
     // Create new book.
-    $this->drupalLogin($this->book_author);
+    $this->drupalLogin($this->bookAuthor);
 
     $this->book = $this->createBookNode('new');
     $book = $this->book;
@@ -96,16 +114,56 @@ class BookTest extends WebTestBase {
   }
 
   /**
+   * Tests the book navigation cache context.
+   *
+   * @see \Drupal\book\Cache\BookNavigationCacheContext
+   */
+  public function testBookNavigationCacheContext() {
+    // Create a page node.
+    $this->drupalCreateContentType(['type' => 'page']);
+    $page = $this->drupalCreateNode();
+
+    // Create a book, consisting of book nodes.
+    $book_nodes = $this->createBook();
+
+    // Enable the debug output.
+    \Drupal::state()->set('book_test.debug_book_navigation_cache_context', TRUE);
+    Cache::invalidateTags(['book_test.debug_book_navigation_cache_context']);
+
+    $this->drupalLogin($this->bookAuthor);
+
+    // On non-node route.
+    $this->drupalGet($this->adminUser->urlInfo());
+    $this->assertRaw('[route.book_navigation]=book.none');
+
+    // On non-book node route.
+    $this->drupalGet($page->urlInfo());
+    $this->assertRaw('[route.book_navigation]=book.none');
+
+    // On book node route.
+    $this->drupalGet($book_nodes[0]->urlInfo());
+    $this->assertRaw('[route.book_navigation]=0|2|3');
+    $this->drupalGet($book_nodes[1]->urlInfo());
+    $this->assertRaw('[route.book_navigation]=0|2|3|4');
+    $this->drupalGet($book_nodes[2]->urlInfo());
+    $this->assertRaw('[route.book_navigation]=0|2|3|5');
+    $this->drupalGet($book_nodes[3]->urlInfo());
+    $this->assertRaw('[route.book_navigation]=0|2|6');
+    $this->drupalGet($book_nodes[4]->urlInfo());
+    $this->assertRaw('[route.book_navigation]=0|2|7');
+  }
+
+  /**
    * Tests saving the book outline on an empty book.
    */
   function testEmptyBook() {
     // Create a new empty book.
-    $this->drupalLogin($this->book_author);
+    $this->drupalLogin($this->bookAuthor);
     $book = $this->createBookNode('new');
     $this->drupalLogout();
 
     // Log in as a user with access to the book outline and save the form.
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
     $this->drupalPostForm('admin/structure/book/' . $book->id(), array(), t('Save book pages'));
     $this->assertText(t('Updated book @book.', array('@book' => $book->label())));
   }
@@ -118,7 +176,7 @@ class BookTest extends WebTestBase {
     $nodes = $this->createBook();
     $book = $this->book;
 
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
 
     // Check that book pages display along with the correct outlines and
     // previous/next links.
@@ -130,7 +188,12 @@ class BookTest extends WebTestBase {
     $this->checkBookNode($nodes[4], NULL, $nodes[3], $book, FALSE, array($book));
 
     $this->drupalLogout();
-    $this->drupalLogin($this->book_author);
+    $this->drupalLogin($this->bookAuthor);
+
+    // Check the presence of expected cache tags.
+    $this->drupalGet('node/add/book');
+    $this->assertCacheTag('config:book.settings');
+
     /*
      * Add Node 5 under Node 3.
      * Book
@@ -141,24 +204,22 @@ class BookTest extends WebTestBase {
      *   |- Node 5
      *  |- Node 4
      */
-
-
     $nodes[] = $this->createBookNode($book->id(), $nodes[3]->book['nid']); // Node 5.
     $this->drupalLogout();
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     // Verify the new outline - make sure we don't get stale cached data.
     $this->checkBookNode($nodes[3], array($nodes[5]), $nodes[2], $book, $nodes[5], array($book));
     $this->checkBookNode($nodes[4], NULL, $nodes[5], $book, FALSE, array($book));
     $this->drupalLogout();
     // Create a second book, and move an existing book page into it.
-    $this->drupalLogin($this->book_author);
+    $this->drupalLogin($this->bookAuthor);
     $other_book = $this->createBookNode('new');
     $node = $this->createBookNode($book->id());
     $edit = array('book[bid]' => $other_book->id());
     $this->drupalPostForm('node/' . $node->id() . '/edit', $edit, t('Save'));
 
     $this->drupalLogout();
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
 
     // Check that the nodes in the second book are displayed correctly.
     // First we must set $this->book to the second book, so that the
@@ -166,6 +227,11 @@ class BookTest extends WebTestBase {
     $this->book = $other_book;
     $this->checkBookNode($other_book, array($node), FALSE, FALSE, $node, array());
     $this->checkBookNode($node, NULL, $other_book, $other_book, FALSE, array($other_book));
+
+    // Test that we can save a book programatically.
+    $this->drupalLogin($this->bookAuthor);
+    $book = $this->createBookNode('new');
+    $book->save();
   }
 
   /**
@@ -204,22 +270,24 @@ class BookTest extends WebTestBase {
     if ($previous) {
       /** @var \Drupal\Core\Url $url */
       $url = $previous->urlInfo();
-      $url->setOptions(array('html' => TRUE, 'attributes' => array('rel' => array('prev'), 'title' => t('Go to previous page'))));
-      $this->assertRaw(\Drupal::l('<b>‹</b> ' . $previous->label(), $url), 'Previous page link found.');
+      $url->setOptions(array('attributes' => array('rel' => array('prev'), 'title' => t('Go to previous page'))));
+      $text = SafeMarkup::format('<b>‹</b> @label', array('@label' => $previous->label()));
+      $this->assertRaw(\Drupal::l($text, $url), 'Previous page link found.');
     }
 
     if ($up) {
       /** @var \Drupal\Core\Url $url */
       $url = $up->urlInfo();
-      $url->setOptions(array('html'=> TRUE, 'attributes' => array('title' => t('Go to parent page'))));
+      $url->setOptions(array('attributes' => array('title' => t('Go to parent page'))));
       $this->assertRaw(\Drupal::l('Up', $url), 'Up page link found.');
     }
 
     if ($next) {
       /** @var \Drupal\Core\Url $url */
       $url = $next->urlInfo();
-      $url->setOptions(array('html'=> TRUE, 'attributes' => array('rel' => array('next'), 'title' => t('Go to next page'))));
-      $this->assertRaw(\Drupal::l($next->label() . ' <b>›</b>', $url), 'Next page link found.');
+      $url->setOptions(array('attributes' => array('rel' => array('next'), 'title' => t('Go to next page'))));
+      $text = SafeMarkup::format('@label <b>›</b>', array('@label' => $next->label()));
+      $this->assertRaw(\Drupal::l($text, $url), 'Next page link found.');
     }
 
     // Compute the expected breadcrumb.
@@ -272,6 +340,9 @@ class BookTest extends WebTestBase {
    *   A book node ID or set to 'new' to create a new book.
    * @param int|null $parent
    *   (optional) Parent book reference ID. Defaults to NULL.
+   *
+   * @return \Drupal\node\NodeInterface
+   *   The created node.
    */
   function createBookNode($book_nid, $parent = NULL) {
     // $number does not use drupal_static as it should not be reset
@@ -279,7 +350,7 @@ class BookTest extends WebTestBase {
     static $number = 0; // Used to ensure that when sorted nodes stay in same order.
 
     $edit = array();
-    $edit['title[0][value]'] = $number . ' - SimpleTest test node ' . $this->randomMachineName(10);
+    $edit['title[0][value]'] = str_pad($number, 2, '0', STR_PAD_LEFT) . ' - SimpleTest test node ' . $this->randomMachineName(10);
     $edit['body[0][value]'] = 'SimpleTest test body ' . $this->randomMachineName(32) . ' ' . $this->randomMachineName(32);
     $edit['book[bid]'] = $book_nid;
 
@@ -312,7 +383,7 @@ class BookTest extends WebTestBase {
     $nodes = $this->createBook();
 
     // Login as web user and view printer-friendly version.
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     $this->drupalGet('node/' . $this->book->id());
     $this->clickLink(t('Printer-friendly version'));
 
@@ -344,7 +415,7 @@ class BookTest extends WebTestBase {
     // Now grant anonymous users permission to view the printer-friendly
     // version and verify that node access restrictions still prevent them from
     // seeing it.
-    user_role_grant_permissions(DRUPAL_ANONYMOUS_RID, array('access printer-friendly version'));
+    user_role_grant_permissions(RoleInterface::ANONYMOUS_ID, array('access printer-friendly version'));
     $this->drupalGet('book/export/html/' . $this->book->id());
     $this->assertResponse('403', 'Anonymous user properly forbidden from seeing the printer-friendly version when denied by node access.');
   }
@@ -353,15 +424,15 @@ class BookTest extends WebTestBase {
    * Tests the functionality of the book navigation block.
    */
   function testBookNavigationBlock() {
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
 
     // Enable the block.
     $block = $this->drupalPlaceBlock('book_navigation');
 
     // Give anonymous users the permission 'node test view'.
     $edit = array();
-    $edit[DRUPAL_ANONYMOUS_RID . '[node test view]'] = TRUE;
-    $this->drupalPostForm('admin/people/permissions/' . DRUPAL_ANONYMOUS_RID, $edit, t('Save permissions'));
+    $edit[RoleInterface::ANONYMOUS_ID . '[node test view]'] = TRUE;
+    $this->drupalPostForm('admin/people/permissions/' . RoleInterface::ANONYMOUS_ID, $edit, t('Save permissions'));
     $this->assertText(t('The changes have been saved.'), "Permission 'node test view' successfully assigned to anonymous users.");
 
     // Test correct display of the block.
@@ -373,23 +444,77 @@ class BookTest extends WebTestBase {
   }
 
   /**
-   * Tests the book navigation block when an access module is enabled.
+   * Tests BookManager::getTableOfContents().
    */
-  function testNavigationBlockOnAccessModuleEnabled() {
-    $this->drupalLogin($this->admin_user);
+  public function testGetTableOfContents() {
+    // Create new book.
+    $nodes = $this->createBook();
+    $book = $this->book;
+
+    $this->drupalLogin($this->bookAuthor);
+
+    /*
+     * Add Node 5 under Node 2.
+     * Add Node 6, 7, 8, 9, 10, 11 under Node 3.
+     * Book
+     *  |- Node 0
+     *   |- Node 1
+     *   |- Node 2
+     *    |- Node 5
+     *  |- Node 3
+     *   |- Node 6
+     *    |- Node 7
+     *     |- Node 8
+     *      |- Node 9
+     *       |- Node 10
+     *        |- Node 11
+     *  |- Node 4
+     */
+    foreach ([5 => 2, 6 => 3, 7 => 6, 8 => 7, 9 => 8, 10 => 9, 11 => 10] as $child => $parent) {
+      $nodes[$child] = $this->createBookNode($book->id(), $nodes[$parent]->id());
+    }
+    $this->drupalGet($nodes[0]->toUrl('edit-form'));
+    // Snice Node 0 has children 2 levels deep, nodes 10 and 11 should not
+    // appear in the selector.
+    $this->assertNoOption('edit-book-pid', $nodes[10]->id());
+    $this->assertNoOption('edit-book-pid', $nodes[11]->id());
+    // Node 9 should be available as an option.
+    $this->assertOption('edit-book-pid', $nodes[9]->id());
+
+    // Get a shallow set of options.
+    /** @var \Drupal\book\BookManagerInterface $manager */
+    $manager = $this->container->get('book.manager');
+    $options = $manager->getTableOfContents($book->id(), 3);
+    $expected_nids = [$book->id(), $nodes[0]->id(), $nodes[1]->id(), $nodes[2]->id(), $nodes[3]->id(), $nodes[6]->id(), $nodes[4]->id()];
+    $this->assertEqual(count($options), count($expected_nids));
+    $diff = array_diff($expected_nids, array_keys($options));
+    $this->assertTrue(empty($diff), 'Found all expected option keys');
+    // Exclude Node 3.
+    $options = $manager->getTableOfContents($book->id(), 3, array($nodes[3]->id()));
+    $expected_nids = array($book->id(), $nodes[0]->id(), $nodes[1]->id(), $nodes[2]->id(), $nodes[4]->id());
+    $this->assertEqual(count($options), count($expected_nids));
+    $diff = array_diff($expected_nids, array_keys($options));
+    $this->assertTrue(empty($diff), 'Found all expected option keys after excluding Node 3');
+  }
+
+  /**
+   * Tests the book navigation block when an access module is installed.
+   */
+  function testNavigationBlockOnAccessModuleInstalled() {
+    $this->drupalLogin($this->adminUser);
     $block = $this->drupalPlaceBlock('book_navigation', array('block_mode' => 'book pages'));
 
     // Give anonymous users the permission 'node test view'.
     $edit = array();
-    $edit[DRUPAL_ANONYMOUS_RID . '[node test view]'] = TRUE;
-    $this->drupalPostForm('admin/people/permissions/' . DRUPAL_ANONYMOUS_RID, $edit, t('Save permissions'));
+    $edit[RoleInterface::ANONYMOUS_ID . '[node test view]'] = TRUE;
+    $this->drupalPostForm('admin/people/permissions/' . RoleInterface::ANONYMOUS_ID, $edit, t('Save permissions'));
     $this->assertText(t('The changes have been saved.'), "Permission 'node test view' successfully assigned to anonymous users.");
 
     // Create a book.
     $this->createBook();
 
     // Test correct display of the block to registered users.
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     $this->drupalGet('node/' . $this->book->id());
     $this->assertText($block->label(), 'Book navigation block is displayed to registered users.');
     $this->drupalLogout();
@@ -407,15 +532,17 @@ class BookTest extends WebTestBase {
    * Tests the access for deleting top-level book nodes.
    */
    function testBookDelete() {
+     $node_storage = $this->container->get('entity.manager')->getStorage('node');
      $nodes = $this->createBook();
-     $this->drupalLogin($this->admin_user);
+     $this->drupalLogin($this->adminUser);
      $edit = array();
 
      // Test access to delete top-level and child book nodes.
      $this->drupalGet('node/' . $this->book->id() . '/outline/remove');
      $this->assertResponse('403', 'Deleting top-level book node properly forbidden.');
      $this->drupalPostForm('node/' . $nodes[4]->id() . '/outline/remove', $edit, t('Remove'));
-     $node4 = node_load($nodes[4]->id(), TRUE);
+     $node_storage->resetCache(array($nodes[4]->id()));
+     $node4 = $node_storage->load($nodes[4]->id());
      $this->assertTrue(empty($node4->book), 'Deleting child book node properly allowed.');
 
      // Delete all child book nodes and retest top-level node deletion.
@@ -424,102 +551,29 @@ class BookTest extends WebTestBase {
      }
      entity_delete_multiple('node', $nids);
      $this->drupalPostForm('node/' . $this->book->id() . '/outline/remove', $edit, t('Remove'));
-     $node = node_load($this->book->id(), TRUE);
+     $node_storage->resetCache(array($this->book->id()));
+     $node = $node_storage->load($this->book->id());
      $this->assertTrue(empty($node->book), 'Deleting childless top-level book node properly allowed.');
+
+     // Tests directly deleting a book parent.
+     $nodes = $this->createBook();
+     $this->drupalLogin($this->adminUser);
+     $this->drupalGet($this->book->urlInfo('delete-form'));
+     $this->assertRaw(t('%title is part of a book outline, and has associated child pages. If you proceed with deletion, the child pages will be relocated automatically.', ['%title' => $this->book->label()]));
+     // Delete parent, and visit a child page.
+     $this->drupalPostForm($this->book->urlInfo('delete-form'), [], t('Delete'));
+     $this->drupalGet($nodes[0]->urlInfo());
+     $this->assertResponse(200);
+     $this->assertText($nodes[0]->label());
+     // The book parents should be updated.
+     $node_storage = \Drupal::entityTypeManager()->getStorage('node');
+     $node_storage->resetCache();
+     $child = $node_storage->load($nodes[0]->id());
+     $this->assertEqual($child->id(), $child->book['bid'], 'Child node book ID updated when parent is deleted.');
+     // 3rd-level children should now be 2nd-level.
+     $second = $node_storage->load($nodes[1]->id());
+     $this->assertEqual($child->id(), $second->book['bid'], '3rd-level child node is now second level when top-level node is deleted.');
    }
-
-  /*
-   * Tests node type changing machine name when type is a book allowed type.
-   */
-  function testBookNodeTypeChange() {
-    $this->drupalLogin($this->admin_user);
-    // Change the name, machine name and description.
-    $edit = array(
-      'name' => 'Bar',
-      'type' => 'bar',
-    );
-    $this->drupalPostForm('admin/structure/types/manage/book', $edit, t('Save content type'));
-
-    // Ensure that the config book.settings:allowed_types has been updated with
-    // the new machine and the old one has been removed.
-    $this->assertTrue(book_type_is_allowed('bar'), 'Config book.settings:allowed_types contains the updated node type machine name "bar".');
-    $this->assertFalse(book_type_is_allowed('book'), 'Config book.settings:allowed_types does not contain the old node type machine name "book".');
-
-    $edit = array(
-      'name' => 'Basic page',
-      'title_label' => 'Title for basic page',
-      'type' => 'page',
-    );
-    $this->drupalPostForm('admin/structure/types/add', $edit, t('Save content type'));
-
-    // Add page to the allowed node types.
-    $edit = array(
-      'book_allowed_types[page]' => 'page',
-      'book_allowed_types[bar]' => 'bar',
-    );
-
-    $this->drupalPostForm('admin/structure/book/settings', $edit, t('Save configuration'));
-    $this->assertTrue(book_type_is_allowed('bar'), 'Config book.settings:allowed_types contains the bar node type.');
-    $this->assertTrue(book_type_is_allowed('page'), 'Config book.settings:allowed_types contains the page node type.');
-
-    // Test the order of the book.settings::allowed_types configuration is as
-    // expected. The point of this test is to prove that after changing a node
-    // type going to admin/structure/book/settings and pressing save without
-    // changing anything should not alter the book.settings configuration. The
-    // order will be:
-    // @code
-    // array(
-    //   'bar',
-    //   'page',
-    // );
-    // @endcode
-    $current_config = \Drupal::config('book.settings')->get();
-    $this->drupalPostForm('admin/structure/book/settings', array(), t('Save configuration'));
-    $this->assertIdentical($current_config, \Drupal::config('book.settings')->get());
-
-    // Change the name, machine name and description.
-    $edit = array(
-      'name' => 'Zebra book',
-      'type' => 'zebra',
-    );
-    $this->drupalPostForm('admin/structure/types/manage/bar', $edit, t('Save content type'));
-    $this->assertTrue(book_type_is_allowed('zebra'), 'Config book.settings:allowed_types contains the zebra node type.');
-    $this->assertTrue(book_type_is_allowed('page'), 'Config book.settings:allowed_types contains the page node type.');
-
-    // Test the order of the book.settings::allowed_types configuration is as
-    // expected. The order should be:
-    // @code
-    // array(
-    //   'page',
-    //   'zebra',
-    // );
-    // @endcode
-    $current_config = \Drupal::config('book.settings')->get();
-    $this->drupalPostForm('admin/structure/book/settings', array(), t('Save configuration'));
-    $this->assertIdentical($current_config, \Drupal::config('book.settings')->get());
-
-    $edit = array(
-      'name' => 'Animal book',
-      'type' => 'zebra',
-    );
-    $this->drupalPostForm('admin/structure/types/manage/zebra', $edit, t('Save content type'));
-
-    // Test the order of the book.settings::allowed_types configuration is as
-    // expected. The order should be:
-    // @code
-    // array(
-    //   'page',
-    //   'zebra',
-    // );
-    // @endcode
-    $current_config = \Drupal::config('book.settings')->get();
-    $this->drupalPostForm('admin/structure/book/settings', array(), t('Save configuration'));
-    $this->assertIdentical($current_config, \Drupal::config('book.settings')->get());
-
-    // Ensure that after all the node type changes book.settings:child_type has
-    // the expected value.
-    $this->assertEqual(\Drupal::config('book.settings')->get('child_type'), 'zebra');
-  }
 
   /**
    * Tests re-ordering of books.
@@ -529,7 +583,7 @@ class BookTest extends WebTestBase {
     $this->createBook();
     $book = $this->book;
 
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
     $node1 = $this->createBookNode($book->id());
     $node2 = $this->createBookNode($book->id());
     $pid = $node1->book['nid'];
@@ -553,17 +607,18 @@ class BookTest extends WebTestBase {
    * Tests outline of a book.
    */
   public function testBookOutline() {
-    $this->drupalLogin($this->book_author);
+    $this->drupalLogin($this->bookAuthor);
 
     // Create new node not yet a book.
     $empty_book = $this->drupalCreateNode(array('type' => 'book'));
     $this->drupalGet('node/' . $empty_book->id() . '/outline');
     $this->assertNoLink(t('Book outline'), 'Book Author is not allowed to outline');
 
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
     $this->drupalGet('node/' . $empty_book->id() . '/outline');
     $this->assertRaw(t('Book outline'));
     $this->assertOptionSelected('edit-book-bid', 0, 'Node does not belong to a book');
+    $this->assertNoLink(t('Remove from book outline'));
 
     $edit = array();
     $edit['book[bid]'] = '1';
@@ -577,12 +632,14 @@ class BookTest extends WebTestBase {
     $this->assertEqual($node->book['pid'], '0');
 
     // Create new book.
-    $this->drupalLogin($this->book_author);
+    $this->drupalLogin($this->bookAuthor);
     $book = $this->createBookNode('new');
 
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
     $this->drupalGet('node/' . $book->id() . '/outline');
     $this->assertRaw(t('Book outline'));
+    $this->clickLink(t('Remove from book outline'));
+    $this->assertRaw(t('Are you sure you want to remove %title from the book hierarchy?', array('%title' => $book->label())));
 
     // Create a new node and set the book after the node was created.
     $node = $this->drupalCreateNode(array('type' => 'book'));
@@ -630,8 +687,8 @@ class BookTest extends WebTestBase {
     // Create a new book.
     $this->createBook();
 
-    // Must be a user with 'node test view' permission since node_access_test is enabled.
-    $this->drupalLogin($this->web_user);
+    // Must be a user with 'node test view' permission since node_access_test is installed.
+    $this->drupalLogin($this->webUser);
 
     // Load the book page and assert the created book title is displayed.
     $this->drupalGet('book');
@@ -647,9 +704,57 @@ class BookTest extends WebTestBase {
     $this->createBook();
 
     // Load the book page and assert the created book title is displayed.
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
     $this->drupalGet('admin/structure/book');
     $this->assertText($this->book->label(), 'The book title is displayed on the administrative book listing page.');
+  }
+
+  /**
+   * Tests the administrative listing of all book pages in a book.
+   */
+  public function testAdminBookNodeListing() {
+    // Create a new book.
+    $this->createBook();
+    $this->drupalLogin($this->adminUser);
+
+    // Load the book page list and assert the created book title is displayed
+    // and action links are shown on list items.
+    $this->drupalGet('admin/structure/book/' . $this->book->id());
+    $this->assertText($this->book->label(), 'The book title is displayed on the administrative book listing page.');
+
+    $elements = $this->xpath('//table//ul[@class="dropbutton"]/li/a');
+    $this->assertEqual((string) $elements[0], 'View', 'View link is found from the list.');
+  }
+
+  /**
+   * Ensure the loaded book in hook_node_load() does not depend on the user.
+   */
+  public function testHookNodeLoadAccess() {
+    \Drupal::service('module_installer')->install(['node_access_test']);
+
+    // Ensure that the loaded book in hook_node_load() does NOT depend on the
+    // current user.
+    $this->drupalLogin($this->bookAuthor);
+    $this->book = $this->createBookNode('new');
+    // Reset any internal static caching.
+    $node_storage = \Drupal::entityManager()->getStorage('node');
+    $node_storage->resetCache();
+
+    // Login as user without access to the book node, so no 'node test view'
+    // permission.
+    // @see node_access_test_node_grants().
+    $this->drupalLogin($this->webUserWithoutNodeAccess);
+    $book_node = $node_storage->load($this->book->id());
+    $this->assertTrue(!empty($book_node->book));
+    $this->assertEqual($book_node->book['bid'], $this->book->id());
+
+    // Reset the internal cache to retrigger the hook_node_load() call.
+    $node_storage->resetCache();
+
+    $this->drupalLogin($this->webUser);
+    $book_node = $node_storage->load($this->book->id());
+    $this->assertTrue(!empty($book_node->book));
+    $this->assertEqual($book_node->book['bid'], $this->book->id());
   }
 
 }

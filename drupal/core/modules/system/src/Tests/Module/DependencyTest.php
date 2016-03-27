@@ -6,6 +6,7 @@
  */
 
 namespace Drupal\system\Tests\Module;
+use Drupal\Component\Utility\Unicode;
 
 /**
  * Enable module without dependency enabled.
@@ -14,13 +15,29 @@ namespace Drupal\system\Tests\Module;
  */
 class DependencyTest extends ModuleTestBase {
   /**
+   * Checks functionality of project namespaces for dependencies.
+   */
+  function testProjectNamespaceForDependencies() {
+    $edit = array(
+      'modules[Core][filter][enable]' => TRUE,
+    );
+    $this->drupalPostForm('admin/modules', $edit, t('Install'));
+    // Enable module with project namespace to ensure nothing breaks.
+    $edit = array(
+      'modules[Testing][system_project_namespace_test][enable]' => TRUE,
+    );
+    $this->drupalPostForm('admin/modules', $edit, t('Install'));
+    $this->assertModules(array('system_project_namespace_test'), TRUE);
+  }
+
+  /**
    * Attempts to enable the Content Translation module without Language enabled.
    */
   function testEnableWithoutDependency() {
     // Attempt to enable Content Translation without Language enabled.
     $edit = array();
     $edit['modules[Multilingual][content_translation][enable]'] = 'content_translation';
-    $this->drupalPostForm('admin/modules', $edit, t('Save configuration'));
+    $this->drupalPostForm('admin/modules', $edit, t('Install'));
     $this->assertText(t('Some required modules must be enabled'), 'Dependency required.');
 
     $this->assertModules(array('content_translation', 'language'), FALSE);
@@ -29,8 +46,7 @@ class DependencyTest extends ModuleTestBase {
     $this->assertTableCount('language', FALSE);
 
     $this->drupalPostForm(NULL, NULL, t('Continue'));
-    $this->assertText(t('The configuration options have been saved.'), 'Modules status has been updated.');
-
+    $this->assertText(t('2 modules have been enabled: Content Translation, Language.'), 'Modules status has been updated.');
     $this->assertModules(array('content_translation', 'language'), TRUE);
 
     // Assert that the language YAML files were created.
@@ -45,7 +61,7 @@ class DependencyTest extends ModuleTestBase {
     // Test that the system_dependencies_test module is marked
     // as missing a dependency.
     $this->drupalGet('admin/modules');
-    $this->assertRaw(t('@module (<span class="admin-missing">missing</span>)', array('@module' => drupal_ucfirst('_missing_dependency'))), 'A module with missing dependencies is marked as such.');
+    $this->assertRaw(t('@module (<span class="admin-missing">missing</span>)', array('@module' => Unicode::ucfirst('_missing_dependency'))), 'A module with missing dependencies is marked as such.');
     $checkbox = $this->xpath('//input[@type="checkbox" and @disabled="disabled" and @name="modules[Testing][system_dependencies_test][enable]"]');
     $this->assert(count($checkbox) == 1, 'Checkbox for the module is disabled.');
   }
@@ -83,7 +99,7 @@ class DependencyTest extends ModuleTestBase {
    * Tests enabling a module that depends on a module which fails hook_requirements().
    */
   function testEnableRequirementsFailureDependency() {
-    \Drupal::moduleHandler()->install(array('comment'));
+    \Drupal::service('module_installer')->install(array('comment'));
 
     $this->assertModules(array('requirements1_test'), FALSE);
     $this->assertModules(array('requirements2_test'), FALSE);
@@ -92,7 +108,7 @@ class DependencyTest extends ModuleTestBase {
     $edit = array();
     $edit['modules[Testing][requirements1_test][enable]'] = 'requirements1_test';
     $edit['modules[Testing][requirements2_test][enable]'] = 'requirements2_test';
-    $this->drupalPostForm('admin/modules', $edit, t('Save configuration'));
+    $this->drupalPostForm('admin/modules', $edit, t('Install'));
 
     // Makes sure the modules were NOT installed.
     $this->assertText(t('Requirements 1 Test failed requirements'), 'Modules status has been updated.');
@@ -110,7 +126,7 @@ class DependencyTest extends ModuleTestBase {
    * Dependencies should be enabled before their dependents.
    */
   function testModuleEnableOrder() {
-    \Drupal::moduleHandler()->install(array('module_test'), FALSE);
+    \Drupal::service('module_installer')->install(array('module_test'), FALSE);
     $this->resetAll();
     $this->assertModules(array('module_test'), TRUE);
     \Drupal::state()->set('module_test.dependency', 'dependency');
@@ -123,7 +139,7 @@ class DependencyTest extends ModuleTestBase {
     // is correct.
     $edit = array();
     $edit['modules[Core][color][enable]'] = 'color';
-    $this->drupalPostForm('admin/modules', $edit, t('Save configuration'));
+    $this->drupalPostForm('admin/modules', $edit, t('Install'));
     $this->assertModules(array('color'), FALSE);
     // Note that dependencies are sorted alphabetically in the confirmation
     // message.
@@ -131,7 +147,7 @@ class DependencyTest extends ModuleTestBase {
 
     $edit['modules[Core][config][enable]'] = 'config';
     $edit['modules[Core][help][enable]'] = 'help';
-    $this->drupalPostForm('admin/modules', $edit, t('Save configuration'));
+    $this->drupalPostForm('admin/modules', $edit, t('Install'));
     $this->assertModules(array('color', 'config', 'help'), TRUE);
 
     // Check the actual order which is saved by module_test_modules_enabled().
@@ -145,15 +161,24 @@ class DependencyTest extends ModuleTestBase {
   function testUninstallDependents() {
     // Enable the forum module.
     $edit = array('modules[Core][forum][enable]' => 'forum');
-    $this->drupalPostForm('admin/modules', $edit, t('Save configuration'));
+    $this->drupalPostForm('admin/modules', $edit, t('Install'));
     $this->drupalPostForm(NULL, array(), t('Continue'));
     $this->assertModules(array('forum'), TRUE);
 
     // Check that the comment module cannot be uninstalled.
     $this->drupalGet('admin/modules/uninstall');
-    $checkbox = $this->xpath('//input[@type="checkbox" and @name="uninstall[comment]"]');
-    $this->assert(count($checkbox) == 0, 'Checkbox for uninstalling the comment module not found.');
+    $checkbox = $this->xpath('//input[@type="checkbox" and @name="uninstall[comment]" and @disabled="disabled"]');
+    $this->assert(count($checkbox) == 1, 'Checkbox for uninstalling the comment module is disabled.');
 
+    // Delete any forum terms.
+    $vid = $this->config('forum.settings')->get('vocabulary');
+    // Ensure taxonomy has been loaded into the test-runner after forum was
+    // enabled.
+    \Drupal::moduleHandler()->load('taxonomy');
+    $terms = entity_load_multiple_by_properties('taxonomy_term', ['vid' => $vid]);
+    foreach ($terms as $term) {
+      $term->delete();
+    }
     // Uninstall the forum module, and check that taxonomy now can also be
     // uninstalled.
     $edit = array('uninstall[forum]' => 'forum');

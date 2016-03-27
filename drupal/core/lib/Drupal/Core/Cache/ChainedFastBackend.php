@@ -39,9 +39,18 @@ namespace Drupal\Core\Cache;
  * Because this backend will mark all the cache entries in a bin as out-dated
  * for each write to a bin, it is best suited to bins with fewer changes.
  *
+ * Note that this is designed specifically for combining a fast inconsistent
+ * cache backend with a slower consistent cache back-end. To still function
+ * correctly, it needs to do a consistency check (see the "last write timestamp"
+ * logic). This contrasts with \Drupal\Core\Cache\BackendChain, which assumes
+ * both chained cache backends are consistent, thus a consistency check being
+ * pointless.
+ *
+ * @see \Drupal\Core\Cache\BackendChain
+ *
  * @ingroup cache
  */
-class ChainedFastBackend implements CacheBackendInterface {
+class ChainedFastBackend implements CacheBackendInterface, CacheTagsInvalidatorInterface {
 
   /**
    * Cache key prefix for the bin-specific entry to track the last write.
@@ -160,7 +169,9 @@ class ChainedFastBackend implements CacheBackendInterface {
     if ($cids) {
       foreach ($this->consistentBackend->getMultiple($cids, $allow_invalid) as $item) {
         $cache[$item->cid] = $item;
-        $this->fastBackend->set($item->cid, $item->data);
+        // Don't write the cache tags to the fast backend as any cache tag
+        // invalidation results in an invalidation of the whole fast backend.
+        $this->fastBackend->set($item->cid, $item->data, $item->expire);
       }
     }
 
@@ -171,17 +182,24 @@ class ChainedFastBackend implements CacheBackendInterface {
    * {@inheritdoc}
    */
   public function set($cid, $data, $expire = Cache::PERMANENT, array $tags = array()) {
-    $this->markAsOutdated();
     $this->consistentBackend->set($cid, $data, $expire, $tags);
-    $this->fastBackend->set($cid, $data, $expire, $tags);
+    $this->markAsOutdated();
+    // Don't write the cache tags to the fast backend as any cache tag
+    // invalidation results in an invalidation of the whole fast backend.
+    $this->fastBackend->set($cid, $data, $expire);
   }
 
   /**
    * {@inheritdoc}
    */
   public function setMultiple(array $items) {
-    $this->markAsOutdated();
     $this->consistentBackend->setMultiple($items);
+    $this->markAsOutdated();
+    // Don't write the cache tags to the fast backend as any cache tag
+    // invalidation results in an invalidation of the whole fast backend.
+    foreach ($items as &$item) {
+      unset($item['tags']);
+    }
     $this->fastBackend->setMultiple($items);
   }
 
@@ -189,32 +207,24 @@ class ChainedFastBackend implements CacheBackendInterface {
    * {@inheritdoc}
    */
   public function delete($cid) {
-    $this->markAsOutdated();
     $this->consistentBackend->deleteMultiple(array($cid));
+    $this->markAsOutdated();
   }
 
   /**
    * {@inheritdoc}
    */
   public function deleteMultiple(array $cids) {
-    $this->markAsOutdated();
     $this->consistentBackend->deleteMultiple($cids);
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function deleteTags(array $tags) {
     $this->markAsOutdated();
-    $this->consistentBackend->deleteTags($tags);
   }
 
   /**
    * {@inheritdoc}
    */
   public function deleteAll() {
-    $this->markAsOutdated();
     $this->consistentBackend->deleteAll();
+    $this->markAsOutdated();
   }
 
   /**
@@ -228,24 +238,26 @@ class ChainedFastBackend implements CacheBackendInterface {
    * {@inheritdoc}
    */
   public function invalidateMultiple(array $cids) {
-    $this->markAsOutdated();
     $this->consistentBackend->invalidateMultiple($cids);
+    $this->markAsOutdated();
   }
 
   /**
    * {@inheritdoc}
    */
   public function invalidateTags(array $tags) {
+    if ($this->consistentBackend instanceof CacheTagsInvalidatorInterface) {
+      $this->consistentBackend->invalidateTags($tags);
+    }
     $this->markAsOutdated();
-    $this->consistentBackend->invalidateTags($tags);
   }
 
   /**
    * {@inheritdoc}
    */
   public function invalidateAll() {
-    $this->markAsOutdated();
     $this->consistentBackend->invalidateAll();
+    $this->markAsOutdated();
   }
 
   /**
@@ -289,7 +301,11 @@ class ChainedFastBackend implements CacheBackendInterface {
     // Clocks on a single server can drift. Multiple servers may have slightly
     // differing opinions about the current time. Given that, do not assume
     // 'now' on this server is always later than our stored timestamp.
-    $now = microtime(TRUE);
+    // Also add 1 millisecond, to ensure that caches written earlier in the same
+    // millisecond are invalidated. It is possible that caches will be later in
+    // the same millisecond and are then incorrectly invalidated, but that only
+    // costs one additional roundtrip to the persistent cache.
+    $now = round(microtime(TRUE) + .001, 3);
     if ($now > $this->getLastWriteTimestamp()) {
       $this->lastWriteTimestamp = $now;
       $this->consistentBackend->set(self::LAST_WRITE_TIMESTAMP_PREFIX . $this->bin, $this->lastWriteTimestamp);

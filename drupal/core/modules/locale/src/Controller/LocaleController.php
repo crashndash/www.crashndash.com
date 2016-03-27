@@ -7,7 +7,6 @@
 namespace Drupal\locale\Controller;
 
 use Drupal\Core\Controller\ControllerBase;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 
 /**
  * Return response for manual check translations.
@@ -37,8 +36,7 @@ class LocaleController extends ControllerBase {
       return batch_process('admin/reports/translations');
     }
 
-    // @todo Use $this->redirect() after https://drupal.org/node/1978926.
-    return new RedirectResponse($this->getUrlGenerator()->generateFromPath('admin/reports/translations', array('absolute' => TRUE)));
+    return $this->redirect('locale.translate_status');
   }
 
   /**

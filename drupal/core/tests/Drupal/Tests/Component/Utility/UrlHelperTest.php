@@ -7,14 +7,13 @@
 
 namespace Drupal\Tests\Component\Utility;
 
-
 use Drupal\Component\Utility\UrlHelper;
-use Drupal\Component\Utility\String;
 use Drupal\Tests\UnitTestCase;
 
 /**
- * @coversDefaultClass \Drupal\Component\Utility\UrlHelper
  * @group Utility
+ *
+ * @coversDefaultClass \Drupal\Component\Utility\UrlHelper
  */
 class UrlHelperTest extends UnitTestCase {
 
@@ -34,7 +33,10 @@ class UrlHelperTest extends UnitTestCase {
   }
 
   /**
-   * Tests UrlHelper::buildQuery().
+   * Tests query building.
+   *
+   * @dataProvider providerTestBuildQuery
+   * @covers ::buildQuery
    *
    * @param array $query
    *   The array of query parameters.
@@ -42,8 +44,6 @@ class UrlHelperTest extends UnitTestCase {
    *   The expected query string.
    * @param string $message
    *   The assertion message.
-   *
-   * @dataProvider providerTestBuildQuery
    */
   public function testBuildQuery($query, $expected, $message) {
     $this->assertEquals(UrlHelper::buildQuery($query), $expected, $message);
@@ -82,17 +82,18 @@ class UrlHelperTest extends UnitTestCase {
   /**
    * Tests valid absolute URLs.
    *
+   * @dataProvider providerTestValidAbsoluteData
+   * @covers ::isValid
+   *
    * @param string $url
    *   The url to test.
    * @param string $scheme
    *   The scheme to test.
-   *
-   * @dataProvider providerTestValidAbsoluteData
    */
   public function testValidAbsolute($url, $scheme) {
     $test_url = $scheme . '://' . $url;
     $valid_url = UrlHelper::isValid($test_url, TRUE);
-    $this->assertTrue($valid_url, String::format('@url is a valid URL.', array('@url' => $test_url)));
+    $this->assertTrue($valid_url, $test_url . ' is a valid URL.');
   }
 
   /**
@@ -112,17 +113,18 @@ class UrlHelperTest extends UnitTestCase {
   /**
    * Tests invalid absolute URLs.
    *
+   * @dataProvider providerTestInvalidAbsolute
+   * @covers ::isValid
+   *
    * @param string $url
    *   The url to test.
    * @param string $scheme
    *   The scheme to test.
-   *
-   * @dataProvider providerTestInvalidAbsolute
    */
   public function testInvalidAbsolute($url, $scheme) {
     $test_url = $scheme . '://' . $url;
     $valid_url = UrlHelper::isValid($test_url, TRUE);
-    $this->assertFalse($valid_url, String::format('@url is NOT a valid URL.', array('@url' => $test_url)));
+    $this->assertFalse($valid_url, $test_url . ' is NOT a valid URL.');
   }
 
   /**
@@ -145,17 +147,18 @@ class UrlHelperTest extends UnitTestCase {
   /**
    * Tests valid relative URLs.
    *
+   * @dataProvider providerTestValidRelativeData
+   * @covers ::isValid
+   *
    * @param string $url
    *   The url to test.
    * @param string $prefix
    *   The prefix to test.
-   *
-   * @dataProvider providerTestValidRelativeData
    */
   public function testValidRelative($url, $prefix) {
     $test_url = $prefix . $url;
     $valid_url = UrlHelper::isValid($test_url);
-    $this->assertTrue($valid_url, String::format('@url is a valid URL.', array('@url' => $test_url)));
+    $this->assertTrue($valid_url, $test_url . ' is a valid URL.');
   }
 
   /**
@@ -175,21 +178,25 @@ class UrlHelperTest extends UnitTestCase {
   /**
    * Tests invalid relative URLs.
    *
+   * @dataProvider providerTestInvalidRelativeData
+   * @covers ::isValid
+   *
    * @param string $url
    *   The url to test.
    * @param string $prefix
    *   The prefix to test.
-   *
-   * @dataProvider providerTestInvalidRelativeData
    */
   public function testInvalidRelative($url, $prefix) {
     $test_url = $prefix . $url;
     $valid_url = UrlHelper::isValid($test_url);
-    $this->assertFalse($valid_url, String::format('@url is NOT a valid URL.', array('@url' => $test_url)));
+    $this->assertFalse($valid_url, $test_url . ' is NOT a valid URL.');
   }
 
   /**
    * Tests query filtering.
+   *
+   * @dataProvider providerTestFilterQueryParameters
+   * @covers ::filterQueryParameters
    *
    * @param array $query
    *   The array of query parameters.
@@ -198,10 +205,6 @@ class UrlHelperTest extends UnitTestCase {
    *   nested items.
    * @param array $expected
    *   An array containing query parameters.
-   *
-   * @dataProvider providerTestFilterQueryParameters
-   *
-   * @see \Drupal\Component\Utility\Url::filterQueryParameters().
    */
   public function testFilterQueryParameters($query, $exclude, $expected) {
     $filtered = UrlHelper::filterQueryParameters($query, $exclude);
@@ -233,14 +236,13 @@ class UrlHelperTest extends UnitTestCase {
   /**
    * Tests url parsing.
    *
+   * @dataProvider providerTestParse
+   * @covers ::parse
+   *
    * @param string $url
    *   URL to test.
    * @param array $expected
    *   Associative array with expected parameters.
-   *
-   * @dataProvider providerTestParse
-   *
-   * @see \Drupal\Component\Utility\Url::parse()
    */
   public function testParse($url, $expected) {
     $parsed = UrlHelper::parse($url);
@@ -304,14 +306,13 @@ class UrlHelperTest extends UnitTestCase {
   /**
    * Tests path encoding.
    *
+   * @dataProvider providerTestEncodePath
+   * @covers ::encodePath
+   *
    * @param string $path
    *   A path to encode.
    * @param string $expected
    *   The expected encoded path.
-   *
-   * @see \Drupal\Component\Utility\Url::encodePath().
-   *
-   * @dataProvider providerTestEncodePath
    */
   public function testEncodePath($path, $expected) {
     $encoded = UrlHelper::encodePath($path);
@@ -333,14 +334,13 @@ class UrlHelperTest extends UnitTestCase {
   /**
    * Tests external versus internal paths.
    *
+   * @dataProvider providerTestIsExternal
+   * @covers ::isExternal
+   *
    * @param string $path
    *   URL or path to test.
    * @param bool $expected
    *   Expected result.
-   *
-   * @see \Drupal\Component\Utility\Url::isExternal()
-   *
-   * @dataProvider providerTestIsExternal
    */
   public function testIsExternal($path, $expected) {
     $isExternal = UrlHelper::isExternal($path);
@@ -357,11 +357,43 @@ class UrlHelperTest extends UnitTestCase {
       array('/internal/path', FALSE),
       array('https://example.com/external/path', TRUE),
       array('javascript://fake-external-path', FALSE),
+      // External URL without an explicit protocol.
+      array('//www.drupal.org/foo/bar?foo=bar&bar=baz&baz#foo', TRUE),
+      // Internal URL starting with a slash.
+      array('/www.drupal.org', FALSE),
+      // Simple external URLs.
+      array('http://example.com', TRUE),
+      array('https://example.com', TRUE),
+      array('http://drupal.org/foo/bar?foo=bar&bar=baz&baz#foo', TRUE),
+      array('//drupal.org', TRUE),
+      // Some browsers ignore or strip leading control characters.
+      array("\x00//www.example.com", TRUE),
+      array("\x08//www.example.com", TRUE),
+      array("\x1F//www.example.com", TRUE),
+      array("\n//www.example.com", TRUE),
+      // JSON supports decoding directly from UTF-8 code points.
+      array(json_decode('"\u00AD"') . "//www.example.com", TRUE),
+      array(json_decode('"\u200E"') . "//www.example.com", TRUE),
+      array(json_decode('"\uE0020"') . "//www.example.com", TRUE),
+      array(json_decode('"\uE000"')  . "//www.example.com", TRUE),
+      // Backslashes should be normalized to forward.
+      array('\\\\example.com', TRUE),
+      // Local URLs.
+      array('node', FALSE),
+      array('/system/ajax', FALSE),
+      array('?q=foo:bar', FALSE),
+      array('node/edit:me', FALSE),
+      array('/drupal.org', FALSE),
+      array('<front>', FALSE),
     );
   }
 
   /**
    * Tests bad protocol filtering and escaping.
+   *
+   * @dataProvider providerTestFilterBadProtocol
+   * @covers ::setAllowedProtocols
+   * @covers ::filterBadProtocol
    *
    * @param string $uri
    *    Protocol URI.
@@ -369,13 +401,13 @@ class UrlHelperTest extends UnitTestCase {
    *    Expected escaped value.
    * @param array $protocols
    *    Protocols to allow.
-   *
-   * @dataProvider providerTestFilterBadProtocol
    */
   public function testFilterBadProtocol($uri, $expected, $protocols) {
     UrlHelper::setAllowedProtocols($protocols);
-    $filtered = UrlHelper::filterBadProtocol($uri);
-    $this->assertEquals($expected, $filtered);
+    $this->assertEquals($expected, UrlHelper::filterBadProtocol($uri));
+    // Multiple calls to UrlHelper::filterBadProtocol() do not cause double
+    // escaping.
+    $this->assertEquals($expected, UrlHelper::filterBadProtocol(UrlHelper::filterBadProtocol($uri)));
   }
 
   /**
@@ -398,16 +430,16 @@ class UrlHelperTest extends UnitTestCase {
   /**
    * Tests dangerous url protocol filtering.
    *
+   * @dataProvider providerTestStripDangerousProtocols
+   * @covers ::setAllowedProtocols
+   * @covers ::stripDangerousProtocols
+   *
    * @param string $uri
    *    Protocol URI.
    * @param string $expected
    *    Expected escaped value.
    * @param array $protocols
    *    Protocols to allow.
-   *
-   * @see \Drupal\Component\Utility\Url::stripDangerousProtocols()
-   *
-   * @dataProvider providerTestStripDangerousProtocols
    */
   public function testStripDangerousProtocols($uri, $expected, $protocols) {
     UrlHelper::setAllowedProtocols($protocols);

@@ -19,6 +19,7 @@ use Drupal\Core\TypedData\DataDefinition;
  *   id = "decimal",
  *   label = @Translation("Number (decimal)"),
  *   description = @Translation("This field stores a number in the database in a fixed decimal format."),
+ *   category = @Translation("Number"),
  *   default_widget = "number",
  *   default_formatter = "number_decimal"
  * )
@@ -37,11 +38,11 @@ class DecimalItem extends NumericItemBase {
 
   /**
    * {@inheritdoc}
-
    */
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
     $properties['value'] = DataDefinition::create('string')
-      ->setLabel(t('Decimal value'));
+      ->setLabel(t('Decimal value'))
+      ->setRequired(TRUE);
 
     return $properties;
   }
@@ -56,7 +57,6 @@ class DecimalItem extends NumericItemBase {
           'type' => 'numeric',
           'precision' => $field_definition->getSetting('precision'),
           'scale' => $field_definition->getSetting('scale'),
-          'not null' => FALSE
         )
       ),
     );
@@ -81,12 +81,44 @@ class DecimalItem extends NumericItemBase {
     $range = range(0, 10);
     $element['scale'] = array(
       '#type' => 'select',
-      '#title' => t('Scale', array(), array('decimal places')),
+      '#title' => t('Scale', array(), array('context' => 'decimal places')),
       '#options' => array_combine($range, $range),
       '#default_value' => $settings['scale'],
       '#description' => t('The number of digits to the right of the decimal.'),
       '#disabled' => $has_data,
     );
+
+    return $element;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getConstraints() {
+    $constraint_manager = \Drupal::typedDataManager()->getValidationConstraintManager();
+    $constraints = parent::getConstraints();
+
+    $constraints[] = $constraint_manager->create('ComplexData', array(
+      'value' => array(
+        'Regex' => array(
+          'pattern' => '/^[+-]?((\d+(\.\d*)?)|(\.\d+))$/i',
+        )
+      ),
+    ));
+
+    return $constraints;
+  }
+
+
+  /**
+   * {@inheritdoc}
+   */
+  public function fieldSettingsForm(array $form, FormStateInterface $form_state) {
+    $element = parent::fieldSettingsForm($form, $form_state);
+    $settings = $this->getSettings();
+
+    $element['min']['#step'] = pow(0.1, $settings['scale']);
+    $element['max']['#step'] = pow(0.1, $settings['scale']);
 
     return $element;
   }

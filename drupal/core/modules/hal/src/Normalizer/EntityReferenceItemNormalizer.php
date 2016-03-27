@@ -52,7 +52,7 @@ class EntityReferenceItemNormalizer extends FieldItemNormalizer implements UuidR
   }
 
   /**
-   * Implements \Symfony\Component\Serializer\Normalizer\NormalizerInterface::normalize()
+   * {@inheritdoc}
    */
   public function normalize($field_item, $format = NULL, array $context = array()) {
     /** @var $field_item \Drupal\Core\Field\FieldItemInterface */
@@ -85,7 +85,7 @@ class EntityReferenceItemNormalizer extends FieldItemNormalizer implements UuidR
     // objects.
     $field_name = $field_item->getParent()->getName();
     $entity = $field_item->getEntity();
-    $field_uri = $this->linkManager->getRelationUri($entity->getEntityTypeId(), $entity->bundle(), $field_name);
+    $field_uri = $this->linkManager->getRelationUri($entity->getEntityTypeId(), $entity->bundle(), $field_name, $context);
     return array(
       '_links' => array(
         $field_uri => array($link),
@@ -97,26 +97,28 @@ class EntityReferenceItemNormalizer extends FieldItemNormalizer implements UuidR
   }
 
   /**
-   * Overrides \Drupal\hal\Normalizer\FieldItemNormalizer::constructValue().
+   * {@inheritdoc}
    */
   protected function constructValue($data, $context) {
     $field_item = $context['target_instance'];
     $field_definition = $field_item->getFieldDefinition();
     $target_type = $field_definition->getSetting('target_type');
-    if ($id = $this->entityResolver->resolve($this, $data, $target_type)) {
+    $id = $this->entityResolver->resolve($this, $data, $target_type);
+    if (isset($id)) {
       return array('target_id' => $id);
     }
     return NULL;
   }
 
   /**
-   * Implements \Drupal\serialization\EntityResolver\UuidReferenceInterface::getUuid().
+   * {@inheritdoc}
    */
   public function getUuid($data) {
     if (isset($data['uuid'])) {
       $uuid = $data['uuid'];
-      if (is_array($uuid)) {
-        $uuid = reset($uuid);
+      // The value may be a nested array like $uuid[0]['value'].
+      if (is_array($uuid) && isset($uuid[0]['value'])) {
+        $uuid = $uuid[0]['value'];
       }
       return $uuid;
     }

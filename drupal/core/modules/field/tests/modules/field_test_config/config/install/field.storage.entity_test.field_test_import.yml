@@ -1,5 +1,5 @@
 id: entity_test.field_test_import
-langcode: und
+langcode: en
 field_name: field_test_import
 entity_type: entity_test
 type: text
@@ -16,3 +16,5 @@ dependencies:
   module:
     - entity_test
     - text
+persist_with_no_fields: false
+custom_storage: false

@@ -38,8 +38,9 @@ use Drupal\language\ConfigurableLanguageInterface;
  *     "weight" = "weight"
  *   },
  *   links = {
- *     "delete-form" = "entity.configurable_language.delete_form",
- *     "edit-form" = "entity.configurable_language.edit_form"
+ *     "delete-form" = "/admin/config/regional/language/delete/{configurable_language}",
+ *     "edit-form" = "/admin/config/regional/language/edit/{configurable_language}",
+ *     "collection" = "/admin/config/regional/language",
  *   }
  * )
  */
@@ -57,19 +58,19 @@ class ConfigurableLanguage extends ConfigEntityBase implements ConfigurableLangu
    *
    * @var string
    */
-  public $label;
+  protected $label;
 
   /**
    * The direction of language, either DIRECTION_LTR or DIRECTION_RTL.
    *
-   * @var integer
+   * @var int
    */
   protected $direction = self::DIRECTION_LTR;
 
   /**
    * The weight of the language, used in lists of languages.
    *
-   * @var integer
+   * @var int
    */
   protected $weight = 0;
 
@@ -116,10 +117,6 @@ class ConfigurableLanguage extends ConfigEntityBase implements ConfigurableLangu
     // rebuild services if necessary during
     // \Drupal\language\Entity\ConfigurableLanguage::postSave().
     $this->preSaveMultilingual = \Drupal::languageManager()->isMultilingual();
-    // Languages are picked from a predefined list which is given in English.
-    // For the uncommon case of custom languages the label should be given in
-    // English.
-    $this->langcode = 'en';
   }
 
   /**
@@ -130,7 +127,7 @@ class ConfigurableLanguage extends ConfigEntityBase implements ConfigurableLangu
 
     $language_manager = \Drupal::languageManager();
     $language_manager->reset();
-    if ($language_manager instanceof ConfigurableLanguageManagerInterface) {
+    if (!$this->isLocked() && $language_manager instanceof ConfigurableLanguageManagerInterface && !$this->isSyncing()) {
       $language_manager->updateLockedLanguageWeights();
     }
 
@@ -172,7 +169,8 @@ class ConfigurableLanguage extends ConfigEntityBase implements ConfigurableLangu
     parent::postDelete($storage, $entities);
     $language_manager = \Drupal::languageManager();
     $language_manager->reset();
-    if ($language_manager instanceof ConfigurableLanguageManagerInterface) {
+    $entity = reset($entities);
+    if ($language_manager instanceof ConfigurableLanguageManagerInterface && !$entity->isUninstalling() && !$entity->isSyncing()) {
       $language_manager->updateLockedLanguageWeights();
     }
     // If after deleting this language the site will become monolingual, we need
@@ -203,6 +201,15 @@ class ConfigurableLanguage extends ConfigEntityBase implements ConfigurableLangu
   /**
    * {@inheritdoc}
    */
+  public function setName($name) {
+    $this->label = $name;
+
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function getId() {
     return $this->id();
   }
@@ -219,6 +226,14 @@ class ConfigurableLanguage extends ConfigEntityBase implements ConfigurableLangu
    */
   public function getWeight() {
     return $this->weight;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setWeight($weight) {
+    $this->weight = $weight;
+    return $this;
   }
 
   /**

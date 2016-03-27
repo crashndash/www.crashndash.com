@@ -2,12 +2,11 @@
 
 /**
  * @file
- * Contains \Drupal\Core\Entity\FieldableNullStorage.
+ * Contains \Drupal\Core\Entity\ContentEntityNullStorage.
  */
 
 namespace Drupal\Core\Entity;
 
-use Drupal\Core\Entity\Query\QueryException;
 use Drupal\Core\Field\FieldDefinitionInterface;
 
 /**
@@ -78,32 +77,32 @@ class ContentEntityNullStorage extends ContentEntityStorageBase {
   /**
    * {@inheritdoc}
    */
-  public function getQueryServiceName() {
-    throw new QueryException('Null implementation can not be queried.');
+  protected function getQueryServiceName() {
+    return 'entity.query.null';
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function doLoadFieldItems($entities, $age) {
+  protected function doLoadRevisionFieldItems($revision_id) {
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function doSaveFieldItems(EntityInterface $entity, $update) {
+  protected function doSaveFieldItems(ContentEntityInterface $entity, array $names = []) {
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function doDeleteFieldItems(EntityInterface $entity) {
+  protected function doDeleteFieldItems($entities) {
   }
 
   /**
    * {@inheritdoc}
    */
-  protected function doDeleteFieldItemsRevision(EntityInterface $entity) {
+  protected function doDeleteRevisionFieldItems(ContentEntityInterface $revision) {
   }
 
   /**
@@ -136,6 +135,13 @@ class ContentEntityNullStorage extends ContentEntityStorageBase {
    */
   public function countFieldData($storage_definition, $as_bool = FALSE) {
     return $as_bool ? FALSE : 0;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function hasData() {
+    return FALSE;
   }
 
 }

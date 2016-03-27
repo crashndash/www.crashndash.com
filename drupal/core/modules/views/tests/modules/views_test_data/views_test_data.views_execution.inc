@@ -6,8 +6,8 @@
  */
 
 use Drupal\field\FieldStorageConfigInterface;
+use Drupal\views\Plugin\views\cache\CachePluginBase;
 use Drupal\views\ViewExecutable;
-use Drupal\views\ViewStorageInterface;
 
 /**
  * Implements hook_views_query_substitutions().
@@ -19,8 +19,13 @@ function views_test_data_views_query_substitutions(ViewExecutable $view) {
 /**
  * Implements hook_views_form_substitutions().
  */
-function views_test_data_views_form_substitutions(ViewExecutable $view) {
+function views_test_data_views_form_substitutions() {
   \Drupal::state()->set('views_hook_test_views_form_substitutions', TRUE);
+  $render = ['#markup' => '<em>unescaped</em>'];
+  return array(
+    '<!--will-be-escaped-->' => '<em>escaped</em>',
+    '<!--will-be-not-escaped-->' => \Drupal::service('renderer')->renderPlain($render),
+  );
 }
 
 /**
@@ -47,18 +52,27 @@ function views_test_data_views_pre_render(ViewExecutable $view) {
   \Drupal::state()->set('views_hook_test_views_pre_render', TRUE);
 
   if (isset($view) && ($view->storage->id() == 'test_cache_header_storage')) {
-    $path = drupal_get_path('module', 'views_test_data');
-    $view->element['#attached']['js'][] = "$path/views_cache.test.js";
-    $view->element['#attached']['css'][] = "$path/views_cache.test.css";
+    $view->element['#attached']['library'][] = 'views_test_data/test';
+    $view->element['#attached']['drupalSettings']['foo'] = 'bar';
+    $view->element['#attached']['placeholders']['non-existing-placeholder-just-for-testing-purposes']['#lazy_builder'] = ['views_test_data_placeholders', ['bar']];
+    $view->element['#cache']['tags'][] = 'views_test_data:1';
     $view->build_info['pre_render_called'] = TRUE;
   }
 
 }
 
 /**
+ * #lazy_builder callback; for testing purposes only.
+ */
+function views_test_data_placeholders() {
+  // No-op.
+  return [];
+}
+
+/**
  * Implements hook_views_post_render().
  */
-function views_test_data_views_post_render(ViewExecutable $view) {
+function views_test_data_views_post_render(ViewExecutable $view, &$output, CachePluginBase $cache) {
   \Drupal::state()->set('views_hook_test_views_post_render', TRUE);
 }
 

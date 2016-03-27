@@ -7,8 +7,8 @@
 
 namespace Drupal\node\Plugin\Block;
 
+use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Block\BlockBase;
-use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Session\AccountInterface;
 
 /**
@@ -35,7 +35,7 @@ class SyndicateBlock extends BlockBase {
    * {@inheritdoc}
    */
   protected function blockAccess(AccountInterface $account) {
-    return $account->hasPermission('access content');
+    return AccessResult::allowedIfHasPermission($account, 'access content');
   }
 
   /**
@@ -46,29 +46,6 @@ class SyndicateBlock extends BlockBase {
       '#theme' => 'feed_icon',
       '#url' => 'rss.xml',
     );
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function buildConfigurationForm(array $form, FormStateInterface $form_state) {
-    $form = parent::buildConfigurationForm($form, $form_state);
-
-    // @see ::isCacheable()
-    $form['cache']['#disabled'] = TRUE;
-    $form['cache']['#description'] = t('This block is never cacheable, it is not configurable.');
-    $form['cache']['max_age']['#value'] = 0;
-
-    return $form;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function isCacheable() {
-    // The 'Syndicate' block is never cacheable, because it is cheaper to just
-    // render it rather than to cache it and incur I/O.
-    return FALSE;
   }
 
 }

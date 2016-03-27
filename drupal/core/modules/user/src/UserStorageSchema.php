@@ -26,35 +26,6 @@ class UserStorageSchema extends SqlContentEntityStorageSchema {
       'user__name' => array('name', 'langcode'),
     );
 
-    $schema['users_roles'] = array(
-      'description' => 'Maps users to roles.',
-      'fields' => array(
-        'uid' => array(
-          'type' => 'int',
-          'unsigned' => TRUE,
-          'not null' => TRUE,
-          'default' => 0,
-          'description' => 'Primary Key: {users}.uid for user.',
-        ),
-        'rid' => array(
-          'type' => 'varchar',
-          'length' => 64,
-          'not null' => TRUE,
-          'description' => 'Primary Key: ID for the role.',
-        ),
-      ),
-      'primary key' => array('uid', 'rid'),
-      'indexes' => array(
-        'rid' => array('rid'),
-      ),
-      'foreign keys' => array(
-        'user' => array(
-          'table' => 'users',
-          'columns' => array('uid' => 'uid'),
-        ),
-      ),
-    );
-
     return $schema;
   }
 
@@ -81,6 +52,9 @@ class UserStorageSchema extends SqlContentEntityStorageSchema {
           // Improves the performance of the user__name index defined
           // in getEntitySchema().
           $schema['fields'][$field_name]['not null'] = TRUE;
+          // Make sure the field is no longer than 191 characters so we can
+          // add a unique constraint in MySQL.
+          $schema['fields'][$field_name]['length'] = USERNAME_MAX_LENGTH;
           break;
 
         case 'mail':

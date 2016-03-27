@@ -2,12 +2,14 @@
 
 /**
  * @file
- * Definition of Drupal\tracker\Tests\TrackerNodeAccessTest.
+ * Contains \Drupal\tracker\Tests\TrackerNodeAccessTest.
  */
 
 namespace Drupal\tracker\Tests;
 
 use Drupal\comment\Plugin\Field\FieldType\CommentItemInterface;
+use Drupal\comment\Tests\CommentTestTrait;
+use Drupal\node\Entity\NodeType;
 use Drupal\simpletest\WebTestBase;
 
 /**
@@ -16,6 +18,8 @@ use Drupal\simpletest\WebTestBase;
  * @group tracker
  */
 class TrackerNodeAccessTest extends WebTestBase {
+
+  use CommentTestTrait;
 
   /**
    * Modules to enable.
@@ -28,8 +32,8 @@ class TrackerNodeAccessTest extends WebTestBase {
     parent::setUp();
     node_access_rebuild();
     $this->drupalCreateContentType(array('type' => 'page'));
-    node_access_test_add_field(entity_load('node_type', 'page'));
-    $this->container->get('comment.manager')->addDefaultField('node', 'page', 'comment', CommentItemInterface::OPEN);
+    node_access_test_add_field(NodeType::load('page'));
+    $this->addDefaultCommentField('node', 'page', 'comment', CommentItemInterface::OPEN);
     \Drupal::state()->set('node_access_test.private', TRUE);
   }
 
@@ -41,7 +45,7 @@ class TrackerNodeAccessTest extends WebTestBase {
     $access_user = $this->drupalCreateUser(array('node test view', 'access user profiles'));
 
     // Create user without node test view permission.
-    $no_access_user = $this->drupalCreateuser(array('access user profiles'));
+    $no_access_user = $this->drupalCreateUser(array('access user profiles'));
 
     $this->drupalLogin($access_user);
 

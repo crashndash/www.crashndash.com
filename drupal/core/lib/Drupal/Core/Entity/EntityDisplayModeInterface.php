@@ -15,11 +15,20 @@ use Drupal\Core\Config\Entity\ConfigEntityInterface;
 interface EntityDisplayModeInterface extends ConfigEntityInterface {
 
   /**
-   * Returns the entity type this display mode is used for.
+   * Gets the entity type this display mode is used for.
    *
    * @return string
    *   The entity type name.
    */
   public function getTargetType();
 
+  /**
+   * Set the entity type this display mode is used for.
+   *
+   * @param string $target_entity_type
+   *   The target entity type for this display mode.
+   *
+   * @return $this
+   */
+  public function setTargetType($target_entity_type);
 }

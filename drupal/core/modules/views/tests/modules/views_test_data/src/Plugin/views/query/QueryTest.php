@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views_test_data\Plugin\views\query\QueryTest.
+ * Contains \Drupal\views_test_data\Plugin\views\query\QueryTest.
  */
 
 namespace Drupal\views_test_data\Plugin\views\query;
@@ -10,6 +10,7 @@ namespace Drupal\views_test_data\Plugin\views\query;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\views\Plugin\views\query\QueryPluginBase;
 use Drupal\views\Plugin\views\join\JoinPluginBase;
+use Drupal\views\ResultRow;
 use Drupal\views\ViewExecutable;
 
 /**
@@ -28,7 +29,7 @@ class QueryTest extends QueryPluginBase {
   protected $orderBy = array();
 
   /**
-   * Implements \Drupal\views\Plugin\views\query\QueryPluginBase::defineOptions().
+   * {@inheritdoc}
    */
   protected function defineOptions() {
     $options = parent::defineOptions();
@@ -38,7 +39,7 @@ class QueryTest extends QueryPluginBase {
   }
 
   /**
-   * Implements \Drupal\views\Plugin\views\query\QueryPluginBase::buildOptionsForm().
+   * {@inheritdoc}
    */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
@@ -91,13 +92,13 @@ class QueryTest extends QueryPluginBase {
   public function build(ViewExecutable $view) {
     $this->view = $view;
     // @todo Support pagers for know, a php based one would probably match.
-    // @todo You could add a string representatin of the query.
+    // @todo You could add a string representation of the query.
     $this->view->build_info['query'] = "";
     $this->view->build_info['count_query'] = "";
 }
 
   /**
-   * Implements Drupal\views\Plugin\views\query\QueryPluginBase::execute().
+   * {@inheritdoc}
    */
   public function execute(ViewExecutable $view) {
     $result = array();
@@ -114,7 +115,7 @@ class QueryTest extends QueryPluginBase {
         if ($this->fields) {
           $element = array_intersect_key($element, $this->fields);
         }
-        $result[] = (object) $element;
+        $result[] = new ResultRow($element);
       }
     }
     $this->view->result = $result;
@@ -146,5 +147,13 @@ class QueryTest extends QueryPluginBase {
     return FALSE;
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    return parent::calculateDependencies() + [
+      'content' => ['QueryTest'],
+    ];
+  }
 
 }

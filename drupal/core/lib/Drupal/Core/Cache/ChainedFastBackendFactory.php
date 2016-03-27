@@ -53,12 +53,18 @@ class ChainedFastBackendFactory implements CacheFactoryInterface {
     }
 
     // Default the fast backend to APCu if it's available.
-    if (!isset($fast_service_name) && function_exists('apc_fetch')) {
+    if (!isset($fast_service_name) && function_exists('apcu_fetch')) {
       $fast_service_name = 'cache.backend.apcu';
     }
 
     $this->consistentServiceName = $consistent_service_name;
-    $this->fastServiceName = $fast_service_name;
+
+    // Do not use the fast chained backend during installation. In those cases,
+    // we expect many cache invalidations and writes, the fast chained cache
+    // backend performs badly in such a scenario.
+    if (!drupal_installation_attempted()) {
+      $this->fastServiceName = $fast_service_name;
+    }
   }
 
   /**

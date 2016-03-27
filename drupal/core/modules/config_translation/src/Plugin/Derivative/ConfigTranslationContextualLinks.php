@@ -7,7 +7,6 @@
 
 namespace Drupal\config_translation\Plugin\Derivative;
 
-use Drupal\Component\Utility\Unicode;
 use Drupal\Component\Plugin\Derivative\DeriverBase;
 use Drupal\config_translation\ConfigMapperManagerInterface;
 use Drupal\Core\Plugin\Discovery\ContainerDeriverInterface;
@@ -52,7 +51,8 @@ class ConfigTranslationContextualLinks extends DeriverBase implements ContainerD
     $mappers = $this->mapperManager->getMappers();
     foreach ($mappers as $plugin_id => $mapper) {
       // @todo Contextual groups do not map to entity types in a predictable
-      //   way. See https://drupal.org/node/2134841 to make them predictable.
+      //   way. See https://www.drupal.org/node/2134841 to make them
+      //   predictable.
       $group_name = $mapper->getContextualLinkGroup();
       if (empty($group_name)) {
         continue;

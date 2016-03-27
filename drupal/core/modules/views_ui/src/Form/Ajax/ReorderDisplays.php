@@ -7,9 +7,9 @@
 
 namespace Drupal\views_ui\Form\Ajax;
 
+use Drupal\Component\Utility\SafeMarkup;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
-use Drupal\views_ui\ViewUI;
 
 /**
  * Displays the display reorder form.
@@ -34,7 +34,7 @@ class ReorderDisplays extends ViewsFormBase {
    * {@inheritdoc}
    */
   public function buildForm(array $form, FormStateInterface $form_state) {
-    /** @var $view \Drupal\views\ViewStorageInterface */
+    /** @var $view \Drupal\views\ViewEntityInterface */
     $view = $form_state->get('view');
     $display_id = $form_state->get('display_id');
 
@@ -120,11 +120,8 @@ class ReorderDisplays extends ViewsFormBase {
         ),
         'link' => array(
           '#type' => 'link',
-          '#title' => '<span>' . $this->t('Remove') . '</span>',
+          '#title' => SafeMarkup::format('<span>@text</span>', array('@text' => $this->t('Remove'))),
           '#url' => Url::fromRoute('<none>'),
-          '#options' => array(
-            'html' => TRUE,
-          ),
           '#attributes' => array(
             'id' => 'display-remove-link-' . $id,
             'class' => array('views-button-remove', 'display-remove-link'),

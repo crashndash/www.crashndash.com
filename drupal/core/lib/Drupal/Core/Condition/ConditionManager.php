@@ -7,10 +7,12 @@
 
 namespace Drupal\Core\Condition;
 
+use Drupal\Component\Plugin\CategorizingPluginManagerInterface;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Executable\ExecutableManagerInterface;
 use Drupal\Core\Executable\ExecutableInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
+use Drupal\Core\Plugin\CategorizingPluginManagerTrait;
 use Drupal\Core\Plugin\Context\ContextAwarePluginManagerTrait;
 use Drupal\Core\Plugin\DefaultPluginManager;
 
@@ -23,8 +25,9 @@ use Drupal\Core\Plugin\DefaultPluginManager;
  *
  * @ingroup plugin_api
  */
-class ConditionManager extends DefaultPluginManager implements ExecutableManagerInterface {
+class ConditionManager extends DefaultPluginManager implements ExecutableManagerInterface, CategorizingPluginManagerInterface {
 
+  use CategorizingPluginManagerTrait;
   use ContextAwarePluginManagerTrait;
 
   /**
@@ -46,10 +49,10 @@ class ConditionManager extends DefaultPluginManager implements ExecutableManager
   }
 
   /**
-   * Override of Drupal\Component\Plugin\PluginManagerBase::createInstance().
+   * {@inheritdoc}
    */
   public function createInstance($plugin_id, array $configuration = array()) {
-    $plugin = $this->factory->createInstance($plugin_id, $configuration);
+    $plugin = $this->getFactory()->createInstance($plugin_id, $configuration);
 
     // If we receive any context values via config set it into the plugin.
     if (!empty($configuration['context'])) {
@@ -62,7 +65,7 @@ class ConditionManager extends DefaultPluginManager implements ExecutableManager
   }
 
   /**
-   * Implements Drupal\Core\Executable\ExecutableManagerInterface::execute().
+   * {@inheritdoc}
    */
   public function execute(ExecutableInterface $condition) {
     $result = $condition->evaluate();

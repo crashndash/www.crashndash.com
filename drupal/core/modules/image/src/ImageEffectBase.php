@@ -70,8 +70,10 @@ abstract class ImageEffectBase extends PluginBase implements ImageEffectInterfac
   /**
    * {@inheritdoc}
    */
-  public function transformDimensions(array &$dimensions) {
-    $dimensions['width'] = $dimensions['height'] = NULL;
+  public function transformDimensions(array &$dimensions, $uri) {
+    // Most image effects will not change the dimensions. This base
+    // implementation represents this behavior. Override this method if your
+    // image effect does change the dimensions.
   }
 
   /**

@@ -1,6 +1,5 @@
 <?php
 
-use Drupal\Core\Entity\EntityInterface;
 use Drupal\field\FieldStorageConfigInterface;
 use Drupal\Core\Form\FormStateInterface;
 
@@ -125,7 +124,7 @@ function field_test_field_widget_form_alter(&$element, FormStateInterface $form_
 function field_test_query_efq_table_prefixing_test_alter(&$query) {
   // Add an additional join onto the entity base table. This will cause an
   // exception if the EFQ does not properly prefix the base table.
-  $query->join('entity_test','et2','%alias.id = entity_test.id');
+  $query->join('entity_test', 'et2', '%alias.id = entity_test.id');
 }
 
 
@@ -145,4 +144,26 @@ function field_test_query_efq_metadata_test_alter(&$query) {
 function field_test_entity_extra_field_info_alter(&$info) {
   // Remove all extra fields from the 'no_fields' content type;
   unset($info['node']['no_fields']);
+}
+
+/**
+ * Implements hook_entity_bundle_field_info_alter().
+ */
+function field_test_entity_bundle_field_info_alter(&$fields, \Drupal\Core\Entity\EntityTypeInterface $entity_type, $bundle) {
+  if (($field_name = \Drupal::state()->get('field_test_set_constraint', FALSE)) && $entity_type->id() == 'entity_test' && $bundle == 'entity_test' && !empty($fields[$field_name])) {
+    $fields[$field_name]->setPropertyConstraints('value', [
+      'Range' => [
+        'min' => 0,
+        'max' => 32,
+      ],
+    ]);
+  }
+  if (($field_name = \Drupal::state()->get('field_test_add_constraint', FALSE)) && $entity_type->id() == 'entity_test' && $bundle == 'entity_test' && !empty($fields[$field_name])) {
+    $fields[$field_name]->addPropertyConstraints('value', [
+      'Range' => [
+        'min' => 0,
+        'max' => 32,
+      ],
+    ]);
+  }
 }

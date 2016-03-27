@@ -9,17 +9,15 @@
  *
  * Each item in these variables (primary and secondary) can be individually
  * themed in menu-local-task.html.twig.
- *
- * @see template_preprocess_menu_local_tasks()
- *
+
  * @ingroup themeable
  */
 #}
 {% if primary %}
   <h2 class="visually-hidden">{{ 'Primary tabs'|t }}</h2>
-  <ul class="tabs primary">{{ primary }}</ul>
+  <ul>{{ primary }}</ul>
 {% endif %}
 {% if secondary %}
   <h2 class="visually-hidden">{{ 'Secondary tabs'|t }}</h2>
-  <ul class="tabs secondary">{{ secondary }}</ul>
+  <ul>{{ secondary }}</ul>
 {% endif %}

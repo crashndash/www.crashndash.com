@@ -2,14 +2,17 @@
 
 /**
  * @file
- * Definition of Drupal\user\Plugin\views\access\Role.
+ * Contains \Drupal\user\Plugin\views\access\Role.
  */
 
 namespace Drupal\user\Plugin\views\access;
 
-use Drupal\Component\Utility\String;
+use Drupal\Core\Cache\Cache;
+use Drupal\Core\Cache\CacheableDependencyInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\user\RoleStorageInterface;
 use Drupal\views\Plugin\views\access\AccessPluginBase;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\Routing\Route;
 use Drupal\Core\Session\AccountInterface;
 
@@ -24,18 +27,54 @@ use Drupal\Core\Session\AccountInterface;
  *   help = @Translation("Access will be granted to users with any of the specified roles.")
  * )
  */
-class Role extends AccessPluginBase {
+class Role extends AccessPluginBase implements CacheableDependencyInterface {
 
   /**
-   * Overrides Drupal\views\Plugin\Plugin::$usesOptions.
+   * {@inheritdoc}
    */
   protected $usesOptions = TRUE;
+
+  /**
+   * The role storage.
+   *
+   * @var \Drupal\user\RoleStorageInterface
+   */
+  protected $roleStorage;
+
+  /**
+   * Constructs a Role object.
+   *
+   * @param array $configuration
+   *   A configuration array containing information about the plugin instance.
+   * @param string $plugin_id
+   *   The plugin_id for the plugin instance.
+   * @param mixed $plugin_definition
+   *   The plugin implementation definition.
+   * @param \Drupal\user\RoleStorageInterface $role_storage
+   *   The role storage.
+   */
+  public function __construct(array $configuration, $plugin_id, $plugin_definition, RoleStorageInterface $role_storage) {
+    parent::__construct($configuration, $plugin_id, $plugin_definition);
+    $this->roleStorage = $role_storage;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container, array $configuration, $plugin_id, $plugin_definition) {
+    return new static(
+      $configuration,
+      $plugin_id,
+      $plugin_definition,
+      $container->get('entity.manager')->getStorage('user_role')
+    );
+  }
 
   /**
    * {@inheritdoc}
    */
   public function access(AccountInterface $account) {
-    return $account->hasPermission('access all views') || array_intersect(array_filter($this->options['role']), $account->getRoles());
+    return array_intersect(array_filter($this->options['role']), $account->getRoles());
   }
 
   /**
@@ -43,7 +82,7 @@ class Role extends AccessPluginBase {
    */
   public function alterRouteDefinition(Route $route) {
     if ($this->options['role']) {
-      $route->setRequirement('_role', (string) implode(',', $this->options['role']));
+      $route->setRequirement('_role', (string) implode('+', $this->options['role']));
     }
   }
 
@@ -58,7 +97,7 @@ class Role extends AccessPluginBase {
     else {
       $rids = user_role_names();
       $rid = reset($this->options['role']);
-      return String::checkPlain($rids[$rid]);
+      return $rids[$rid];
     }
   }
 
@@ -76,8 +115,8 @@ class Role extends AccessPluginBase {
       '#type' => 'checkboxes',
       '#title' => $this->t('Role'),
       '#default_value' => $this->options['role'],
-      '#options' => array_map('\Drupal\Component\Utility\String::checkPlain', user_role_names()),
-      '#description' => $this->t('Only the checked roles will be able to access this display. Note that users with "access all views" can see any view, regardless of role.'),
+      '#options' => array_map('\Drupal\Component\Utility\Html::escape', user_role_names()),
+      '#description' => $this->t('Only the checked roles will be able to access this display.'),
     );
   }
 
@@ -92,4 +131,41 @@ class Role extends AccessPluginBase {
     $form_state->setValue(array('access_options', 'role'), $role);
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    $dependencies = parent::calculateDependencies();
+
+    foreach (array_keys($this->options['role']) as $rid) {
+      if ($role = $this->roleStorage->load($rid)) {
+        $dependencies[$role->getConfigDependencyKey()][] = $role->getConfigDependencyName();
+      }
+    }
+
+    return $dependencies;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheMaxAge() {
+    return Cache::PERMANENT;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheContexts() {
+    return ['user.roles'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getCacheTags() {
+    return [];
+  }
+
 }
+

@@ -151,4 +151,20 @@ class View extends AreaPluginBase {
     }
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    $dependencies = parent::calculateDependencies();
+
+    list($view_id) = explode(':', $this->options['view_to_insert'], 2);
+    // Don't call the current view, as it would result into an infinite recursion.
+    if ($view_id && $this->view->storage->id() != $view_id) {
+      $view = $this->viewStorage->load($view_id);
+      $dependencies[$view->getConfigDependencyKey()][] = $view->getConfigDependencyName();
+    }
+
+    return $dependencies;
+  }
+
 }

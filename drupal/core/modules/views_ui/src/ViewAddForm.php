@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\views_ui\ViewAddForm.
+ * Contains \Drupal\views_ui\ViewAddForm.
  */
 
 namespace Drupal\views_ui;
@@ -55,8 +55,7 @@ class ViewAddForm extends ViewFormBase {
    * {@inheritdoc}
    */
   public function form(array $form, FormStateInterface $form_state) {
-    $form['#attached']['css'] = static::getAdminCSS();
-    $form['#attached']['js'][] = drupal_get_path('module', 'views_ui') . '/js/views-admin.js';
+    $form['#attached']['library'][] = 'views_ui/views_ui.admin';
     $form['#attributes']['class'] = array('views-admin');
 
     $form['name'] = array(
@@ -163,7 +162,7 @@ class ViewAddForm extends ViewFormBase {
   /**
    * {@inheritdoc}
    */
-  public function validate(array $form, FormStateInterface $form_state) {
+  public function validateForm(array &$form, FormStateInterface $form_state) {
     $wizard_type = $form_state->getValue(array('show', 'wizard_key'));
     $wizard_instance = $this->wizardManager->createInstance($wizard_type);
     $form_state->set('wizard', $wizard_instance->getPluginDefinition());
@@ -189,11 +188,11 @@ class ViewAddForm extends ViewFormBase {
     // @todo Figure out whether it really makes sense to throw and catch exceptions on the wizard.
     catch (WizardException $e) {
       drupal_set_message($e->getMessage(), 'error');
-      $form_state->setRedirect('views_ui.list');
+      $form_state->setRedirect('entity.view.collection');
       return;
     }
     $this->entity->save();
-
+    drupal_set_message($this->t('The view %name has been saved.', array('%name' => $form_state->getValue('label'))));
     $form_state->setRedirectUrl($this->entity->urlInfo('edit-form'));
   }
 
@@ -206,7 +205,7 @@ class ViewAddForm extends ViewFormBase {
    *   The current state of the form.
    */
   public function cancel(array $form, FormStateInterface $form_state) {
-    $form_state->setRedirect('views_ui.list');
+    $form_state->setRedirect('entity.view.collection');
   }
 
 }

@@ -2,11 +2,12 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\style\Grid.
+ * Contains \Drupal\views\Plugin\views\style\Grid.
  */
 
 namespace Drupal\views\Plugin\views\style;
 
+use Drupal\Component\Utility\Html;
 use Drupal\Core\Form\FormStateInterface;
 
 /**
@@ -122,7 +123,7 @@ class Grid extends StylePluginBase {
 
     $classes = explode(' ', $class);
     foreach ($classes as &$class) {
-      $class = drupal_clean_css_identifier($class);
+      $class = Html::cleanCssIdentifier($class);
     }
     return implode(' ', $classes);
   }

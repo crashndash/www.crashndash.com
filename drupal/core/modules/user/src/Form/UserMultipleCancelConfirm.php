@@ -7,12 +7,11 @@
 
 namespace Drupal\user\Form;
 
-use Drupal\Component\Utility\String;
 use Drupal\Core\Entity\EntityManagerInterface;
 use Drupal\Core\Form\ConfirmFormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Url;
-use Drupal\user\TempStoreFactory;
+use Drupal\user\PrivateTempStoreFactory;
 use Drupal\user\UserStorageInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
@@ -24,7 +23,7 @@ class UserMultipleCancelConfirm extends ConfirmFormBase {
   /**
    * The temp store factory.
    *
-   * @var \Drupal\user\TempStoreFactory
+   * @var \Drupal\user\PrivateTempStoreFactory
    */
   protected $tempStoreFactory;
 
@@ -45,14 +44,14 @@ class UserMultipleCancelConfirm extends ConfirmFormBase {
   /**
    * Constructs a new UserMultipleCancelConfirm.
    *
-   * @param \Drupal\user\TempStoreFactory $temp_store_factory
+   * @param \Drupal\user\PrivateTempStoreFactory $temp_store_factory
    *   The temp store factory.
    * @param \Drupal\user\UserStorageInterface $user_storage
    *   The user storage.
    * @param \Drupal\Core\Entity\EntityManagerInterface $entity_manager
    *   The entity manager.
    */
-  public function __construct(TempStoreFactory $temp_store_factory, UserStorageInterface $user_storage, EntityManagerInterface $entity_manager) {
+  public function __construct(PrivateTempStoreFactory $temp_store_factory, UserStorageInterface $user_storage, EntityManagerInterface $entity_manager) {
     $this->tempStoreFactory = $temp_store_factory;
     $this->userStorage = $user_storage;
     $this->entityManager = $entity_manager;
@@ -63,7 +62,7 @@ class UserMultipleCancelConfirm extends ConfirmFormBase {
    */
   public static function create(ContainerInterface $container) {
     return new static(
-      $container->get('user.tempstore'),
+      $container->get('user.private_tempstore'),
       $container->get('entity.manager')->getStorage('user'),
       $container->get('entity.manager')
     );
@@ -87,7 +86,7 @@ class UserMultipleCancelConfirm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getCancelUrl() {
-    return new Url('user.admin_account');
+    return new Url('entity.user.collection');
   }
 
   /**
@@ -106,31 +105,34 @@ class UserMultipleCancelConfirm extends ConfirmFormBase {
       ->get('user_user_operations_cancel')
       ->get($this->currentUser()->id());
     if (!$accounts) {
-      return $this->redirect('user.admin_account');
+      return $this->redirect('entity.user.collection');
     }
 
+    $root = NULL;
     $form['accounts'] = array('#prefix' => '<ul>', '#suffix' => '</ul>', '#tree' => TRUE);
-    foreach ($accounts as $uid => $account) {
+    foreach ($accounts as $account) {
+      $uid = $account->id();
       // Prevent user 1 from being canceled.
       if ($uid <= 1) {
+        $root = intval($uid) === 1 ? $account : $root;
         continue;
       }
       $form['accounts'][$uid] = array(
         '#type' => 'hidden',
         '#value' => $uid,
         '#prefix' => '<li>',
-        '#suffix' => String::checkPlain($account->label()) . "</li>\n",
+        '#suffix' => $account->label() . "</li>\n",
       );
     }
 
     // Output a notice that user 1 cannot be canceled.
-    if (isset($accounts[1])) {
+    if (isset($root)) {
       $redirect = (count($accounts) == 1);
-      $message = $this->t('The user account %name cannot be canceled.', array('%name' => $accounts[1]->label()));
+      $message = $this->t('The user account %name cannot be canceled.', array('%name' => $root->label()));
       drupal_set_message($message, $redirect ? 'error' : 'warning');
       // If only user 1 was selected, redirect to the overview.
       if ($redirect) {
-        return $this->redirect('user.admin_account');
+        return $this->redirect('entity.user.collection');
       }
     }
 
@@ -197,7 +199,7 @@ class UserMultipleCancelConfirm extends ConfirmFormBase {
         }
       }
     }
-    $form_state->setRedirect('user.admin_account');
+    $form_state->setRedirect('entity.user.collection');
   }
 
 }

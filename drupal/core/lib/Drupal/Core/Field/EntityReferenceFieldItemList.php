@@ -18,32 +18,44 @@ class EntityReferenceFieldItemList extends FieldItemList implements EntityRefere
   /**
    * {@inheritdoc}
    */
+  public function getConstraints() {
+    $constraints = parent::getConstraints();
+    $constraint_manager = $this->getTypedDataManager()->getValidationConstraintManager();
+    $constraints[] = $constraint_manager->create('ValidReference', []);
+    return $constraints;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function referencedEntities() {
     if (empty($this->list)) {
       return array();
     }
 
-    // Get a list of items having non-empty target ids.
-    $list = array_filter($this->list, function($item) {
-      return (bool) $item->target_id;
-    });
-
-    $ids = array();
-    foreach ($list as $delta => $item) {
-      $ids[$delta] = $item->target_id;
-    }
-    if (empty($ids)) {
-      return array();
-    }
-
-    $target_type = $this->getFieldDefinition()->getSetting('target_type');
-    $entities = \Drupal::entityManager()->getStorage($target_type)->loadMultiple($ids);
-
-    $target_entities = array();
-    foreach ($ids as $delta => $target_id) {
-      if (isset($entities[$target_id])) {
-        $target_entities[$delta] = $entities[$target_id];
+    // Collect the IDs of existing entities to load, and directly grab the
+    // "autocreate" entities that are already populated in $item->entity.
+    $target_entities = $ids = array();
+    foreach ($this->list as $delta => $item) {
+      if ($item->target_id !== NULL) {
+        $ids[$delta] = $item->target_id;
       }
+      elseif ($item->hasNewEntity()) {
+        $target_entities[$delta] = $item->entity;
+      }
+    }
+
+    // Load and add the existing entities.
+    if ($ids) {
+      $target_type = $this->getFieldDefinition()->getSetting('target_type');
+      $entities = \Drupal::entityManager()->getStorage($target_type)->loadMultiple($ids);
+      foreach ($ids as $delta => $target_id) {
+        if (isset($entities[$target_id])) {
+          $target_entities[$delta] = $entities[$target_id];
+        }
+      }
+      // Ensure the returned array is ordered by deltas.
+      ksort($target_entities);
     }
 
     return $target_entities;
@@ -102,7 +114,13 @@ class EntityReferenceFieldItemList extends FieldItemList implements EntityRefere
     // Convert numeric IDs to UUIDs to ensure config deployability.
     $ids = array();
     foreach ($default_value as $delta => $properties) {
-      $ids[] = $properties['target_id'];
+      if (isset($properties['entity']) && $properties['entity']->isNew()) {
+        // This may be a newly created term.
+        $properties['entity']->save();
+        $default_value[$delta]['target_id'] = $properties['entity']->id();
+        unset($default_value[$delta]['entity']);
+      }
+      $ids[] = $default_value[$delta]['target_id'];
     }
     $entities = \Drupal::entityManager()
       ->getStorage($this->getSetting('target_type'))

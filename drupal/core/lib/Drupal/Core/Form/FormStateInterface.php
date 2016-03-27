@@ -561,6 +561,24 @@ interface FormStateInterface {
   public function isRebuilding();
 
   /**
+   * Flags the form state as having or not an invalid token.
+   *
+   * @param bool $invalid_token
+   *   Whether the form has an invalid token.
+   *
+   * @return $this
+   */
+  public function setInvalidToken($invalid_token);
+
+  /**
+   * Determines if the form has an invalid token.
+   *
+   * @return bool
+   *   TRUE if the form has an invalid token, FALSE otherwise.
+   */
+  public function hasInvalidToken();
+
+  /**
    * Converts support notations for a form callback to a valid callable.
    *
    * Specifically, supports methods on the form/callback object as strings when
@@ -639,6 +657,10 @@ interface FormStateInterface {
    *   TRUE if the form should be cached, FALSE otherwise.
    *
    * @return $this
+   *
+   * @throws \LogicException
+   *   If the current request is using an HTTP method that must not change
+   *   state (e.g., GET).
    */
   public function setCached($cache = TRUE);
 
@@ -730,16 +752,35 @@ interface FormStateInterface {
   public function getLimitValidationErrors();
 
   /**
-   * Sets the HTTP form method.
+   * Sets the HTTP method to use for the form's submission.
+   *
+   * This is what the form's "method" attribute should be, not necessarily what
+   * the current request's HTTP method is. For example, a form can have a
+   * method attribute of POST, but the request that initially builds it uses
+   * GET.
    *
    * @param string $method
-   *   The HTTP form method.
+   *   Either "GET" or "POST". Other HTTP methods are not valid form submission
+   *   methods.
    *
    * @see \Drupal\Core\Form\FormState::$method
+   * @see \Drupal\Core\Form\FormStateInterface::setRequestMethod()
    *
    * @return $this
    */
   public function setMethod($method);
+
+  /**
+   * Sets the HTTP method used by the request that is building the form.
+   *
+   * @param string $method
+   *   Can be any valid HTTP method, such as GET, POST, HEAD, etc.
+   *
+   * @return $this
+   *
+   * @see \Drupal\Core\Form\FormStateInterface::setMethod()
+   */
+  public function setRequestMethod($method);
 
   /**
    * Returns the HTTP form method.
@@ -934,6 +975,47 @@ interface FormStateInterface {
   public function getTemporary();
 
   /**
+   * Gets an arbitrary value from temporary storage.
+   *
+   * @param string|array $key
+   *   Properties are often stored as multi-dimensional associative arrays. If
+   *   $key is a string, it will return $temporary[$key]. If $key is an array,
+   *   each element of the array will be used as a nested key. If
+   *   $key = ['foo', 'bar'] it will return $temporary['foo']['bar'].
+   *
+   * @return mixed
+   *   A reference to the value for that key, or NULL if the property does
+   *   not exist.
+   */
+  public function &getTemporaryValue($key);
+
+  /**
+   * Sets an arbitrary value in temporary storage.
+   *
+   * @param string|array $key
+   *   Properties are often stored as multi-dimensional associative arrays. If
+   *   $key is a string, it will use $temporary[$key] = $value. If $key is an
+   *   array, each element of the array will be used as a nested key. If
+   *   $key = ['foo', 'bar'] it will use $temporary['foo']['bar'] = $value.
+   * @param mixed $value
+   *   The value to set.
+   *
+   * @return $this
+   */
+  public function setTemporaryValue($key, $value);
+
+  /**
+   * Determines if a temporary value is present.
+   *
+   * @param string $key
+   *   Properties are often stored as multi-dimensional associative arrays. If
+   *   $key is a string, it will return isset($temporary[$key]). If $key is an
+   *   array, each element of the array will be used as a nested key. If
+   *   $key = ['foo', 'bar'] it will return isset($temporary['foo']['bar']).
+   */
+  public function hasTemporaryValue($key);
+
+  /**
    * Sets the form element that triggered submission.
    *
    * @param array|null $triggering_element
@@ -988,14 +1070,42 @@ interface FormStateInterface {
   public function isValidationComplete();
 
   /**
+   * Gets the keys of the form values that will be cleaned.
+   *
+   * @return array
+   *   An array of form value keys to be cleaned.
+   */
+  public function getCleanValueKeys();
+
+  /**
+   * Sets the keys of the form values that will be cleaned.
+   *
+   * @param array $keys
+   *   An array of form value keys to be cleaned.
+   *
+   * @return $this
+   */
+  public function setCleanValueKeys(array $keys);
+
+  /**
+   * Adds a key to the array of form values that will be cleaned.
+   *
+   * @param string $key
+   *   The form value key to be cleaned.
+   *
+   * @return $this
+   */
+  public function addCleanValueKey($key);
+
+  /**
    * Removes internal Form API elements and buttons from submitted form values.
    *
    * This function can be used when a module wants to store all submitted form
    * values, for example, by serializing them into a single database column. In
    * such cases, all internal Form API values and all form button elements
-   * should not be contained, and this function allows to remove them before the
+   * should not be contained, and this function allows their removal before the
    * module proceeds to storage. Next to button elements, the following internal
-   * values are removed:
+   * values are removed by default.
    * - form_id
    * - form_token
    * - form_build_id

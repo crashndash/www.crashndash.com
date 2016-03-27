@@ -7,7 +7,7 @@
 
 namespace Drupal\shortcut\Entity;
 
-use Drupal\Core\Config\Entity\ConfigEntityBase;
+use Drupal\Core\Config\Entity\ConfigEntityBundleBase;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\shortcut\ShortcutSetInterface;
 
@@ -36,27 +36,32 @@ use Drupal\shortcut\ShortcutSetInterface;
  *     "label" = "label"
  *   },
  *   links = {
- *     "customize-form" = "entity.shortcut_set.customize_form",
- *     "delete-form" = "entity.shortcut_set.delete_form",
- *     "edit-form" = "entity.shortcut_set.edit_form"
+ *     "customize-form" = "/admin/config/user-interface/shortcut/manage/{shortcut_set}/customize",
+ *     "delete-form" = "/admin/config/user-interface/shortcut/manage/{shortcut_set}/delete",
+ *     "edit-form" = "/admin/config/user-interface/shortcut/manage/{shortcut_set}",
+ *     "collection" = "/admin/config/user-interface/shortcut",
+ *   },
+ *   config_export = {
+ *     "id",
+ *     "label",
  *   }
  * )
  */
-class ShortcutSet extends ConfigEntityBase implements ShortcutSetInterface {
+class ShortcutSet extends ConfigEntityBundleBase implements ShortcutSetInterface {
 
   /**
    * The machine name for the configuration entity.
    *
    * @var string
    */
-  public $id;
+  protected $id;
 
   /**
    * The human-readable name of the configuration entity.
    *
    * @var string
    */
-  public $label;
+  protected $label;
 
   /**
    * {@inheritdoc}
@@ -116,7 +121,9 @@ class ShortcutSet extends ConfigEntityBase implements ShortcutSetInterface {
    * {@inheritdoc}
    */
   public function getShortcuts() {
-    return \Drupal::entityManager()->getStorage('shortcut')->loadByProperties(array('shortcut_set' => $this->id()));
+    $shortcuts = \Drupal::entityManager()->getStorage('shortcut')->loadByProperties(array('shortcut_set' => $this->id()));
+    uasort($shortcuts, array('\Drupal\shortcut\Entity\Shortcut', 'sort'));
+    return $shortcuts;
   }
 
 }

@@ -2,13 +2,17 @@
 
 /**
  * @file
- * Definition of Drupal\image\Tests\ImageAdminStylesTest.
+ * Contains \Drupal\image\Tests\ImageAdminStylesTest.
  */
 
 namespace Drupal\image\Tests;
 
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\Core\Entity\Entity\EntityViewDisplay;
+use Drupal\image\Entity\ImageStyle;
 use Drupal\image\ImageStyleInterface;
+use Drupal\node\Entity\Node;
+use Drupal\file\Entity\File;
 
 /**
  * Tests creation, deletion, and editing of image styles and effects.
@@ -128,7 +132,7 @@ class ImageAdminStylesTest extends ImageFieldTestBase {
     }
 
     // Load the saved image style.
-    $style = entity_load('image_style', $style_name);
+    $style = ImageStyle::load($style_name);
 
     // Ensure that third party settings were added to the config entity.
     // These are added by a hook_image_style_presave() implemented in
@@ -147,7 +151,7 @@ class ImageAdminStylesTest extends ImageFieldTestBase {
       $uuids[$effect->getPluginId()] = $uuid;
       $effect_configuration = $effect->getConfiguration();
       foreach ($effect_edits[$effect->getPluginId()] as $field => $value) {
-        $this->assertEqual($value, $effect_configuration['data'][$field], String::format('The %field field in the %effect effect has the correct value of %value.', array('%field' => $field, '%effect' => $effect->getPluginId(), '%value' => $value)));
+        $this->assertEqual($value, $effect_configuration['data'][$field], SafeMarkup::format('The %field field in the %effect effect has the correct value of %value.', array('%field' => $field, '%effect' => $effect->getPluginId(), '%value' => $value)));
       }
     }
 
@@ -210,7 +214,7 @@ class ImageAdminStylesTest extends ImageFieldTestBase {
     $this->assertEqual($this->getImageCount($style), 0, format_string('Image style %style was flushed after renaming the style and updating the order of effects.', array('%style' => $style->label())));
 
     // Load the style by the new name with the new weights.
-    $style = entity_load('image_style', $style_name);
+    $style = ImageStyle::load($style_name);
 
     // Confirm the new style order was saved.
     $effect_edits_order = array_reverse($effect_edits_order);
@@ -240,12 +244,13 @@ class ImageAdminStylesTest extends ImageFieldTestBase {
     $this->assertNoLinkByHref($style_path . '/effects/' . $uuids['image_crop'] . '/delete');
     // Refresh the image style information and verify that the effect was
     // actually deleted.
-    $style = entity_load_unchanged('image_style', $style->id());
+    $entity_type_manager = $this->container->get('entity_type.manager');
+    $style = $entity_type_manager->getStorage('image_style')->loadUnchanged($style->id());
     $this->assertFalse($style->getEffects()->has($uuids['image_crop']), format_string(
       'Effect with ID %uuid no longer found on image style %style',
       array(
         '%uuid' => $uuids['image_crop'],
-        '%style' => $style->label,
+        '%style' => $style->label(),
       )));
 
     // Additional test on Rotate effect, for transparent background.
@@ -256,7 +261,8 @@ class ImageAdminStylesTest extends ImageFieldTestBase {
     );
     $this->drupalPostForm($style_path, array('new' => 'image_rotate'), t('Add'));
     $this->drupalPostForm(NULL, $edit, t('Add effect'));
-    $style = entity_load_unchanged('image_style', $style_name);
+    $entity_type_manager = $this->container->get('entity_type.manager');
+    $style = $entity_type_manager->getStorage('image_style')->loadUnchanged($style_name);
     $this->assertEqual(count($style->getEffects()), 6, 'Rotate effect with transparent background was added.');
 
     // Style deletion form.
@@ -268,7 +274,61 @@ class ImageAdminStylesTest extends ImageFieldTestBase {
     $directory = file_default_scheme() . '://styles/' . $style_name;
     $this->assertFalse(is_dir($directory), format_string('Image style %style directory removed on style deletion.', array('%style' => $style->label())));
 
-    $this->assertFalse(entity_load('image_style', $style_name), format_string('Image style %style successfully deleted.', array('%style' => $style->label())));
+    $this->assertFalse(ImageStyle::load($style_name), format_string('Image style %style successfully deleted.', array('%style' => $style->label())));
+
+    // Test empty text when there are no image styles.
+
+    // Delete all image styles.
+    foreach (ImageStyle::loadMultiple() as $image_style) {
+      $image_style->delete();
+    }
+
+    // Confirm that the empty text is correct on the image styles page.
+    $this->drupalGet($admin_path);
+    $this->assertRaw(t('There are currently no styles. <a href=":url">Add a new one</a>.', [
+      ':url' => \Drupal::url('image.style_add'),
+    ]));
+
+  }
+
+  /**
+   * Tests editing Ajax-enabled image effect forms.
+   */
+  public function testAjaxEnabledEffectForm() {
+    $admin_path = 'admin/config/media/image-styles';
+
+    // Setup a style to be created and effects to add to it.
+    $style_name = strtolower($this->randomMachineName(10));
+    $style_label = $this->randomString();
+    $style_path = $admin_path . '/manage/' . $style_name;
+    $effect_edit = [
+      'data[test_parameter]' => 100,
+    ];
+
+    // Add style form.
+    $edit = [
+      'name' => $style_name,
+      'label' => $style_label,
+    ];
+    $this->drupalPostForm($admin_path . '/add', $edit, t('Create new style'));
+    $this->assertRaw(t('Style %name was created.', ['%name' => $style_label]));
+
+    // Add two Ajax-enabled test effects.
+    $this->drupalPostForm($style_path, ['new' => 'image_module_test_ajax'], t('Add'));
+    $this->drupalPostForm(NULL, $effect_edit, t('Add effect'));
+    $this->drupalPostForm($style_path, ['new' => 'image_module_test_ajax'], t('Add'));
+    $this->drupalPostForm(NULL, $effect_edit, t('Add effect'));
+
+    // Load the saved image style.
+    $style = ImageStyle::load($style_name);
+
+    // Edit back the effects.
+    foreach ($style->getEffects() as $uuid => $effect) {
+      $effect_path = $admin_path . '/manage/' . $style_name . '/effects/' . $uuid;
+      $this->drupalGet($effect_path);
+      $this->drupalPostAjaxForm(NULL, $effect_edit, ['op' => t('Ajax refresh')]);
+      $this->drupalPostForm(NULL, $effect_edit, t('Update effect'));
+    }
 
   }
 
@@ -295,16 +355,16 @@ class ImageAdminStylesTest extends ImageFieldTestBase {
 
     // Create a new node with an image attached.
     $test_image = current($this->drupalGetTestFiles('image'));
-    $nid = $this->uploadNodeImage($test_image, $field_name, 'article');
-    $node = node_load($nid);
+    $nid = $this->uploadNodeImage($test_image, $field_name, 'article', $this->randomMachineName());
+    $node = Node::load($nid);
 
     // Get node field original image URI.
     $fid = $node->get($field_name)->target_id;
-    $original_uri = file_load($fid)->getFileUri();
+    $original_uri = File::load($fid)->getFileUri();
 
     // Test that image is displayed using newly created style.
     $this->drupalGet('node/' . $nid);
-    $this->assertRaw($style->buildUrl($original_uri), format_string('Image displayed using style @style.', array('@style' => $style_name)));
+    $this->assertRaw(file_url_transform_relative($style->buildUrl($original_uri)), format_string('Image displayed using style @style.', array('@style' => $style_name)));
 
     // Rename the style and make sure the image field is updated.
     $new_style_name = strtolower($this->randomMachineName(10));
@@ -318,20 +378,20 @@ class ImageAdminStylesTest extends ImageFieldTestBase {
     $this->drupalGet('node/' . $nid);
 
     // Reload the image style using the new name.
-    $style = entity_load('image_style', $new_style_name);
-    $this->assertRaw($style->buildUrl($original_uri), 'Image displayed using style replacement style.');
+    $style = ImageStyle::load($new_style_name);
+    $this->assertRaw(file_url_transform_relative($style->buildUrl($original_uri)), 'Image displayed using style replacement style.');
 
     // Delete the style and choose a replacement style.
     $edit = array(
       'replacement' => 'thumbnail',
     );
     $this->drupalPostForm($style_path . $new_style_name . '/delete', $edit, t('Delete'));
-    $message = t('Style %name was deleted.', array('%name' => $new_style_label));
+    $message = t('The image style %name has been deleted.', array('%name' => $new_style_label));
     $this->assertRaw($message);
 
-    $replacement_style = entity_load('image_style', 'thumbnail');
+    $replacement_style = ImageStyle::load('thumbnail');
     $this->drupalGet('node/' . $nid);
-    $this->assertRaw($replacement_style->buildUrl($original_uri), 'Image displayed using style replacement style.');
+    $this->assertRaw(file_url_transform_relative($replacement_style->buildUrl($original_uri)), 'Image displayed using style replacement style.');
   }
 
   /**
@@ -429,25 +489,30 @@ class ImageAdminStylesTest extends ImageFieldTestBase {
 
     // Create a new node with an image attached.
     $test_image = current($this->drupalGetTestFiles('image'));
-    $nid = $this->uploadNodeImage($test_image, $field_name, 'article');
-    $node = node_load($nid);
+    $nid = $this->uploadNodeImage($test_image, $field_name, 'article', $this->randomMachineName());
+    $node = Node::load($nid);
 
     // Get node field original image URI.
     $fid = $node->get($field_name)->target_id;
-    $original_uri = file_load($fid)->getFileUri();
+    $original_uri = File::load($fid)->getFileUri();
 
     // Test that image is displayed using newly created style.
     $this->drupalGet('node/' . $nid);
-    $this->assertRaw($style->buildUrl($original_uri), format_string('Image displayed using style @style.', array('@style' => $style_name)));
+    $this->assertRaw(file_url_transform_relative($style->buildUrl($original_uri)), format_string('Image displayed using style @style.', array('@style' => $style_name)));
 
-    // Copy config to staging, and delete the image style.
-    $staging = $this->container->get('config.storage.staging');
+    // Copy config to sync, and delete the image style.
+    $sync = $this->container->get('config.storage.sync');
     $active = $this->container->get('config.storage');
-    $this->copyConfig($active, $staging);
-    $staging->delete('image.style.' . $style_name);
+    // Remove the image field from the display, to avoid a dependency error
+    // during import.
+    EntityViewDisplay::load('node.article.default')
+      ->removeComponent($field_name)
+      ->save();
+    $this->copyConfig($active, $sync);
+    $sync->delete('image.style.' . $style_name);
     $this->configImporter()->import();
 
-    $this->assertFalse(entity_load('image_style', $style_name), 'Style deleted after config import.');
+    $this->assertFalse(ImageStyle::load($style_name), 'Style deleted after config import.');
     $this->assertEqual($this->getImageCount($style), 0, 'Image style was flushed after being deleted by config import.');
   }
 

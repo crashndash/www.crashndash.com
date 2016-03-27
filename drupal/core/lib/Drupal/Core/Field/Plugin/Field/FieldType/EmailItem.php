@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\Core\Entity\Plugin\Field\FieldType\EmailItem.
+ * Contains \Drupal\Core\Field\Plugin\Field\FieldType\EmailItem.
  */
 
 namespace Drupal\Core\Field\Plugin\Field\FieldType;
@@ -22,7 +22,7 @@ use Drupal\Core\TypedData\DataDefinition;
  *   label = @Translation("Email"),
  *   description = @Translation("An entity field containing an email value."),
  *   default_widget = "email_default",
- *   default_formatter = "string"
+ *   default_formatter = "basic_string"
  * )
  */
 class EmailItem extends FieldItemBase {
@@ -32,7 +32,8 @@ class EmailItem extends FieldItemBase {
    */
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
     $properties['value'] = DataDefinition::create('email')
-      ->setLabel(t('E-mail'));
+      ->setLabel(t('Email'))
+      ->setRequired(TRUE);
 
     return $properties;
   }
@@ -46,7 +47,6 @@ class EmailItem extends FieldItemBase {
         'value' => array(
           'type' => 'varchar',
           'length' => Email::EMAIL_MAX_LENGTH,
-          'not null' => FALSE,
         ),
       ),
     );

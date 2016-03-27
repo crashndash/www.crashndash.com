@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\ajax_forms_test\Callbacks.
+ * Contains \Drupal\ajax_forms_test\Callbacks.
  */
 
 namespace Drupal\ajax_forms_test;
@@ -36,4 +36,12 @@ class Callbacks {
     $response->addCommand(new DataCommand('#ajax_checkbox_value', 'form_state_value_select', (int) $form_state->getValue('checkbox')));
     return $response;
   }
+
+  /**
+   * Ajax callback triggered by the checkbox in a #group.
+   */
+  function checkboxGroupCallback($form, FormStateInterface $form_state) {
+    return $form['checkbox_in_group_wrapper'];
+  }
+
 }

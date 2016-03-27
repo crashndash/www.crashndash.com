@@ -41,6 +41,13 @@ class Crypt {
         $bytes .= openssl_random_pseudo_bytes($missing_bytes);
       }
 
+      // If OpenSSL is not available, we can use mcrypt. On Windows, this will
+      // transparently pull from CryptGenRandom. On Unix-based systems, it will
+      // read from /dev/urandom as expected.
+      elseif (function_exists(('mcrypt_create_iv')) && defined('MCRYPT_DEV_URANDOM')) {
+        $bytes .= mcrypt_create_iv($count, MCRYPT_DEV_URANDOM);
+      }
+
       // Else, read directly from /dev/urandom, which is available on many *nix
       // systems and is considered cryptographically secure.
       elseif ($fh = @fopen('/dev/urandom', 'rb')) {
@@ -106,7 +113,7 @@ class Crypt {
 
     $hmac = base64_encode(hash_hmac('sha256', $data, $key, TRUE));
     // Modify the hmac so it's safe to use in URLs.
-    return strtr($hmac, array('+' => '-', '/' => '_', '=' => ''));
+    return str_replace(['+', '/', '='], ['-', '_', ''], $hmac);
   }
 
   /**
@@ -122,7 +129,50 @@ class Crypt {
   public static function hashBase64($data) {
     $hash = base64_encode(hash('sha256', $data, TRUE));
     // Modify the hash so it's safe to use in URLs.
-    return strtr($hash, array('+' => '-', '/' => '_', '=' => ''));
+    return str_replace(['+', '/', '='], ['-', '_', ''], $hash);
+  }
+
+  /**
+   * Compares strings in constant time.
+   *
+   * @param string $known_string
+   *   The expected string.
+   * @param string $user_string
+   *   The user supplied string to check.
+   *
+   * @return bool
+   *   Returns TRUE when the two strings are equal, FALSE otherwise.
+   */
+  public static function hashEquals($known_string, $user_string) {
+    if (function_exists('hash_equals')) {
+      return hash_equals($known_string, $user_string);
+    }
+    else {
+      // Backport of hash_equals() function from PHP 5.6
+      // @see https://github.com/php/php-src/blob/PHP-5.6/ext/hash/hash.c#L739
+      if (!is_string($known_string)) {
+        trigger_error(sprintf("Expected known_string to be a string, %s given", gettype($known_string)), E_USER_WARNING);
+        return FALSE;
+      }
+
+      if (!is_string($user_string)) {
+        trigger_error(sprintf("Expected user_string to be a string, %s given", gettype($user_string)), E_USER_WARNING);
+        return FALSE;
+      }
+
+      $known_len = strlen($known_string);
+      if ($known_len !== strlen($user_string)) {
+        return FALSE;
+      }
+
+      // This is security sensitive code. Do not optimize this for speed.
+      $result = 0;
+      for ($i = 0; $i < $known_len; $i++) {
+        $result |= (ord($known_string[$i]) ^ ord($user_string[$i]));
+      }
+
+      return $result === 0;
+    }
   }
 
   /**
@@ -137,7 +187,7 @@ class Crypt {
    * @see \Drupal\Component\Utility\Crypt::randomBytes()
    */
   public static function randomBytesBase64($count = 32) {
-    return strtr(base64_encode(static::randomBytes($count)), array('+' => '-', '/' => '_', '=' => ''));
+    return str_replace(['+', '/', '='], ['-', '_', ''], base64_encode(static::randomBytes($count)));
   }
 
 }

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\exposed_form\InputRequired.
+ * Contains \Drupal\views\Plugin\views\exposed_form\InputRequired.
  */
 
 namespace Drupal\views\Plugin\views\exposed_form;
@@ -26,7 +26,7 @@ class InputRequired extends ExposedFormPluginBase {
   protected function defineOptions() {
     $options = parent::defineOptions();
 
-    $options['text_input_required'] = array('default' => 'Select any filter and click on Apply to see results', 'translatable' => TRUE);
+    $options['text_input_required'] = array('default' => $this->t('Select any filter and click on Apply to see results'));
     $options['text_input_required_format'] = array('default' => NULL);
     return $options;
   }
@@ -59,7 +59,7 @@ class InputRequired extends ExposedFormPluginBase {
         foreach ($view->filter as $filter) {
           if ($filter->isExposed()) {
             $identifier = $filter->options['expose']['identifier'];
-            if (isset($view->exposed_input[$identifier])) {
+            if (isset($view->getExposedInput()[$identifier])) {
               $cache = TRUE;
               return $cache;
             }
@@ -73,6 +73,9 @@ class InputRequired extends ExposedFormPluginBase {
   }
 
   public function preRender($values) {
+    // Display the "text on demand" if needed. This is a site builder-defined
+    // text to display instead of results until the user selects and applies
+    // an exposed filter.
     if (!$this->exposedFilterApplied()) {
       $options = array(
         'id' => 'area',
@@ -81,14 +84,22 @@ class InputRequired extends ExposedFormPluginBase {
         'label' => '',
         'relationship' => 'none',
         'group_type' => 'group',
-        'content' => $this->options['text_input_required'],
-        'format' => $this->options['text_input_required_format'],
+        // We need to set the "Display even if view has no result" option to
+        // TRUE as the input required exposed form plugin will always force an
+        // empty result if no exposed filters are applied.
+        'empty' => TRUE,
+        'content' => [
+          // @see \Drupal\views\Plugin\views\area\Text::render()
+          'value' => $this->options['text_input_required'],
+          'format' => $this->options['text_input_required_format'],
+        ],
       );
       $handler = Views::handlerManager('area')->getHandler($options);
       $handler->init($this->view, $this->displayHandler, $options);
       $this->displayHandler->handlers['empty'] = array(
         'area' => $handler,
       );
+      // Override the existing empty result message (if applicable).
       $this->displayHandler->setOption('empty', array('text' => $options));
     }
   }

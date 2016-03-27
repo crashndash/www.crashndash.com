@@ -2,6 +2,8 @@
 
 /**
  * @file
+ * Contains \Drupal\block\Tests\BlockHookOperationTest.
+ *
  * Tests for Block module regarding hook_entity_operations_alter().
  */
 
@@ -18,7 +20,7 @@ use Drupal\simpletest\WebTestBase;
 class BlockHookOperationTest extends WebTestBase {
 
   /**
-   * Modules to enable.
+   * Modules to install.
    *
    * @var array
    */

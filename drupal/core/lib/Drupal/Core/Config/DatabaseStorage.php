@@ -67,7 +67,7 @@ class DatabaseStorage implements StorageInterface {
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::exists().
+   * {@inheritdoc}
    */
   public function exists($name) {
     try {
@@ -107,7 +107,7 @@ class DatabaseStorage implements StorageInterface {
   public function readMultiple(array $names) {
     $list = array();
     try {
-      $list = $this->connection->query('SELECT name, data FROM {' . $this->connection->escapeTable($this->table) . '} WHERE collection = :collection AND name IN (:names)', array(':collection' => $this->collection, ':names' => $names), $this->options)->fetchAllKeyed();
+      $list = $this->connection->query('SELECT name, data FROM {' . $this->connection->escapeTable($this->table) . '} WHERE collection = :collection AND name IN ( :names[] )', array(':collection' => $this->collection, ':names[]' => $names), $this->options)->fetchAllKeyed();
       foreach ($list as &$data) {
         $data = $this->decode($data);
       }
@@ -192,14 +192,14 @@ class DatabaseStorage implements StorageInterface {
       'fields' => array(
         'collection' => array(
           'description' => 'Primary Key: Config object collection.',
-          'type' => 'varchar',
+          'type' => 'varchar_ascii',
           'length' => 255,
           'not null' => TRUE,
           'default' => '',
         ),
         'name' => array(
           'description' => 'Primary Key: Config object name.',
-          'type' => 'varchar',
+          'type' => 'varchar_ascii',
           'length' => 255,
           'not null' => TRUE,
           'default' => '',
@@ -247,7 +247,7 @@ class DatabaseStorage implements StorageInterface {
   }
 
   /**
-   * Implements Drupal\Core\Config\StorageInterface::encode().
+   * {@inheritdoc}
    */
   public function encode($data) {
     return serialize($data);
@@ -273,6 +273,7 @@ class DatabaseStorage implements StorageInterface {
       $query->fields($this->table, array('name'));
       $query->condition('collection', $this->collection, '=');
       $query->condition('name', $prefix . '%', 'LIKE');
+      $query->orderBy('collection')->orderBy('name');
       return $query->execute()->fetchCol();
     }
     catch (\Exception $e) {

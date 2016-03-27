@@ -8,7 +8,6 @@
 namespace Drupal\ckeditor_test\Plugin\CKEditorPlugin;
 
 use Drupal\ckeditor\CKEditorPluginButtonsInterface;
-use Drupal\Component\Plugin\PluginBase;
 
 /**
  * Defines a "LlamaButton" plugin, with a toolbar builder-enabled "llama" feature.
@@ -21,18 +20,18 @@ use Drupal\Component\Plugin\PluginBase;
 class LlamaButton extends Llama implements CKEditorPluginButtonsInterface {
 
   /**
-   * Implements \Drupal\ckeditor\Plugin\CKEditorPluginButtonsInterface::getButtons().
+   * {@inheritdoc}
    */
   function getButtons() {
     return array(
       'Llama' => array(
-        'label' => t('Insert Lllama'),
+        'label' => t('Insert Llama'),
       ),
     );
   }
 
   /**
-   * Implements \Drupal\ckeditor\Plugin\CKEditorPluginInterface::getFile().
+   * {@inheritdoc}
    */
   function getFile() {
     return drupal_get_path('module', 'ckeditor_test') . '/js/llama_button.js';

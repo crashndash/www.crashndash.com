@@ -2,13 +2,12 @@
 
 /**
  * @file
- * Definition of Drupal\comment\Plugin\views\row\Rss.
+ * Contains \Drupal\comment\Plugin\views\row\Rss.
  */
 
 namespace Drupal\comment\Plugin\views\row;
 
-use Drupal\Core\Form\FormStateInterface;
-use Drupal\views\Plugin\views\row\RowPluginBase;
+use Drupal\views\Plugin\views\row\RssPluginBase;
 
 /**
  * Plugin which formats the comments as RSS items.
@@ -19,33 +18,31 @@ use Drupal\views\Plugin\views\row\RowPluginBase;
  *   help = @Translation("Display the comment as RSS."),
  *   theme = "views_view_row_rss",
  *   register_theme = FALSE,
- *   base = {"comment"},
+ *   base = {"comment_field_data"},
  *   display_types = {"feed"}
  * )
  */
-class Rss extends RowPluginBase {
+class Rss extends RssPluginBase {
 
-   var $base_table = 'comment';
-   var $base_field = 'cid';
+  /**
+   * {@inheritdoc}
+   */
+  protected $base_table = 'comment_field_data';
 
-  protected function defineOptions() {
-    $options = parent::defineOptions();
+  /**
+   * {@inheritdoc}
+   */
+  protected $base_field = 'cid';
 
-    $options['view_mode'] = array('default' => 'default');
+  /**
+   * @var \Drupal\comment\CommentInterface[]
+   */
+  protected $comments;
 
-    return $options;
-  }
-
-  public function buildOptionsForm(&$form, FormStateInterface $form_state) {
-    parent::buildOptionsForm($form, $form_state);
-
-    $form['view_mode'] = array(
-      '#type' => 'select',
-      '#title' => $this->t('Display type'),
-      '#options' => $this->options_form_summary_options(),
-      '#default_value' => $this->options['view_mode'],
-    );
-  }
+  /**
+   * {@inheritdoc}
+   */
+  protected $entityTypeId = 'comment';
 
   public function preRender($result) {
     $cids = array();
@@ -54,26 +51,14 @@ class Rss extends RowPluginBase {
       $cids[] = $row->cid;
     }
 
-    $this->comments = entity_load_multiple('comment', $cids);
-    foreach ($this->comments as $comment) {
-      $comment->depth = count(explode('.', $comment->getThread())) - 1;
-    }
-
+    $this->comments = $this->entityManager->getStorage('comment')->loadMultiple($cids);
   }
 
   /**
-   * Return the main options, which are shown in the summary title
-   *
-   * @see views_plugin_row_node_rss::options_form_summary_options()
-   * @todo: Maybe provide a views_plugin_row_rss_entity and reuse this method
-   * in views_plugin_row_comment|node_rss.inc
+   * {@inheritdoc}
    */
-  function options_form_summary_options() {
-    $view_modes = \Drupal::entityManager()->getViewModes('node');
-    $options = array();
-    foreach ($view_modes as $mode => $settings) {
-      $options[$mode] = $settings['label'];
-    }
+  public function buildOptionsForm_summary_options() {
+    $options = parent::buildOptionsForm_summary_options();
     $options['title'] = $this->t('Title only');
     $options['default'] = $this->t('Use site default RSS settings');
     return $options;
@@ -99,8 +84,6 @@ class Rss extends RowPluginBase {
       return;
     }
 
-    $item_text = '';
-
     $comment->link = $comment->url('canonical', array('absolute' => TRUE));
     $comment->rss_namespaces = array();
     $comment->rss_elements = array(
@@ -121,23 +104,23 @@ class Rss extends RowPluginBase {
 
     // The comment gets built and modules add to or modify
     // $comment->rss_elements and $comment->rss_namespaces.
-    $build = comment_view($comment, 'rss');
+    $build = $this->entityManager->getViewBuilder('comment')->view($comment, 'rss');
     unset($build['#theme']);
 
     if (!empty($comment->rss_namespaces)) {
       $this->view->style_plugin->namespaces = array_merge($this->view->style_plugin->namespaces, $comment->rss_namespaces);
     }
 
+    $item = new \stdClass();
     if ($view_mode != 'title') {
       // We render comment contents.
-      $item_text .= drupal_render($build);
+      $item->description = $build;
     }
-
-    $item = new \stdClass();
-    $item->description = $item_text;
     $item->title = $comment->label();
     $item->link = $comment->link;
-    $item->elements = $comment->rss_elements;
+    // Provide a reference so that the render call in
+    // template_preprocess_views_view_row_rss() can still access it.
+    $item->elements = &$comment->rss_elements;
     $item->cid = $comment->id();
 
     $build = array(
@@ -146,7 +129,7 @@ class Rss extends RowPluginBase {
       '#options' => $this->options,
       '#row' => $item,
     );
-    return drupal_render($build);
+    return $build;
   }
 
 }

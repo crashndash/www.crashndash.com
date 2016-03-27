@@ -9,6 +9,7 @@ namespace Drupal\Core\Render\Element;
 
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Render\Element;
+use Drupal\Component\Utility\Html as HtmlUtility;
 
 /**
  * Provides a render element for a table.
@@ -16,6 +17,41 @@ use Drupal\Core\Render\Element;
  * Note: Although this extends FormElement, it can be used outside the
  * context of a form.
  *
+ * Properties:
+ * - #header: An array of table header labels.
+ * - #rows: An array of the rows to be displayed. Each row is either an array
+ *   of cell contents or an array of properties as described in table.html.twig
+ *   Alternatively specify the data for the table as child elements of the table
+ *   element. Table elements would contain rows elements that would in turn
+ *   contain column elements.
+ * - #empty: Text to display when no rows are present.
+ * - #responsive: Indicates whether to add the drupal.responsive_table library
+ *   providing responsive tables.  Defaults to TRUE.
+ * - #sticky: Indicates whether to add the drupal.tableheader library that makes
+ *   table headers always visible at the top of the page. Defaults to FALSE.
+ *
+ * Usage example:
+ * @code
+ * $form['contacts'] = array(
+ *   '#type' => 'table',
+ *   '#caption' => 'Sample Table',
+ *   '#header' => array('Name', 'Phone'),
+ * );
+ *
+ * for ($i=1; $i<=4; $i++) {
+ *   $form['contacts'][$i]['name'] = array(
+ *     '#type' => 'textfield',
+ *     '#title' => t('Name'),
+ *     '#title_display' => 'invisible',
+ *   );
+ *
+ *   $form['contacts'][$i]['phone'] = array(
+ *     '#type' => 'tel',
+ *     '#title' => t('Phone'),
+ *     '#title_display' => 'invisible',
+ *   );
+ * }
+ * @endcode
  * @see \Drupal\Core\Render\Element\Tableselect
  *
  * @FormElement("table")
@@ -131,9 +167,10 @@ class Table extends FormElement {
 
         // Since the #parents of the tableselect form element will equal the
         // #parents of the row element, prevent FormBuilder from auto-generating
-        // an #id for the row element, since drupal_html_id() would automatically
+        // an #id for the row element, since
+        // \Drupal\Component\Utility\Html::getUniqueId() would automatically
         // append a suffix to the tableselect form element's #id otherwise.
-        $row['#id'] = drupal_html_id('edit-' . implode('-', $element_parents) . '-row');
+        $row['#id'] = HtmlUtility::getUniqueId('edit-' . implode('-', $element_parents) . '-row');
 
         // Do not overwrite manually created children.
         if (!isset($row['select'])) {
@@ -163,7 +200,7 @@ class Table extends FormElement {
               }
             }
             if (isset($title) && $title !== '') {
-              $title = t('Update !title', array('!title' => $title));
+              $title = t('Update @title', array('@title' => $title));
             }
           }
 
@@ -171,7 +208,7 @@ class Table extends FormElement {
           $row = array('select' => array()) + $row;
           $row['select'] += array(
             '#type' => $element['#multiple'] ? 'checkbox' : 'radio',
-            '#id' => drupal_html_id('edit-' . implode('-', $element_parents)),
+            '#id' => HtmlUtility::getUniqueId('edit-' . implode('-', $element_parents)),
             // @todo If rows happen to use numeric indexes instead of string keys,
             //   this results in a first row with $key === 0, which is always FALSE.
             '#return_value' => $key,
@@ -234,10 +271,10 @@ class Table extends FormElement {
   }
 
   /**
-   * #pre_render callback to transform children of an element into #rows suitable for theme_table().
+   * #pre_render callback to transform children of an element of #type 'table'.
    *
    * This function converts sub-elements of an element of #type 'table' to be
-   * suitable for theme_table():
+   * suitable for table.html.twig:
    * - The first level of sub-elements are table rows. Only the #attributes
    *   property is taken into account.
    * - The second level of sub-elements is converted into columns for the
@@ -294,8 +331,8 @@ class Table extends FormElement {
    *
    * @return array
    *
-   * @see theme_table()
-   * @see drupal_process_attached()
+   * @see template_preprocess_table()
+   * @see \Drupal\Core\Render\AttachmentsResponseProcessorInterface::processAttachments()
    * @see drupal_attach_tabledrag()
    */
   public static function preRenderTable($element) {
@@ -307,7 +344,7 @@ class Table extends FormElement {
       }
       // Turn second-level elements into table row columns.
       // @todo Do not render a cell for children of #type 'value'.
-      // @see http://drupal.org/node/1248940
+      // @see https://www.drupal.org/node/1248940
       foreach (Element::children($element[$first]) as $second) {
         // Assign the element by reference, so any potential changes to the
         // original element are taken over.

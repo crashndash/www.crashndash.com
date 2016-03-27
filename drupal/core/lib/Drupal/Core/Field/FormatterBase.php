@@ -8,6 +8,8 @@
 namespace Drupal\Core\Field;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Language\LanguageInterface;
+use Drupal\Core\Render\Element;
 
 /**
  * Base class for 'Field formatter' plugin implementations.
@@ -75,11 +77,16 @@ abstract class FormatterBase extends PluginSettingsBase implements FormatterInte
   /**
    * {@inheritdoc}
    */
-  public function view(FieldItemListInterface $items) {
-    $addition = array();
+  public function view(FieldItemListInterface $items, $langcode = NULL) {
+    // Default the language to the current content language.
+    if (empty($langcode)) {
+      $langcode = \Drupal::languageManager()->getCurrentLanguage(LanguageInterface::TYPE_CONTENT)->getId();
+    }
+    $elements = $this->viewElements($items, $langcode);
 
-    $elements = $this->viewElements($items);
-    if ($elements) {
+    // If there are actual renderable children, use #theme => field, otherwise,
+    // let access cacheability metadata pass through for correct bubbling.
+    if (Element::children($elements)) {
       $entity = $items->getEntity();
       $entity_type = $entity->getEntityTypeId();
       $field_name = $this->fieldDefinition->getName();
@@ -97,12 +104,13 @@ abstract class FormatterBase extends PluginSettingsBase implements FormatterInte
         '#object' => $entity,
         '#items' => $items,
         '#formatter' => $this->getPluginId(),
+        '#is_multiple' => $this->fieldDefinition->getFieldStorageDefinition()->isMultiple(),
       );
 
-      $addition = array_merge($info, $elements);
+      $elements = array_merge($info, $elements);
     }
 
-    return $addition;
+    return $elements;
   }
 
   /**

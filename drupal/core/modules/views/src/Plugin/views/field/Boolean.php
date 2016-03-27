@@ -2,13 +2,14 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\field\Boolean.
+ * Contains \Drupal\views\Plugin\views\field\Boolean.
  */
 
 namespace Drupal\views\Plugin\views\field;
 
 use Drupal\Component\Utility\Xss as UtilityXss;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\views\Render\ViewsRenderPipelineMarkup;
 use Drupal\views\ResultRow;
 use Drupal\views\ViewExecutable;
 use Drupal\views\Plugin\views\display\DisplayPluginBase;
@@ -33,6 +34,9 @@ use Drupal\views\Plugin\views\display\DisplayPluginBase;
  */
 class Boolean extends FieldPluginBase {
 
+  /**
+   * {@inheritdoc}
+   */
   protected function defineOptions() {
     $options = parent::defineOptions();
     $options['type'] = array('default' => 'yes-no');
@@ -44,7 +48,7 @@ class Boolean extends FieldPluginBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\field\FieldPluginBase::init().
+   * {@inheritdoc}
    */
   public function init(ViewExecutable $view, DisplayPluginBase $display, array &$options = NULL) {
     parent::init($view, $display, $options);
@@ -62,6 +66,9 @@ class Boolean extends FieldPluginBase {
     $this->formats = array_merge($default_formats, $output_formats, $custom_format);
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     foreach ($this->formats as $key => $item) {
       $options[$key] = implode('/', $item);
@@ -112,7 +119,8 @@ class Boolean extends FieldPluginBase {
     }
 
     if ($this->options['type'] == 'custom') {
-      return $value ? UtilityXss::filterAdmin($this->options['type_custom_true']) : UtilityXss::filterAdmin($this->options['type_custom_false']);
+      $custom_value = $value ? $this->options['type_custom_true'] : $this->options['type_custom_false'];
+      return ViewsRenderPipelineMarkup::create(UtilityXss::filterAdmin($custom_value));
     }
     elseif (isset($this->formats[$this->options['type']])) {
       return $value ? $this->formats[$this->options['type']][0] : $this->formats[$this->options['type']][1];

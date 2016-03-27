@@ -1,48 +1,86 @@
 /**
  * @file
  * Drupal Link plugin.
+ *
+ * @ignore
  */
 
 (function ($, Drupal, drupalSettings, CKEDITOR) {
 
-  "use strict";
+  'use strict';
+
+  function parseAttributes(element) {
+    var parsedAttributes = {};
+
+    var domElement = element.$;
+    var attribute = null;
+    var attributeName;
+    for (var attrIndex = 0; attrIndex < domElement.attributes.length; attrIndex++) {
+      attribute = domElement.attributes.item(attrIndex);
+      attributeName = attribute.nodeName.toLowerCase();
+      // Ignore data-cke-* attributes; they're CKEditor internals.
+      if (attributeName.indexOf('data-cke-') === 0) {
+        continue;
+      }
+      // Store the value for this attribute, unless there's a data-cke-saved-
+      // alternative for it, which will contain the quirk-free, original value.
+      parsedAttributes[attributeName] = element.data('cke-saved-' + attributeName) || attribute.nodeValue;
+    }
+
+    // Remove any cke_* classes.
+    if (parsedAttributes.class) {
+      parsedAttributes.class = CKEDITOR.tools.trim(parsedAttributes.class.replace(/cke_\S+/, ''));
+    }
+
+    return parsedAttributes;
+  }
 
   CKEDITOR.plugins.add('drupallink', {
     init: function (editor) {
       // Add the commands for link and unlink.
       editor.addCommand('drupallink', {
-        allowedContent: 'a[!href,target]',
-        requiredContent: 'a[href]',
-        modes: { wysiwyg: 1 },
+        allowedContent: {
+          a: {
+            attributes: {
+              '!href': true
+            },
+            classes: {}
+          }
+        },
+        requiredContent: new CKEDITOR.style({
+          element: 'a',
+          attributes: {
+            href: ''
+          }
+        }),
+        modes: {wysiwyg: 1},
         canUndo: true,
         exec: function (editor) {
+          var drupalImageUtils = CKEDITOR.plugins.drupalimage;
+          var focusedImageWidget = drupalImageUtils && drupalImageUtils.getFocusedWidget(editor);
           var linkElement = getSelectedLink(editor);
-          var linkDOMElement = null;
 
           // Set existing values based on selected element.
           var existingValues = {};
           if (linkElement && linkElement.$) {
-            linkDOMElement = linkElement.$;
-
-            // Populate an array with the link's current attributes.
-            var attribute = null, attributeName;
-            for (var key = 0; key < linkDOMElement.attributes.length; key++) {
-              attribute = linkDOMElement.attributes.item(key);
-              attributeName = attribute.nodeName.toLowerCase();
-              // Don't consider data-cke-saved- attributes; they're just there to
-              // work around browser quirks.
-              if (attributeName.substring(0, 15) === 'data-cke-saved-') {
-                continue;
-              }
-              // Store the value for this attribute, unless there's a
-              // data-cke-saved- alternative for it, which will contain the quirk-
-              // free, original value.
-              existingValues[attributeName] = linkElement.data('cke-saved-' + attributeName) || attribute.nodeValue;
-            }
+            existingValues = parseAttributes(linkElement);
+          }
+          // Or, if an image widget is focused, we're editing a link wrapping
+          // an image widget.
+          else if (focusedImageWidget && focusedImageWidget.data.link) {
+            existingValues = CKEDITOR.tools.clone(focusedImageWidget.data.link);
           }
 
           // Prepare a save callback to be used upon saving the dialog.
           var saveCallback = function (returnValues) {
+            // If an image widget is focused, we're not editing an independent
+            // link, but we're wrapping an image widget in a link.
+            if (focusedImageWidget) {
+              focusedImageWidget.setData('link', CKEDITOR.tools.extend(returnValues.attributes, focusedImageWidget.data.link));
+              editor.fire('saveSnapshot');
+              return;
+            }
+
             editor.fire('saveSnapshot');
 
             // Create a new link element if needed.
@@ -58,13 +96,8 @@
                 range.selectNodeContents(text);
               }
 
-              // Ignore a disabled target attribute.
-              if (returnValues.attributes.target === 0) {
-                delete returnValues.attributes.target;
-              }
-
               // Create the new link by applying a style to the new text.
-              var style = new CKEDITOR.style({ element: 'a', attributes: returnValues.attributes });
+              var style = new CKEDITOR.style({element: 'a', attributes: returnValues.attributes});
               style.type = CKEDITOR.STYLE_INLINE;
               style.applyToRange(range);
               range.select();
@@ -74,17 +107,17 @@
             }
             // Update the link properties.
             else if (linkElement) {
-              for (var key in returnValues.attributes) {
-                if (returnValues.attributes.hasOwnProperty(key)) {
+              for (var attrName in returnValues.attributes) {
+                if (returnValues.attributes.hasOwnProperty(attrName)) {
                   // Update the property if a value is specified.
-                  if (returnValues.attributes[key].length > 0) {
-                    var value = returnValues.attributes[key];
-                    linkElement.data('cke-saved-' + key, value);
-                    linkElement.setAttribute(key, value);
+                  if (returnValues.attributes[attrName].length > 0) {
+                    var value = returnValues.attributes[attrName];
+                    linkElement.data('cke-saved-' + attrName, value);
+                    linkElement.setAttribute(attrName, value);
                   }
                   // Delete the property if set to an empty string.
                   else {
-                    linkElement.removeAttribute(key);
+                    linkElement.removeAttribute(attrName);
                   }
                 }
               }
@@ -94,8 +127,8 @@
             editor.fire('saveSnapshot');
           };
           // Drupal.t() will not work inside CKEditor plugins because CKEditor
-          // loads the JavaScript file instead of Drupal. Pull translated strings
-          // from the plugin settings that are translated server-side.
+          // loads the JavaScript file instead of Drupal. Pull translated
+          // strings from the plugin settings that are translated server-side.
           var dialogSettings = {
             title: linkElement ? editor.config.drupalLink_dialogTitleEdit : editor.config.drupalLink_dialogTitleAdd,
             dialogClass: 'editor-link-dialog'
@@ -108,10 +141,14 @@
       editor.addCommand('drupalunlink', {
         contextSensitive: 1,
         startDisabled: 1,
-        allowedContent: 'a[!href]',
-        requiredContent: 'a[href]',
+        requiredContent: new CKEDITOR.style({
+          element: 'a',
+          attributes: {
+            href: ''
+          }
+        }),
         exec: function (editor) {
-          var style = new CKEDITOR.style({ element: 'a', type: CKEDITOR.STYLE_INLINE, alwaysRemoveElement: 1 });
+          var style = new CKEDITOR.style({element: 'a', type: CKEDITOR.STYLE_INLINE, alwaysRemoveElement: 1});
           editor.removeStyle(style);
         },
         refresh: function (editor, path) {
@@ -125,7 +162,8 @@
         }
       });
 
-      editor.setKeystroke(CKEDITOR.CTRL + 75 /*K*/, 'drupallink');
+      // CTRL + K.
+      editor.setKeystroke(CKEDITOR.CTRL + 75, 'drupallink');
 
       // Add buttons for link and unlink.
       if (editor.ui.addButton) {
@@ -184,7 +222,7 @@
 
           var menu = {};
           if (anchor.getAttribute('href') && anchor.getChildCount()) {
-            menu = { link: CKEDITOR.TRISTATE_OFF, unlink: CKEDITOR.TRISTATE_OFF };
+            menu = {link: CKEDITOR.TRISTATE_OFF, unlink: CKEDITOR.TRISTATE_OFF};
           }
           return menu;
         });
@@ -197,6 +235,7 @@
    *
    * The following selection will all return the link element.
    *
+   * @example
    *  <a href="#">li^nk</a>
    *  <a href="#">[link]</a>
    *  text[<a href="#">link]</a>
@@ -205,6 +244,11 @@
    *  [<a href="#"><b>li]nk</b></a>
    *
    * @param {CKEDITOR.editor} editor
+   *   The CKEditor editor object
+   *
+   * @return {?HTMLElement}
+   *   The selected link element, or null.
+   *
    */
   function getSelectedLink(editor) {
     var selection = editor.getSelection();
@@ -221,5 +265,48 @@
     }
     return null;
   }
+
+  /**
+   * The image2 plugin is currently tightly coupled to the link plugin: it
+   * calls CKEDITOR.plugins.link.parseLinkAttributes().
+   *
+   * Drupal 8's CKEditor build doesn't include the 'link' plugin. Because it
+   * includes its own link plugin that integrates with Drupal's dialog system.
+   * So, to allow images to be linked, we need to duplicate the necessary subset
+   * of the logic.
+   *
+   * @todo Remove once we update to CKEditor 4.5.5.
+   * @see https://dev.ckeditor.com/ticket/13885
+   */
+  CKEDITOR.plugins.link = CKEDITOR.plugins.link || {
+    parseLinkAttributes: function (editor, element) {
+      return parseAttributes(element);
+    },
+    getLinkAttributes: function (editor, data) {
+      var set = {};
+      for (var attributeName in data) {
+        if (data.hasOwnProperty(attributeName)) {
+          set[attributeName] = data[attributeName];
+        }
+      }
+
+      // CKEditor tracks the *actual* saved href in a data-cke-saved-* attribute
+      // to work around browser quirks. We need to update it.
+      set['data-cke-saved-href'] = set.href;
+
+      // Remove all attributes which are not currently set.
+      var removed = {};
+      for (var s in set) {
+        if (set.hasOwnProperty(s)) {
+          delete removed[s];
+        }
+      }
+
+      return {
+        set: set,
+        removed: CKEDITOR.tools.objectKeys(removed)
+      };
+    }
+  };
 
 })(jQuery, Drupal, drupalSettings, CKEDITOR);

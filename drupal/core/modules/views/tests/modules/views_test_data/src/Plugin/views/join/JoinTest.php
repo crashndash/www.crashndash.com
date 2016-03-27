@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views_test_data\views\join\JoinTest.
+ * Contains \Drupal\views_test_data\Plugin\views\join\JoinTest.
  */
 
 namespace Drupal\views_test_data\Plugin\views\join;
@@ -42,7 +42,7 @@ class JoinTest extends JoinPluginBase {
 
 
   /**
-   * Overrides Drupal\views\Plugin\views\join\JoinPluginBase::buildJoin().
+   * {@inheritdoc}
    */
   public function buildJoin($select_query, $table, $view_query) {
     // Add an additional hardcoded condition to the query.

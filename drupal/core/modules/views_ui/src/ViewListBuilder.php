@@ -7,13 +7,12 @@
 
 namespace Drupal\views_ui;
 
-use Drupal\Component\Utility\SafeMarkup;
-use Drupal\Component\Utility\String;
 use Drupal\Component\Plugin\PluginManagerInterface;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Config\Entity\ConfigEntityListBuilder;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
+use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -29,6 +28,11 @@ class ViewListBuilder extends ConfigEntityListBuilder {
    * @var \Drupal\Component\Plugin\PluginManagerInterface
    */
   protected $displayManager;
+
+  /**
+   * {@inheritdoc}
+   */
+  protected $limit;
 
   /**
    * {@inheritdoc}
@@ -55,6 +59,11 @@ class ViewListBuilder extends ConfigEntityListBuilder {
     parent::__construct($entity_type, $storage);
 
     $this->displayManager = $display_manager;
+    // This list builder uses client-side filters which requires all entities to
+    // be listed, disable the pager.
+    // @todo https://www.drupal.org/node/2536826 change the filtering to support
+    //   a pager.
+    $this->limit = FALSE;
   }
 
   /**
@@ -81,12 +90,6 @@ class ViewListBuilder extends ConfigEntityListBuilder {
    */
   public function buildRow(EntityInterface $view) {
     $row = parent::buildRow($view);
-    $display_paths = '';
-    $separator = '';
-    foreach ($this->getDisplayPaths($view) as $display_path) {
-      $display_paths .= $separator . SafeMarkup::escape($display_path);
-      $separator = ', ';
-    }
     return array(
       'data' => array(
         'view_name' => array(
@@ -98,12 +101,23 @@ class ViewListBuilder extends ConfigEntityListBuilder {
         ),
         'description' => array(
           'data' => array(
-            '#markup' => String::checkPlain($view->get('description')),
+            '#plain_text' => $view->get('description'),
           ),
-          'class' => array('views-table-filter-text-source'),
+          'data-drupal-selector' => 'views-table-filter-text-source',
         ),
-        'tag' => $view->get('tag'),
-        'path' => SafeMarkup::set($display_paths),
+        'tag' => array(
+          'data' => array(
+            '#plain_text' => $view->get('tag'),
+          ),
+          'data-drupal-selector' => 'views-table-filter-text-source',
+        ),
+        'path' => array(
+          'data' => array(
+            '#theme' => 'item_list',
+            '#items' => $this->getDisplayPaths($view),
+            '#context' => ['list_style' => 'comma-list'],
+          ),
+        ),
         'operations' => $row['operations'],
       ),
       'title' => $this->t('Machine name: @name', array('@name' => $view->id())),
@@ -173,7 +187,6 @@ class ViewListBuilder extends ConfigEntityListBuilder {
     $list['#type'] = 'container';
     $list['#attributes']['id'] = 'views-entity-list';
 
-    $list['#attached']['css'] = ViewFormBase::getAdminCSS();
     $list['#attached']['library'][] = 'core/drupal.ajax';
     $list['#attached']['library'][] = 'views_ui/views_ui.listing';
 
@@ -186,9 +199,10 @@ class ViewListBuilder extends ConfigEntityListBuilder {
 
     $list['filters']['text'] = array(
       '#type' => 'search',
-      '#title' => $this->t('Search'),
-      '#size' => 30,
-      '#placeholder' => $this->t('Enter view name'),
+      '#title' => $this->t('Filter'),
+      '#title_display' => 'invisible',
+      '#size' => 40,
+      '#placeholder' => $this->t('Filter by view name or description'),
       '#attributes' => array(
         'class' => array('views-filter-text'),
         'data-table' => '.views-listing-table',
@@ -197,8 +211,8 @@ class ViewListBuilder extends ConfigEntityListBuilder {
       ),
     );
 
-    $list['enabled']['heading']['#markup'] = '<h2>' . $this->t('Enabled') . '</h2>';
-    $list['disabled']['heading']['#markup'] = '<h2>' . $this->t('Disabled') . '</h2>';
+    $list['enabled']['heading']['#markup'] = '<h2>' . $this->t('Enabled', array(), array('context' => 'Plural')) . '</h2>';
+    $list['disabled']['heading']['#markup'] = '<h2>' . $this->t('Disabled', array(), array('context' => 'Plural')) . '</h2>';
     foreach (array('enabled', 'disabled') as $status) {
       $list[$status]['#type'] = 'container';
       $list[$status]['#attributes'] = array('class' => array('views-list-section', $status));
@@ -237,7 +251,7 @@ class ViewListBuilder extends ConfigEntityListBuilder {
       $definition = $this->displayManager->getDefinition($display['display_plugin']);
       if (!empty($definition['admin'])) {
         // Cast the admin label to a string since it is an object.
-        // @see \Drupal\Core\StringTranslation\TranslationWrapper
+        // @see \Drupal\Core\StringTranslation\TranslatableMarkup
         $displays[] = (string) $definition['admin'];
       }
     }
@@ -263,10 +277,12 @@ class ViewListBuilder extends ConfigEntityListBuilder {
       if ($display->hasPath()) {
         $path = $display->getPath();
         if ($view->status() && strpos($path, '%') === FALSE) {
-          $all_paths[] = _l('/' . $path, $path);
+          // @todo Views should expect and store a leading /. See:
+          //   https://www.drupal.org/node/2423913
+          $all_paths[] = \Drupal::l('/' . $path, Url::fromUserInput('/' . $path));
         }
         else {
-          $all_paths[] = String::checkPlain('/' . $path);
+          $all_paths[] = '/' . $path;
         }
       }
     }

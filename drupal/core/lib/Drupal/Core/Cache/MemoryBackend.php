@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Cache\ArrayBackend.
+ * Contains \Drupal\Core\Cache\MemoryBackend.
  */
 
 namespace Drupal\Core\Cache;
@@ -17,7 +17,7 @@ namespace Drupal\Core\Cache;
  *
  * @ingroup cache
  */
-class MemoryBackend implements CacheBackendInterface {
+class MemoryBackend implements CacheBackendInterface, CacheTagsInvalidatorInterface {
 
   /**
    * Array to store cache objects.
@@ -34,7 +34,7 @@ class MemoryBackend implements CacheBackendInterface {
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::get().
+   * {@inheritdoc}
    */
   public function get($cid, $allow_invalid = FALSE) {
     if (isset($this->cache[$cid])) {
@@ -46,7 +46,7 @@ class MemoryBackend implements CacheBackendInterface {
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::getMultiple().
+   * {@inheritdoc}
    */
   public function getMultiple(&$cids, $allow_invalid = FALSE) {
     $ret = array();
@@ -94,7 +94,7 @@ class MemoryBackend implements CacheBackendInterface {
     $prepared->data = unserialize($prepared->data);
 
     // Check expire time.
-    $prepared->valid = $prepared->expire == Cache::PERMANENT || $prepared->expire >= REQUEST_TIME;
+    $prepared->valid = $prepared->expire == Cache::PERMANENT || $prepared->expire >= $this->getRequestTime();
 
     if (!$allow_invalid && !$prepared->valid) {
       return FALSE;
@@ -104,17 +104,17 @@ class MemoryBackend implements CacheBackendInterface {
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::set().
+   * {@inheritdoc}
    */
   public function set($cid, $data, $expire = Cache::PERMANENT, array $tags = array()) {
-    Cache::validateTags($tags);
+    assert('\Drupal\Component\Assertion\Inspector::assertAllStrings($tags)', 'Cache Tags must be strings.');
     $tags = array_unique($tags);
     // Sort the cache tags so that they are stored consistently in the database.
     sort($tags);
     $this->cache[$cid] = (object) array(
       'cid' => $cid,
       'data' => serialize($data),
-      'created' => REQUEST_TIME,
+      'created' => $this->getRequestTime(),
       'expire' => $expire,
       'tags' => $tags,
     );
@@ -130,77 +130,66 @@ class MemoryBackend implements CacheBackendInterface {
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::delete().
+   * {@inheritdoc}
    */
   public function delete($cid) {
     unset($this->cache[$cid]);
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::deleteMultiple().
+   * {@inheritdoc}
    */
   public function deleteMultiple(array $cids) {
     $this->cache = array_diff_key($this->cache, array_flip($cids));
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::deleteTags().
-   */
-  public function deleteTags(array $tags) {
-    foreach ($this->cache as $cid => $item) {
-      if (array_intersect($tags, $item->tags)) {
-        unset($this->cache[$cid]);
-      }
-    }
-  }
-
-  /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::deleteAll().
+   * {@inheritdoc}
    */
   public function deleteAll() {
     $this->cache = array();
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::invalidate().
+   * {@inheritdoc}
    */
   public function invalidate($cid) {
     if (isset($this->cache[$cid])) {
-      $this->cache[$cid]->expire = REQUEST_TIME - 1;
+      $this->cache[$cid]->expire = $this->getRequestTime() - 1;
     }
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::invalidateMultiple().
+   * {@inheritdoc}
    */
   public function invalidateMultiple(array $cids) {
     foreach ($cids as $cid) {
-      $this->cache[$cid]->expire = REQUEST_TIME - 1;
+      $this->cache[$cid]->expire = $this->getRequestTime() - 1;
     }
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::invalidateTags().
+   * {@inheritdoc}
    */
   public function invalidateTags(array $tags) {
     foreach ($this->cache as $cid => $item) {
       if (array_intersect($tags, $item->tags)) {
-        $this->cache[$cid]->expire = REQUEST_TIME - 1;
+        $this->cache[$cid]->expire = $this->getRequestTime() - 1;
       }
     }
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::invalidateAll().
+   * {@inheritdoc}
    */
   public function invalidateAll() {
     foreach ($this->cache as $cid => $item) {
-      $this->cache[$cid]->expire = REQUEST_TIME - 1;
+      $this->cache[$cid]->expire = $this->getRequestTime() - 1;
     }
   }
 
   /**
-   * Implements Drupal\Core\Cache\CacheBackendInterface::garbageCollection()
+   * {@inheritdoc}
    */
   public function garbageCollection() {
   }
@@ -208,6 +197,33 @@ class MemoryBackend implements CacheBackendInterface {
   /**
    * {@inheritdoc}
    */
-  public function removeBin() {}
+  public function removeBin() {
+    $this->cache = [];
+  }
+
+  /**
+   * Wrapper method for REQUEST_TIME constant.
+   *
+   * @return int
+   */
+  protected function getRequestTime() {
+    return defined('REQUEST_TIME') ? REQUEST_TIME : (int) $_SERVER['REQUEST_TIME'];
+  }
+
+  /**
+   * Prevents data stored in memory backends from being serialized.
+   */
+  public function __sleep() {
+    return [];
+  }
+
+  /**
+   * Reset statically cached variables.
+   *
+   * This is only used by tests.
+   */
+  public function reset() {
+    $this->cache = [];
+  }
 
 }

@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\user\Tests\UserEditedOwnAccountTest.
+ * Contains \Drupal\user\Tests\UserEditedOwnAccountTest.
  */
 
 namespace Drupal\user\Tests;
@@ -16,10 +16,17 @@ use Drupal\simpletest\WebTestBase;
  */
 class UserEditedOwnAccountTest extends WebTestBase {
 
+  /**
+   * Modules to enable.
+   *
+   * @var array
+   */
+  public static $modules = array('user_form_test');
+
   function testUserEditedOwnAccount() {
     // Change account setting 'Who can register accounts?' to Administrators
     // only.
-    \Drupal::config('user.settings')->set('register', USER_REGISTER_ADMINISTRATORS_ONLY)->save();
+    $this->config('user.settings')->set('register', USER_REGISTER_ADMINISTRATORS_ONLY)->save();
 
     // Create a new user account and log in.
     $account = $this->drupalCreateUser(array('change own username'));

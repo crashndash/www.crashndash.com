@@ -2,12 +2,10 @@
 
 /**
  * @file
- * Definition of Drupal\Component\Gettext\PoMetadataInterface.
+ * Contains \Drupal\Component\Gettext\PoMetadataInterface.
  */
 
 namespace Drupal\Component\Gettext;
-
-use Drupal\Component\Gettext\PoHeader;
 
 /**
  * Methods required for both reader and writer implementations.

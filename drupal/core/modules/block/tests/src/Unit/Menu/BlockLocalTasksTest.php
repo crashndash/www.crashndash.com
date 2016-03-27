@@ -7,7 +7,7 @@
 
 namespace Drupal\Tests\block\Unit\Menu;
 
-use Drupal\Tests\Core\Menu\LocalTaskIntegrationTest;
+use Drupal\Tests\Core\Menu\LocalTaskIntegrationTestBase;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 /**
@@ -15,7 +15,7 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
  *
  * @group block
  */
-class BlockLocalTasksTest extends LocalTaskIntegrationTest {
+class BlockLocalTasksTest extends LocalTaskIntegrationTestBase {
 
   protected function setUp() {
     $this->directoryList = array('block' => 'core/modules/block');
@@ -27,7 +27,11 @@ class BlockLocalTasksTest extends LocalTaskIntegrationTest {
 
     $themes = array();
     $themes['test_a'] = (object) array(
-      'status' => 0,
+      'status' => 1,
+      'info' => array(
+        'name' => 'test_a',
+        'hidden' => TRUE,
+      ),
     );
     $themes['test_b'] = (object) array(
       'status' => 1,
@@ -45,10 +49,18 @@ class BlockLocalTasksTest extends LocalTaskIntegrationTest {
     $theme_handler->expects($this->any())
       ->method('listInfo')
       ->will($this->returnValue($themes));
+    $theme_handler->expects($this->any())
+      ->method('hasUi')
+      ->willReturnMap([
+        ['test_a', FALSE],
+        ['test_b', TRUE],
+        ['test_c', TRUE],
+      ]);
 
     $container = new ContainerBuilder();
     $container->set('config.factory', $config_factory);
     $container->set('theme_handler', $theme_handler);
+    $container->set('app.root', $this->root);
     \Drupal::setContainer($container);
   }
 

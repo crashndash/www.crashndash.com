@@ -1,7 +1,7 @@
 <?php
 
 /**
- * @image
+ * @file
  * Contains \Drupal\image\Plugin\Field\FieldType\ImageItem.
  */
 
@@ -23,6 +23,7 @@ use Drupal\file\Plugin\Field\FieldType\FileItem;
  *   id = "image",
  *   label = @Translation("Image"),
  *   description = @Translation("This field stores the ID of an image file as an integer value."),
+ *   category = @Translation("Reference"),
  *   default_widget = "image_image",
  *   default_formatter = "image",
  *   column_groups = {
@@ -30,7 +31,8 @@ use Drupal\file\Plugin\Field\FieldType\FileItem;
  *       "label" = @Translation("File"),
  *       "columns" = {
  *         "target_id", "width", "height"
- *       }
+ *       },
+ *       "require_all_groups_for_translation" = TRUE
  *     },
  *     "alt" = {
  *       "label" = @Translation("Alt"),
@@ -42,10 +44,17 @@ use Drupal\file\Plugin\Field\FieldType\FileItem;
  *     },
  *   },
  *   list_class = "\Drupal\file\Plugin\Field\FieldType\FileFieldItemList",
- *   constraints = {"ValidReference" = {}, "ReferenceAccess" = {}}
+ *   constraints = {"ReferenceAccess" = {}, "FileValidation" = {}}
  * )
  */
 class ImageItem extends FileItem {
+
+  /**
+   * The entity manager.
+   *
+   * @var \Drupal\Core\Entity\EntityManagerInterface
+   */
+  protected $entityManager;
 
   /**
    * {@inheritdoc}
@@ -53,7 +62,7 @@ class ImageItem extends FileItem {
   public static function defaultStorageSettings() {
     return array(
       'default_image' => array(
-        'fid' => NULL,
+        'uuid' => NULL,
         'alt' => '',
         'title' => '',
         'width' => NULL,
@@ -68,14 +77,14 @@ class ImageItem extends FileItem {
   public static function defaultFieldSettings() {
     $settings = array(
       'file_extensions' => 'png gif jpg jpeg',
-      'alt_field' => 0,
-      'alt_field_required' => 0,
+      'alt_field' => 1,
+      'alt_field_required' => 1,
       'title_field' => 0,
       'title_field_required' => 0,
       'max_resolution' => '',
       'min_resolution' => '',
       'default_image' => array(
-        'fid' => NULL,
+        'uuid' => NULL,
         'alt' => '',
         'title' => '',
         'width' => NULL,
@@ -96,20 +105,17 @@ class ImageItem extends FileItem {
         'target_id' => array(
           'description' => 'The ID of the file entity.',
           'type' => 'int',
-          'not null' => TRUE,
           'unsigned' => TRUE,
         ),
         'alt' => array(
           'description' => "Alternative image text, for the image's 'alt' attribute.",
           'type' => 'varchar',
           'length' => 512,
-          'not null' => FALSE,
         ),
         'title' => array(
           'description' => "Image title text, for the image's 'title' attribute.",
           'type' => 'varchar',
           'length' => 1024,
-          'not null' => FALSE,
         ),
         'width' => array(
           'description' => 'The width of the image in pixels.',
@@ -139,6 +145,9 @@ class ImageItem extends FileItem {
    */
   public static function propertyDefinitions(FieldStorageDefinitionInterface $field_definition) {
     $properties = parent::propertyDefinitions($field_definition);
+
+    unset($properties['display']);
+    unset($properties['description']);
 
     $properties['alt'] = DataDefinition::create('string')
       ->setLabel(t('Alternative text'))
@@ -196,7 +205,7 @@ class ImageItem extends FileItem {
     $settings = $this->getSettings();
 
     // Add maximum and minimum resolution settings.
-    $max_resolution = explode('×', $settings['max_resolution']) + array('', '');
+    $max_resolution = explode('x', $settings['max_resolution']) + array('', '');
     $element['max_resolution'] = array(
       '#type' => 'item',
       '#title' => t('Maximum image resolution'),
@@ -204,7 +213,7 @@ class ImageItem extends FileItem {
       '#weight' => 4.1,
       '#field_prefix' => '<div class="container-inline">',
       '#field_suffix' => '</div>',
-      '#description' => t('The maximum allowed image size expressed as WIDTH×HEIGHT (e.g. 640×480). Leave blank for no restriction. If a larger image is uploaded, it will be resized to reflect the given width and height. Resizing images on upload will cause the loss of <a href="@url">EXIF data</a> in the image.', array('@url' => 'http://en.wikipedia.org/wiki/Exchangeable_image_file_format')),
+      '#description' => t('The maximum allowed image size expressed as WIDTH×HEIGHT (e.g. 640×480). Leave blank for no restriction. If a larger image is uploaded, it will be resized to reflect the given width and height. Resizing images on upload will cause the loss of <a href=":url">EXIF data</a> in the image.', array(':url' => 'http://en.wikipedia.org/wiki/Exchangeable_image_file_format')),
     );
     $element['max_resolution']['x'] = array(
       '#type' => 'number',
@@ -223,7 +232,7 @@ class ImageItem extends FileItem {
       '#field_suffix' => ' ' . t('pixels'),
     );
 
-    $min_resolution = explode('×', $settings['min_resolution']) + array('', '');
+    $min_resolution = explode('x', $settings['min_resolution']) + array('', '');
     $element['min_resolution'] = array(
       '#type' => 'item',
       '#title' => t('Minimum image resolution'),
@@ -258,7 +267,7 @@ class ImageItem extends FileItem {
       '#type' => 'checkbox',
       '#title' => t('Enable <em>Alt</em> field'),
       '#default_value' => $settings['alt_field'],
-      '#description' => t('The alt attribute may be used by search engines, screen readers, and when the image cannot be loaded. Enabling this field is recommended'),
+      '#description' => t('The alt attribute may be used by search engines, screen readers, and when the image cannot be loaded. Enabling this field is recommended.'),
       '#weight' => 9,
     );
     $element['alt_field_required'] = array(
@@ -269,7 +278,7 @@ class ImageItem extends FileItem {
       '#weight' => 10,
       '#states' => array(
         'visible' => array(
-          ':input[name="instance[settings][alt_field]"]' => array('checked' => TRUE),
+          ':input[name="settings[alt_field]"]' => array('checked' => TRUE),
         ),
       ),
     );
@@ -287,7 +296,7 @@ class ImageItem extends FileItem {
       '#weight' => 12,
       '#states' => array(
         'visible' => array(
-          ':input[name="instance[settings][title_field]"]' => array('checked' => TRUE),
+          ':input[name="settings[title_field]"]' => array('checked' => TRUE),
         ),
       ),
     );
@@ -338,10 +347,10 @@ class ImageItem extends FileItem {
       if ($path = $random->image(drupal_realpath($destination), $min_resolution, $max_resolution)) {
         $image = File::create();
         $image->setFileUri($path);
-        // $image->setOwner($account);
+        $image->setOwnerId(\Drupal::currentUser()->id());
         $image->setMimeType('image/' . pathinfo($path, PATHINFO_EXTENSION));
         $image->setFileName(drupal_basename($path));
-        $destination_dir = $settings['uri_scheme'] . '://' . $settings['file_directory'];
+        $destination_dir = static::doGetUploadLocation($settings);
         file_prepare_directory($destination_dir, FILE_CREATE_DIRECTORY);
         $destination = $destination_dir . '/' . basename($path);
         $file = file_move($image, $destination, FILE_CREATE_DIRECTORY);
@@ -375,14 +384,16 @@ class ImageItem extends FileItem {
     if (!empty($element['x']['#value']) || !empty($element['y']['#value'])) {
       foreach (array('x', 'y') as $dimension) {
         if (!$element[$dimension]['#value']) {
-          $form_state->setError($element[$dimension], t('Both a height and width value must be specified in the !name field.', array('!name' => $element['#title'])));
+          // We expect the field name placeholder value to be wrapped in t()
+          // here, so it won't be escaped again as it's already marked safe.
+          $form_state->setError($element[$dimension], t('Both a height and width value must be specified in the @name field.', array('@name' => $element['#title'])));
           return;
         }
       }
-      form_set_value($element, $element['x']['#value'] . 'x' . $element['y']['#value'], $form_state);
+      $form_state->setValueForElement($element, $element['x']['#value'] . 'x' . $element['y']['#value']);
     }
     else {
-      form_set_value($element, '', $form_state);
+      $form_state->setValueForElement($element, '');
     }
   }
 
@@ -400,13 +411,22 @@ class ImageItem extends FileItem {
       '#title' => t('Default image'),
       '#open' => TRUE,
     );
-    $element['default_image']['fid'] = array(
+    // Convert the stored UUID to a FID.
+    $fids = [];
+    $uuid = $settings['default_image']['uuid'];
+    if ($uuid && ($file = $this->getEntityManager()->loadEntityByUuid('file', $uuid))) {
+      $fids[0] = $file->id();
+    }
+    $element['default_image']['uuid'] = array(
       '#type' => 'managed_file',
       '#title' => t('Image'),
       '#description' => t('Image to be shown if no image is uploaded.'),
-      '#default_value' => empty($settings['default_image']['fid']) ? array() : array($settings['default_image']['fid']),
+      '#default_value' => $fids,
       '#upload_location' => $settings['uri_scheme'] . '://default_images/',
-      '#element_validate' => array('file_managed_file_validate', array(get_class($this), 'validateDefaultImageForm')),
+      '#element_validate' => array(
+        '\Drupal\file\Element\ManagedFile::validateManagedFile',
+        array(get_class($this), 'validateDefaultImageForm'),
+      ),
       '#upload_validators' => $this->getUploadValidators(),
     );
     $element['default_image']['alt'] = array(
@@ -450,9 +470,13 @@ class ImageItem extends FileItem {
     // for default image is not TRUE and this is a single value.
     if (isset($element['fids']['#value'][0])) {
       $value = $element['fids']['#value'][0];
+      // Convert the file ID to a uuid.
+      if ($file = \Drupal::entityManager()->getStorage('file')->load($value)) {
+        $value = $file->uuid();
+      }
     }
     else {
-      $value = 0;
+      $value = '';
     }
     $form_state->setValueForElement($element, $value);
   }
@@ -463,6 +487,18 @@ class ImageItem extends FileItem {
   public function isDisplayed() {
     // Image items do not have per-item visibility settings.
     return TRUE;
+  }
+
+  /**
+   * Gets the entity manager.
+   *
+   * @return \Drupal\Core\Entity\EntityManagerInterface.
+   */
+  protected function getEntityManager() {
+    if (!isset($this->entityManager)) {
+      $this->entityManager = \Drupal::entityManager();
+    }
+    return $this->entityManager;
   }
 
 }

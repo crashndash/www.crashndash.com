@@ -2,13 +2,14 @@
 
 /**
  * @file
- * Definition of Drupal\config\Tests\Storage\FileStorageTest.
+ * Contains \Drupal\config\Tests\Storage\FileStorageTest.
  */
 
 namespace Drupal\config\Tests\Storage;
 
 use Drupal\Component\Serialization\Yaml;
 use Drupal\Core\Config\FileStorage;
+use Drupal\Core\Config\UnsupportedDataTypeConfigException;
 
 /**
  * Tests FileStorage operations.
@@ -16,13 +17,27 @@ use Drupal\Core\Config\FileStorage;
  * @group config
  */
 class FileStorageTest extends ConfigStorageTestBase {
+
+  /**
+   * A directory to store configuration in.
+   *
+   * @var string
+   */
+  protected $directory;
+
+  /**
+   * {@inheritdoc}
+   */
   protected function setUp() {
     parent::setUp();
-    $this->storage = new FileStorage($this->configDirectories[CONFIG_ACTIVE_DIRECTORY]);
-    $this->invalidStorage = new FileStorage($this->configDirectories[CONFIG_ACTIVE_DIRECTORY] . '/nonexisting');
+    // Create a directory.
+    $this->directory = $this->publicFilesDirectory . '/config';
+    mkdir($this->directory);
+    $this->storage = new FileStorage($this->directory);
+    $this->invalidStorage = new FileStorage($this->directory . '/nonexisting');
 
     // FileStorage::listAll() requires other configuration data to exist.
-    $this->storage->write('system.performance', \Drupal::config('system.performance')->get());
+    $this->storage->write('system.performance', $this->config('system.performance')->get());
     $this->storage->write('core.extension', array('module' => array()));
   }
 
@@ -55,11 +70,32 @@ class FileStorageTest extends ConfigStorageTestBase {
     $config_files = $this->storage->listAll();
     $this->assertIdentical($config_files, $expected_files, 'Relative path, two config files found.');
 
+    // @todo https://www.drupal.org/node/2666954 FileStorage::listAll() is
+    //   case-sensitive. However, \Drupal\Core\Config\DatabaseStorage::listAll()
+    //   is case-insensitive.
+    $this->assertIdentical(['system.performance'], $this->storage->listAll('system'), 'The FileStorage::listAll() with prefix works.');
+    $this->assertIdentical([], $this->storage->listAll('System'), 'The FileStorage::listAll() is case sensitive.');
+
     // Initialize FileStorage with absolute file path.
-    $absolute_path = realpath($this->configDirectories[CONFIG_ACTIVE_DIRECTORY]);
+    $absolute_path = realpath($this->directory);
     $storage_absolute_path = new FileStorage($absolute_path);
     $config_files = $storage_absolute_path->listAll();
     $this->assertIdentical($config_files, $expected_files, 'Absolute path, two config files found.');
+  }
+
+  /**
+   * Test UnsupportedDataTypeConfigException displays path of
+   * erroneous file during read.
+   */
+  public function testReadUnsupportedDataTypeConfigException() {
+    file_put_contents($this->storage->getFilePath('core.extension'), PHP_EOL . 'foo : [bar}', FILE_APPEND);
+    try {
+      $config_parsed = $this->storage->read('core.extension');
+    }
+    catch (UnsupportedDataTypeConfigException $e) {
+      $this->pass('Exception thrown when trying to read a field containing invalid data type.');
+      $this->assertTrue((strpos($e->getMessage(), $this->storage->getFilePath('core.extension')) !== FALSE), 'Erroneous file path is displayed.');
+    }
   }
 
 }

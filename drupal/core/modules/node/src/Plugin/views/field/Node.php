@@ -2,12 +2,13 @@
 
 /**
  * @file
- * Definition of Drupal\node\Plugin\views\field\Node.
+ * Contains \Drupal\node\Plugin\views\field\Node.
  */
 
 namespace Drupal\node\Plugin\views\field;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url;
 use Drupal\views\ResultRow;
 use Drupal\views\ViewExecutable;
 use Drupal\views\Plugin\views\display\DisplayPluginBase;
@@ -25,17 +26,20 @@ use Drupal\views\Plugin\views\field\FieldPluginBase;
 class Node extends FieldPluginBase {
 
   /**
-   * Overrides \Drupal\views\Plugin\views\field\FieldPluginBase::init().
+   * {@inheritdoc}
    */
   public function init(ViewExecutable $view, DisplayPluginBase $display, array &$options = NULL) {
     parent::init($view, $display, $options);
 
     // Don't add the additional fields to groupby
     if (!empty($this->options['link_to_node'])) {
-      $this->additional_fields['nid'] = array('table' => 'node', 'field' => 'nid');
+      $this->additional_fields['nid'] = array('table' => 'node_field_data', 'field' => 'nid');
     }
   }
 
+  /**
+   * {@inheritdoc}
+   */
   protected function defineOptions() {
     $options = parent::defineOptions();
     $options['link_to_node'] = array('default' => isset($this->definition['link_to_node default']) ? $this->definition['link_to_node default'] : FALSE);
@@ -71,9 +75,9 @@ class Node extends FieldPluginBase {
     if (!empty($this->options['link_to_node']) && !empty($this->additional_fields['nid'])) {
       if ($data !== NULL && $data !== '') {
         $this->options['alter']['make_link'] = TRUE;
-        $this->options['alter']['path'] = "node/" . $this->getValue($values, 'nid');
+        $this->options['alter']['url'] = Url::fromRoute('entity.node.canonical', ['node' => $this->getValue($values, 'nid')]);
         if (isset($this->aliases['langcode'])) {
-          $languages = language_list();
+          $languages = \Drupal::languageManager()->getLanguages();
           $langcode = $this->getValue($values, 'langcode');
           if (isset($languages[$langcode])) {
             $this->options['alter']['language'] = $languages[$langcode];

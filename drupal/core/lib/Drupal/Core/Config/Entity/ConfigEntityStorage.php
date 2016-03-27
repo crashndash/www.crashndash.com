@@ -2,19 +2,18 @@
 
 /**
  * @file
- * Definition of Drupal\Core\Config\Entity\ConfigEntityStorage.
+ * Contains \Drupal\Core\Config\Entity\ConfigEntityStorage.
  */
 
 namespace Drupal\Core\Config\Entity;
 
-use Drupal\Component\Utility\String;
+use Drupal\Core\Cache\CacheableMetadata;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Config\ConfigImporterException;
 use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\EntityMalformedException;
 use Drupal\Core\Entity\EntityStorageBase;
 use Drupal\Core\Config\Config;
-use Drupal\Core\Config\StorageInterface;
 use Drupal\Core\Config\Entity\Exception\ConfigEntityIdLengthException;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Component\Uuid\UuidInterface;
@@ -93,6 +92,13 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
   protected $entities = array();
 
   /**
+   * Determines if the underlying configuration is retrieved override free.
+   *
+   * @var bool
+   */
+  protected $overrideFree = FALSE;
+
+  /**
    * Constructs a ConfigEntityStorage object.
    *
    * @param \Drupal\Core\Entity\EntityTypeInterface $entity_type
@@ -132,7 +138,7 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
   }
 
   /**
-   * Implements Drupal\Core\Entity\EntityStorageInterface::deleteRevision().
+   * {@inheritdoc}
    */
   public function deleteRevision($revision_id) {
     return NULL;
@@ -177,19 +183,49 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
     }
 
     // Load all of the configuration entities.
-    $records = array();
+    /** @var \Drupal\Core\Config\Config[] $configs */
+    $configs = [];
+    $records = [];
     foreach ($this->configFactory->loadMultiple($names) as $config) {
-      $records[$config->get($this->idKey)] = $config->get();
+      $id = $config->get($this->idKey);
+      $records[$id] = $this->overrideFree ? $config->getOriginal(NULL, FALSE) : $config->get();
+      $configs[$id] = $config;
     }
-    return $this->mapFromStorageRecords($records);
+    $entities = $this->mapFromStorageRecords($records, $configs);
+
+    // Config entities wrap config objects, and therefore they need to inherit
+    // the cacheability metadata of config objects (to ensure e.g. additional
+    // cacheability metadata added by config overrides is not lost).
+    foreach ($entities as $id => $entity) {
+      // But rather than simply inheriting all cacheability metadata of config
+      // objects, we need to make sure the self-referring cache tag that is
+      // present on Config objects is not added to the Config entity. It must be
+      // removed for 3 reasons:
+      // 1. When renaming/duplicating a Config entity, the cache tag of the
+      //    original config object would remain present, which would be wrong.
+      // 2. Some Config entities choose to not use the cache tag that the under-
+      //    lying Config object provides by default (For performance and
+      //    cacheability reasons it may not make sense to have a unique cache
+      //    tag for every Config entity. The DateFormat Config entity specifies
+      //    the 'rendered' cache tag for example, because A) date formats are
+      //    changed extremely rarely, so invalidating all render cache items is
+      //    fine, B) it means fewer cache tags per page.).
+      // 3. Fewer cache tags is better for performance.
+      $self_referring_cache_tag = ['config:' . $configs[$id]->getName()];
+      $config_cacheability = CacheableMetadata::createFromObject($configs[$id]);
+      $config_cacheability->setCacheTags(array_diff($config_cacheability->getCacheTags(), $self_referring_cache_tag));
+      $entity->addCacheableDependency($config_cacheability);
+    }
+
+    return $entities;
   }
 
   /**
    * {@inheritdoc}
    */
   protected function doCreate(array $values) {
-    // Set default language to site default if not provided.
-    $values += array('langcode' => $this->languageManager->getDefaultLanguage()->getId());
+    // Set default language to current language if not provided.
+    $values += array($this->langcodeKey => $this->languageManager->getCurrentLanguage()->getId());
     $entity = new $this->entityClass($values, $this->entityTypeId);
 
     return $entity;
@@ -200,8 +236,7 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
    */
   protected function doDelete($entities) {
     foreach ($entities as $entity) {
-      $config = $this->configFactory->get($this->getPrefix() . $entity->id());
-      $config->delete();
+      $this->configFactory->getEditable($this->getPrefix() . $entity->id())->delete();
     }
   }
 
@@ -223,10 +258,7 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
     // @todo Consider moving this to a protected method on the parent class, and
     //   abstracting it for all entity types.
     if (strlen($entity->get($this->idKey)) > self::MAX_ID_LENGTH) {
-      throw new ConfigEntityIdLengthException(String::format('Configuration entity ID @id exceeds maximum allowed length of @length characters.', array(
-        '@id' => $entity->get($this->idKey),
-        '@length' => self::MAX_ID_LENGTH,
-      )));
+      throw new ConfigEntityIdLengthException("Configuration entity ID {$entity->get($this->idKey)} exceeds maximum allowed length of " . self::MAX_ID_LENGTH . " characters.");
     }
 
     return parent::save($entity);
@@ -238,23 +270,31 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
   protected function doSave($id, EntityInterface $entity) {
     $is_new = $entity->isNew();
     $prefix = $this->getPrefix();
+    $config_name = $prefix . $entity->id();
     if ($id !== $entity->id()) {
       // Renaming a config object needs to cater for:
       // - Storage needs to access the original object.
       // - The object needs to be renamed/copied in ConfigFactory and reloaded.
       // - All instances of the object need to be renamed.
-      $config = $this->configFactory->rename($prefix . $id, $prefix . $entity->id());
+      $this->configFactory->rename($prefix . $id, $config_name);
     }
-    else {
-      $config = $this->configFactory->get($prefix . $id);
-    }
+    $config = $this->configFactory->getEditable($config_name);
 
     // Retrieve the desired properties and set them in config.
-    $record = $this->mapToStorageRecord($entity);
-    foreach ($record as $key => $value) {
-      $config->set($key, $value);
+    $config->setData($this->mapToStorageRecord($entity));
+    $config->save($entity->hasTrustedData());
+
+    // Update the entity with the values stored in configuration. It is possible
+    // that configuration schema has casted some of the values.
+    if (!$entity->hasTrustedData()) {
+      $data = $this->mapFromStorageRecords(array($config->get()));
+      $updated_entity = current($data);
+
+      foreach (array_keys($config->get()) as $property) {
+        $value = $updated_entity->get($property);
+        $entity->set($property, $value);
+      }
     }
-    $config->save();
 
     return $is_new ? SAVED_NEW : SAVED_UPDATED;
   }
@@ -294,7 +334,7 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
     $entities = array();
     // Load any available entities from the internal cache.
     if ($this->entityType->isStaticallyCacheable() && !empty($this->entities)) {
-      $config_overrides_key = implode(':', $this->configFactory->getCacheKeys());
+      $config_overrides_key = $this->overrideFree ? '' : implode(':', $this->configFactory->getCacheKeys());
       foreach ($ids as $id) {
         if (!empty($this->entities[$id])) {
           if (isset($this->entities[$id][$config_overrides_key])) {
@@ -314,7 +354,7 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
    */
   protected function setStaticCache(array $entities) {
     if ($this->entityType->isStaticallyCacheable()) {
-      $config_overrides_key = implode(':', $this->configFactory->getCacheKeys());
+      $config_overrides_key = $this->overrideFree ? '' : implode(':', $this->configFactory->getCacheKeys());
       foreach ($entities as $id => $entity) {
         $this->entities[$id][$config_overrides_key] = $entity;
       }
@@ -337,9 +377,9 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
   }
 
   /**
-   * Implements Drupal\Core\Entity\EntityStorageInterface::getQueryServicename().
+   * {@inheritdoc}
    */
-  public function getQueryServicename() {
+  protected function getQueryServiceName() {
     return 'entity.query.config';
   }
 
@@ -360,7 +400,7 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
     $id = static::getIDFromConfigName($name, $this->entityType->getConfigPrefix());
     $entity = $this->load($id);
     if (!$entity) {
-      throw new ConfigImporterException(String::format('Attempt to update non-existing entity "@id".', array('@id' => $id)));
+      throw new ConfigImporterException("Attempt to update non-existing entity '$id'.");
     }
     $entity->setSyncing(TRUE);
     $entity = $this->updateFromStorageRecord($entity, $new_config->get());
@@ -421,6 +461,24 @@ class ConfigEntityStorage extends EntityStorageBase implements ConfigEntityStora
     }
 
     return $entity;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function loadOverrideFree($id) {
+    $entities = $this->loadMultipleOverrideFree([$id]);
+    return isset($entities[$id]) ? $entities[$id] : NULL;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function loadMultipleOverrideFree(array $ids = NULL) {
+    $this->overrideFree = TRUE;
+    $entities = $this->loadMultiple($ids);
+    $this->overrideFree = FALSE;
+    return $entities;
   }
 
 }

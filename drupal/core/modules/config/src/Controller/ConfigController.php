@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\config\Controller\ConfigController
+ * Contains \Drupal\config\Controller\ConfigController.
  */
 
 namespace Drupal\config\Controller;
@@ -64,7 +64,7 @@ class ConfigController implements ContainerInjectionInterface {
   public static function create(ContainerInterface $container) {
     return new static(
       $container->get('config.storage'),
-      $container->get('config.storage.staging'),
+      $container->get('config.storage.sync'),
       $container->get('config.manager'),
       new FileDownloadController(),
       $container->get('diff.formatter')
@@ -138,13 +138,16 @@ class ConfigController implements ContainerInjectionInterface {
 
     $build['#title'] = t('View changes of @config_file', array('@config_file' => $source_name));
     // Add the CSS for the inline diff.
-    $build['#attached']['css'][] = drupal_get_path('module', 'system') . '/css/system.diff.css';
+    $build['#attached']['library'][] = 'system/diff';
 
     $build['diff'] = array(
       '#type' => 'table',
+      '#attributes' => array(
+        'class' => array('diff'),
+      ),
       '#header' => array(
-        array('data' => t('Old'), 'colspan' => '2'),
-        array('data' => t('New'), 'colspan' => '2'),
+        array('data' => t('Active'), 'colspan' => '2'),
+        array('data' => t('Staged'), 'colspan' => '2'),
       ),
       '#rows' => $this->diffFormatter->format($diff),
     );

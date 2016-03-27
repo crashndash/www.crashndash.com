@@ -12,9 +12,21 @@ use Drupal\Core\Form\FormStateInterface;
 /**
  * Provides a form element for a set of checkboxes.
  *
- * #options is an associative array, where the key is the #return_value of the
- * checkbox and the value is displayed. The #options array cannot have a 0 key,
- * as it would not be possible to discern checked and unchecked states.
+ * Properties:
+ * - #options: An associative array whose keys are the values returned for each
+ *   checkbox, and whose values are the labels next to each checkbox. The
+ *   #options array cannot have a 0 key, as it would not be possible to discern
+ *   checked and unchecked states.
+ *
+ * Usage example:
+ * @code
+ * $form['high_school']['tests_taken'] = array(
+ *   '#type' => 'checkboxes',
+ *   '#options' => array('SAT' => t('SAT'), 'ACT' => t('ACT'))),
+ *   '#title' => t('What standardized tests did you take?'),
+ *   ...
+ * );
+ * @endcode
  *
  * @see \Drupal\Core\Render\Element\Radios
  * @see \Drupal\Core\Render\Element\Checkbox
@@ -74,6 +86,8 @@ class Checkboxes extends FormElement {
           '#default_value' => isset($value[$key]) ? $key : NULL,
           '#attributes' => $element['#attributes'],
           '#ajax' => isset($element['#ajax']) ? $element['#ajax'] : NULL,
+          // Errors should only be shown on the parent checkboxes element.
+          '#error_no_message' => TRUE,
           '#weight' => $weight,
         );
       }
@@ -95,12 +109,12 @@ class Checkboxes extends FormElement {
     }
     elseif (is_array($input)) {
       // Programmatic form submissions use NULL to indicate that a checkbox
-      // should be unchecked; see drupal_form_submit(). We therefore remove all
-      // NULL elements from the array before constructing the return value, to
-      // simulate the behavior of web browsers (which do not send unchecked
-      // checkboxes to the server at all). This will not affect non-programmatic
-      // form submissions, since all values in \Drupal::request()->request are
-      // strings.
+      // should be unchecked. We therefore remove all NULL elements from the
+      // array before constructing the return value, to simulate the behavior
+      // of web browsers (which do not send unchecked checkboxes to the server
+      // at all). This will not affect non-programmatic form submissions, since
+      // all values in \Drupal::request()->request are strings.
+      // @see \Drupal\Core\Form\FormBuilderInterface::submitForm()
       foreach ($input as $key => $value) {
         if (!isset($value)) {
           unset($input[$key]);

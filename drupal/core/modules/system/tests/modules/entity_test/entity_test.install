@@ -5,17 +5,13 @@
  * Install, update and uninstall functions for the entity_test module.
  */
 
+use Drupal\system\Tests\Update\DbUpdatesTrait;
+
 /**
  * Implements hook_install().
  */
 function entity_test_install() {
-  $entity_types = array(
-    'entity_test',
-    'entity_test_rev',
-    'entity_test_mul',
-    'entity_test_mulrev',
-  );
-  foreach ($entity_types as $entity_type) {
+  foreach (entity_test_entity_types() as $entity_type) {
     // Auto-create fields for testing.
     entity_create('field_storage_config', array(
       'entity_type' => $entity_type,
@@ -55,3 +51,6 @@ function entity_test_schema() {
   );
   return $schema;
 }
+
+DbUpdatesTrait::includeUpdates('entity_test', 'entity_definition_updates');
+DbUpdatesTrait::includeUpdates('entity_test', 'status_report');

@@ -10,11 +10,17 @@ namespace Drupal\Core\Render\Element;
 use Drupal\Core\Render\Element;
 
 /**
- * Provides a form input element for searching.
+ * Provides an HTML5 input element with type of "search".
  *
- * This is commonly used to provide a filter or search box at the top of a
- * long listing page, to allow users to find specific items in the list for
- * faster input.
+ * Usage example:
+ * @code
+ * $form['search'] = array(
+ *   '#type' => 'search',
+ *   '#title' => t('Search'),
+ * );
+ * @endcode
+ *
+ * @see \Drupal\Core\Render\Element\Textfield
  *
  * @FormElement("search")
  */
@@ -43,7 +49,7 @@ class Search extends FormElement {
   }
 
   /**
-   * Prepares a #type 'search' render element for theme_input().
+   * Prepares a #type 'search' render element for input.html.twig.
    *
    * @param array $element
    *   An associative array containing the properties of the element.
@@ -51,7 +57,7 @@ class Search extends FormElement {
    *   #placeholder, #required, #attributes.
    *
    * @return array
-   *   The $element with prepared variables ready for theme_input().
+   *   The $element with prepared variables ready for input.html.twig.
    */
   public static function preRenderSearch($element) {
     $element['#attributes']['type'] = 'search';

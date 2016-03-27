@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\taxonomy\Tests\LoadMultipleTest.
+ * Contains \Drupal\taxonomy\Tests\LoadMultipleTest.
  */
 
 namespace Drupal\taxonomy\Tests;
@@ -18,8 +18,7 @@ class LoadMultipleTest extends TaxonomyTestBase {
 
   protected function setUp() {
     parent::setUp();
-    $this->taxonomy_admin = $this->drupalCreateUser(array('administer taxonomy'));
-    $this->drupalLogin($this->taxonomy_admin);
+    $this->drupalLogin($this->drupalCreateUser(['administer taxonomy']));
   }
 
   /**
@@ -39,7 +38,7 @@ class LoadMultipleTest extends TaxonomyTestBase {
     // Load the terms from the vocabulary.
     $terms = entity_load_multiple_by_properties('taxonomy_term', array('vid' => $vocabulary->id()));
     $count = count($terms);
-    $this->assertEqual($count, 5, format_string('Correct number of terms were loaded. !count terms.', array('!count' => $count)));
+    $this->assertEqual($count, 5, format_string('Correct number of terms were loaded. @count terms.', array('@count' => $count)));
 
     // Load the same terms again by tid.
     $terms2 = Term::loadMultiple(array_keys($terms));

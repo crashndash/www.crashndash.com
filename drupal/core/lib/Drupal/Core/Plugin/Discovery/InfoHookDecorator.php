@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains Drupal\Core\Plugin\Discovery\InfoHookDecorator.
+ * Contains \Drupal\Core\Plugin\Discovery\InfoHookDecorator.
  */
 
 namespace Drupal\Core\Plugin\Discovery;
@@ -45,7 +45,7 @@ class InfoHookDecorator implements DiscoveryInterface {
   }
 
   /**
-   * Implements Drupal\Component\Plugin\Discovery\DiscoveryInterface::getDefinitions().
+   * {@inheritdoc}
    */
   public function getDefinitions() {
     $definitions = $this->decorated->getDefinitions();

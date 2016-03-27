@@ -9,9 +9,11 @@ namespace Drupal\Core\Field\Plugin\Field\FieldWidget;
 
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\Field\FieldDefinitionInterface;
+use Drupal\Core\Field\FieldFilteredMarkup;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Field\WidgetBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Form\OptGroup;
 
 /**
  * Base class for the 'options_*' widgets.
@@ -24,16 +26,6 @@ use Drupal\Core\Form\FormStateInterface;
  * @see \Drupal\Core\TypedData\OptionsProviderInterface
  */
 abstract class OptionsWidgetBase extends WidgetBase {
-
-  /**
-   * Identifies a 'None' option.
-   */
-  const OPTIONS_EMPTY_NONE = 'option_none';
-
-  /**
-   * Identifies a 'Select a value' option.
-   */
-  const OPTIONS_EMPTY_SELECT = 'option_select';
 
   /**
    * Abstract over the actual field columns, to allow different field types to
@@ -81,7 +73,7 @@ abstract class OptionsWidgetBase extends WidgetBase {
    */
   public static function validateElement(array $element, FormStateInterface $form_state) {
     if ($element['#required'] && $element['#value'] == '_none') {
-      $form_state->setError($element, t('!name field is required.', array('!name' => $element['#title'])));
+      $form_state->setError($element, t('@name field is required.', array('@name' => $element['#title'])));
     }
 
     // Massage submitted form values.
@@ -108,7 +100,7 @@ abstract class OptionsWidgetBase extends WidgetBase {
     foreach ($values as $value) {
       $items[] = array($element['#key_column'] => $value);
     }
-    form_set_value($element, $items, $form_state);
+    $form_state->setValueForElement($element, $items);
   }
 
   /**
@@ -129,18 +121,8 @@ abstract class OptionsWidgetBase extends WidgetBase {
         ->getSettableOptions(\Drupal::currentUser());
 
       // Add an empty option if the widget needs one.
-      if ($empty_option = $this->getEmptyOption()) {
-        switch ($this->getPluginId()) {
-          case 'options_buttons':
-            $label = t('N/A');
-            break;
-
-          case 'options_select':
-            $label = ($empty_option == static::OPTIONS_EMPTY_NONE ? t('- None -') : t('- Select a value -'));
-            break;
-        }
-
-        $options = array('_none' => $label) + $options;
+      if ($empty_label = $this->getEmptyLabel()) {
+        $options = ['_none' => $empty_label] + $options;
       }
 
       $module_handler = \Drupal::moduleHandler();
@@ -155,7 +137,7 @@ abstract class OptionsWidgetBase extends WidgetBase {
       // Options might be nested ("optgroups"). If the widget does not support
       // nested options, flatten the list.
       if (!$this->supportsGroups()) {
-        $options = $this->flattenOptions($options);
+        $options = OptGroup::flattenOptions($options);
       }
 
       $this->options = $options;
@@ -176,7 +158,7 @@ abstract class OptionsWidgetBase extends WidgetBase {
    */
   protected function getSelectedOptions(FieldItemListInterface $items, $delta = 0) {
     // We need to check against a flat list of options.
-    $flat_options = $this->flattenOptions($this->getOptions($items->getEntity()));
+    $flat_options = OptGroup::flattenOptions($this->getOptions($items->getEntity()));
 
     $selected_options = array();
     foreach ($items as $item) {
@@ -189,21 +171,6 @@ abstract class OptionsWidgetBase extends WidgetBase {
     }
 
     return $selected_options;
-  }
-
-  /**
-   * Flattens an array of allowed values.
-   *
-   * @param array $array
-   *   A single or multidimensional array.
-   *
-   * @return array
-   *   The flattened array.
-   */
-  protected function flattenOptions(array $array) {
-    $result = array();
-    array_walk_recursive($array, function($a, $b) use (&$result) { $result[$b] = $a; });
-    return $result;
   }
 
   /**
@@ -224,15 +191,15 @@ abstract class OptionsWidgetBase extends WidgetBase {
    */
   protected function sanitizeLabel(&$label) {
     // Allow a limited set of HTML tags.
-    $label = $this->fieldFilterXss($label);
+    $label = FieldFilteredMarkup::create($label);
   }
 
   /**
-   * Returns the empty option to add to the list of options, if any.
+   * Returns the empty option label to add to the list of options, if any.
    *
-   * @return string|null
-   *   Either static::OPTIONS_EMPTY_NONE, static::OPTIONS_EMPTY_SELECT, or NULL.
+   * @return string|NULL
+   *   Either a label of the empty option, or NULL.
    */
-  protected function getEmptyOption() { }
+  protected function getEmptyLabel() { }
 
 }

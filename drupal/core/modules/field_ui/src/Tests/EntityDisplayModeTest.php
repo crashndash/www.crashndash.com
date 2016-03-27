@@ -19,9 +19,19 @@ class EntityDisplayModeTest extends WebTestBase {
   /**
    * Modules to enable.
    *
-   * @var array
+   * @var string[]
    */
-  public static $modules = array('entity_test', 'field_ui');
+  public static $modules = ['block', 'entity_test', 'field_ui'];
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function setUp() {
+    parent::setUp();
+
+    $this->drupalPlaceBlock('local_actions_block');
+    $this->drupalPlaceBlock('page_title_block');
+  }
 
   /**
    * Tests the EntityViewMode user interface.
@@ -65,9 +75,9 @@ class EntityDisplayModeTest extends WebTestBase {
 
     // Test deleting the view mode.
     $this->clickLink(t('Delete'));
-    $this->assertRaw(t('Are you sure you want to delete the %label view mode?', array('%label' => $edit['label'])));
+    $this->assertRaw(t('Are you sure you want to delete the view mode %label?', array('%label' => $edit['label'])));
     $this->drupalPostForm(NULL, NULL, t('Delete'));
-    $this->assertRaw(t('Deleted the %label view mode.', array('%label' => $edit['label'])));
+    $this->assertRaw(t('The view mode %label has been deleted.', array('%label' => $edit['label'])));
   }
 
   /**
@@ -111,9 +121,9 @@ class EntityDisplayModeTest extends WebTestBase {
 
     // Test deleting the form mode.
     $this->clickLink(t('Delete'));
-    $this->assertRaw(t('Are you sure you want to delete the %label form mode?', array('%label' => $edit['label'])));
+    $this->assertRaw(t('Are you sure you want to delete the form mode %label?', array('%label' => $edit['label'])));
     $this->drupalPostForm(NULL, NULL, t('Delete'));
-    $this->assertRaw(t('Deleted the %label form mode.', array('%label' => $edit['label'])));
+    $this->assertRaw(t('The form mode %label has been deleted.', array('%label' => $edit['label'])));
   }
 
 }

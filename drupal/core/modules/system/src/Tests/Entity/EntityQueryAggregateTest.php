@@ -45,7 +45,7 @@ class EntityQueryAggregateTest extends EntityUnitTestBase {
   protected function setUp() {
     parent::setUp();
 
-    $this->entityStorage = $this->container->get('entity.manager')->getStorage('entity_test');
+    $this->entityStorage = $this->entityManager->getStorage('entity_test');
     $this->factory = $this->container->get('entity.query');
 
     // Add some fieldapi fields to be used in the test.
@@ -526,7 +526,8 @@ class EntityQueryAggregateTest extends EntityUnitTestBase {
       array('field_test_1' => 1, 'field_test_2_count' => 2),
     ));
 
-    // Groupy and aggregate by fieldapi field, and sort by the aggregated field.
+    // Groupby and aggregate by fieldapi field, and sort by the aggregated
+    // field.
     $this->queryResult = $this->factory->getAggregate('entity_test')
       ->groupBy('field_test_1')
       ->sortAggregate('field_test_2', 'COUNT', 'DESC')

@@ -2,12 +2,14 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\field\Custom.
+ * Contains \Drupal\views\Plugin\views\field\Custom.
  */
 
 namespace Drupal\views\Plugin\views\field;
 
+use Drupal\Component\Utility\Xss;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\views\Render\ViewsRenderPipelineMarkup;
 use Drupal\views\ResultRow;
 
 /**
@@ -26,10 +28,16 @@ class Custom extends FieldPluginBase {
     return FALSE;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function query() {
     // do nothing -- to override the parent query.
   }
 
+  /**
+   * {@inheritdoc}
+   */
   protected function defineOptions() {
     $options = parent::defineOptions();
 
@@ -39,6 +47,9 @@ class Custom extends FieldPluginBase {
     return $options;
   }
 
+  /**
+   * {@inheritdoc}
+   */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
 
@@ -54,7 +65,7 @@ class Custom extends FieldPluginBase {
    */
   public function render(ResultRow $values) {
     // Return the text, so the code never thinks the value is empty.
-    return $this->options['alter']['text'];
+    return ViewsRenderPipelineMarkup::create(Xss::filterAdmin($this->options['alter']['text']));
   }
 
   /**

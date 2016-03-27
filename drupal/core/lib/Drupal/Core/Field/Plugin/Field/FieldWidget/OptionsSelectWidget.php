@@ -7,6 +7,7 @@
 
 namespace Drupal\Core\Field\Plugin\Field\FieldWidget;
 
+use Drupal\Component\Utility\Html;
 use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Form\FormStateInterface;
 
@@ -17,6 +18,7 @@ use Drupal\Core\Form\FormStateInterface;
  *   id = "options_select",
  *   label = @Translation("Select list"),
  *   field_types = {
+ *     "entity_reference",
  *     "list_integer",
  *     "list_float",
  *     "list_string"
@@ -48,7 +50,7 @@ class OptionsSelectWidget extends OptionsWidgetBase {
    */
   protected function sanitizeLabel(&$label) {
     // Select form inputs allow unencoded HTML entities, but no HTML tags.
-    $label = decode_entities(strip_tags($label));
+    $label = Html::decodeEntities(strip_tags($label));
   }
 
   /**
@@ -61,11 +63,11 @@ class OptionsSelectWidget extends OptionsWidgetBase {
   /**
    * {@inheritdoc}
    */
-  protected function getEmptyOption() {
+  protected function getEmptyLabel() {
     if ($this->multiple) {
       // Multiple select: add a 'none' option for non-required fields.
       if (!$this->required) {
-        return static::OPTIONS_EMPTY_NONE;
+        return t('- None -');
       }
     }
     else {
@@ -73,10 +75,10 @@ class OptionsSelectWidget extends OptionsWidgetBase {
       // and a 'select a value' option for required fields that do not come
       // with a value selected.
       if (!$this->required) {
-        return static::OPTIONS_EMPTY_NONE;
+        return t('- None -');
       }
       if (!$this->has_value) {
-        return static::OPTIONS_EMPTY_SELECT;
+        return t('- Select a value -');
       }
     }
   }

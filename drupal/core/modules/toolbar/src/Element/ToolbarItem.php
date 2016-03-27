@@ -7,7 +7,6 @@
 
 namespace Drupal\toolbar\Element;
 
-use Drupal\Component\Utility\Html;
 use Drupal\Core\Render\Element\RenderElement;
 use Drupal\Core\Url;
 
@@ -50,8 +49,7 @@ class ToolbarItem extends RenderElement {
    *   A renderable array.
    */
   public static function preRenderToolbarItem($element) {
-    // Assign each item a unique ID.
-    $id = Html::getUniqueId('toolbar-item');
+    $id = $element['#id'];
 
     // Provide attributes for a toolbar item.
     $attributes = array(
@@ -63,7 +61,7 @@ class ToolbarItem extends RenderElement {
       // Provide attributes necessary for trays.
       $attributes += array(
         'data-toolbar-tray' => $id . '-tray',
-        'aria-owns' => $id,
+        'aria-owns' => $id . '-tray',
         'role' => 'button',
         'aria-pressed' => 'false',
       );
@@ -77,7 +75,6 @@ class ToolbarItem extends RenderElement {
       $attributes = array(
         'id' => $id . '-tray',
         'data-toolbar-tray' => $id . '-tray',
-        'aria-owned-by' => $id,
       );
       // Merge in module-provided attributes.
       if (!isset($element['tray']['#wrapper_attributes'])) {

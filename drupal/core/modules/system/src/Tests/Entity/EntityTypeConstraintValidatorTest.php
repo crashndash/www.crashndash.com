@@ -2,12 +2,11 @@
 
 /**
  * @file
- * Contains Drupal\system\Tests\Entity\EntityTypeConstraintValidatorTest.
+ * Contains \Drupal\system\Tests\Entity\EntityTypeConstraintValidatorTest.
  */
 
 namespace Drupal\system\Tests\Entity;
 
-use Drupal\system\Tests\Entity\EntityUnitTestBase;
 use Drupal\system\Tests\TypedData;
 use Drupal\Core\TypedData\DataDefinition;
 

@@ -18,18 +18,18 @@ use Drupal\simpletest\WebTestBase;
 class ColorTest extends WebTestBase {
 
   /**
-   * Modules to enable.
+   * Modules to install.
    *
    * @var array
    */
-  public static $modules = array('color', 'color_test');
+  public static $modules = array('color', 'color_test', 'block', 'file');
 
   /**
    * A user with administrative permissions.
    *
    * @var \Drupal\user\UserInterface
    */
-  protected $big_user;
+  protected $bigUser;
 
   /**
    * An associative array of settings for themes.
@@ -55,7 +55,7 @@ class ColorTest extends WebTestBase {
     parent::setUp();
 
     // Create user.
-    $this->big_user = $this->drupalCreateUser(array('administer themes'));
+    $this->bigUser = $this->drupalCreateUser(array('administer themes'));
 
     // This tests the color module in Bartik.
     $this->themes = array(
@@ -105,12 +105,12 @@ class ColorTest extends WebTestBase {
    *   color', 'Color set', etc) for the theme which being tested.
    */
   function _testColor($theme, $test_values) {
-    \Drupal::config('system.theme')
+    $this->config('system.theme')
       ->set('default', $theme)
       ->save();
     $settings_path = 'admin/appearance/settings/' . $theme;
 
-    $this->drupalLogin($this->big_user);
+    $this->drupalLogin($this->bigUser);
     $this->drupalGet($settings_path);
     $this->assertResponse(200);
     $this->assertUniqueText('Color set');
@@ -119,9 +119,9 @@ class ColorTest extends WebTestBase {
     $this->drupalPostForm($settings_path, $edit, t('Save configuration'));
 
     $this->drupalGet('<front>');
-    $stylesheets = \Drupal::config('color.theme.' . $theme)->get('stylesheets');
+    $stylesheets = $this->config('color.theme.' . $theme)->get('stylesheets');
     foreach ($stylesheets as $stylesheet) {
-      $this->assertPattern('|' . file_create_url($stylesheet) . '|', 'Make sure the color stylesheet is included in the content. (' . $theme . ')');
+      $this->assertPattern('|' . file_url_transform_relative(file_create_url($stylesheet)) . '|', 'Make sure the color stylesheet is included in the content. (' . $theme . ')');
       $stylesheet_content = join("\n", file($stylesheet));
       $this->assertTrue(strpos($stylesheet_content, 'color: #123456') !== FALSE, 'Make sure the color we changed is in the color stylesheet. (' . $theme . ')');
     }
@@ -132,14 +132,14 @@ class ColorTest extends WebTestBase {
     $this->drupalPostForm($settings_path, $edit, t('Save configuration'));
 
     $this->drupalGet('<front>');
-    $stylesheets = \Drupal::config('color.theme.' . $theme)->get('stylesheets');
+    $stylesheets = $this->config('color.theme.' . $theme)->get('stylesheets');
     foreach ($stylesheets as $stylesheet) {
       $stylesheet_content = join("\n", file($stylesheet));
       $this->assertTrue(strpos($stylesheet_content, 'color: ' . $test_values['scheme_color']) !== FALSE, 'Make sure the color we changed is in the color stylesheet. (' . $theme . ')');
     }
 
     // Test with aggregated CSS turned on.
-    $config = \Drupal::config('system.performance');
+    $config = $this->config('system.performance');
     $config->set('css.preprocess', 1);
     $config->save();
     $this->drupalGet('<front>');
@@ -157,12 +157,12 @@ class ColorTest extends WebTestBase {
    * Tests whether the provided color is valid.
    */
   function testValidColor() {
-    \Drupal::config('system.theme')
+    $this->config('system.theme')
       ->set('default', 'bartik')
       ->save();
     $settings_path = 'admin/appearance/settings/bartik';
 
-    $this->drupalLogin($this->big_user);
+    $this->drupalLogin($this->bigUser);
     $edit['scheme'] = '';
 
     foreach ($this->colorTests as $color => $is_valid) {
@@ -177,4 +177,60 @@ class ColorTest extends WebTestBase {
       }
     }
   }
+
+  /**
+   * Test whether the custom logo is used in the color preview.
+   */
+  function testLogoSettingOverride() {
+    $this->drupalLogin($this->bigUser);
+    $edit = array(
+      'default_logo' => FALSE,
+      'logo_path' => 'core/misc/druplicon.png',
+    );
+    $this->drupalPostForm('admin/appearance/settings', $edit, t('Save configuration'));
+
+    // Ensure that the overridden logo is present in Bartik, which is colorable.
+    $this->drupalGet('admin/appearance/settings/bartik');
+    $this->assertIdentical($GLOBALS['base_path'] . 'core/misc/druplicon.png', $this->getDrupalSettings()['color']['logo']);
+  }
+
+  /**
+   * Test whether the scheme can be set, viewed anonymously and reset.
+   */
+  function testOverrideAndResetScheme() {
+    $settings_path = 'admin/appearance/settings/bartik';
+    $this->config('system.theme')
+      ->set('default', 'bartik')
+      ->save();
+
+    // Place branding block with site name and slogan into header region.
+    $this->drupalPlaceBlock('system_branding_block', ['region' => 'header']);
+
+    $this->drupalGet('');
+    $this->assertNoRaw('files/color/bartik-', 'Make sure the color logo is not being used.');
+    $this->assertRaw('bartik/logo.svg', 'Make sure the original bartik logo exists.');
+
+    // Log in and set the color scheme to 'slate'.
+    $this->drupalLogin($this->bigUser);
+    $edit['scheme'] = 'slate';
+    $this->drupalPostForm($settings_path, $edit, t('Save configuration'));
+
+    // Visit the homepage and ensure color changes.
+    $this->drupalLogout();
+    $this->drupalGet('');
+    $this->assertRaw('files/color/bartik-', 'Make sure the color logo is being used.');
+    $this->assertNoRaw('bartik/logo.svg', 'Make sure the original bartik logo does not exist.');
+
+    // Log in and set the color scheme back to default (delete config).
+    $this->drupalLogin($this->bigUser);
+    $edit['scheme'] = 'default';
+    $this->drupalPostForm($settings_path, $edit, t('Save configuration'));
+
+    // Log out and ensure there is no color and we have the original logo.
+    $this->drupalLogout();
+    $this->drupalGet('');
+    $this->assertNoRaw('files/color/bartik-', 'Make sure the color logo is not being used.');
+    $this->assertRaw('bartik/logo.svg', 'Make sure the original bartik logo exists.');
+  }
+
 }

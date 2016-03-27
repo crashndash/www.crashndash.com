@@ -10,10 +10,13 @@ namespace Drupal\Tests\Core\Menu;
 use Drupal\Component\Plugin\Discovery\DiscoveryInterface;
 use Drupal\Component\Plugin\Factory\FactoryInterface;
 use Drupal\Core\Access\AccessManagerInterface;
+use Drupal\Core\Access\AccessResult;
+use Drupal\Core\Access\AccessResultForbidden;
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
-use Drupal\Core\Language\Language;
 use Drupal\Core\Menu\LocalActionManager;
+use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Routing\RouteProviderInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\Core\Url;
@@ -108,19 +111,21 @@ class LocalActionManagerTest extends UnitTestCase {
     $this->moduleHandler = $this->getMock('Drupal\Core\Extension\ModuleHandlerInterface');
     $this->cacheBackend = $this->getMock('Drupal\Core\Cache\CacheBackendInterface');
 
+    $access_result = new AccessResultForbidden();
     $this->accessManager = $this->getMock('Drupal\Core\Access\AccessManagerInterface');
     $this->accessManager->expects($this->any())
       ->method('checkNamedRoute')
-      ->will($this->returnValue(FALSE));
+      ->willReturn($access_result);
     $this->account = $this->getMock('Drupal\Core\Session\AccountInterface');
     $this->discovery = $this->getMock('Drupal\Component\Plugin\Discovery\DiscoveryInterface');
     $this->factory = $this->getMock('Drupal\Component\Plugin\Factory\FactoryInterface');
+    $route_match = $this->getMock('Drupal\Core\Routing\RouteMatchInterface');
 
-    $this->localActionManager = new TestLocalActionManager($this->controllerResolver, $this->request, $this->routeProvider, $this->moduleHandler, $this->cacheBackend, $this->accessManager, $this->account, $this->discovery, $this->factory);
+    $this->localActionManager = new TestLocalActionManager($this->controllerResolver, $this->request, $route_match, $this->routeProvider, $this->moduleHandler, $this->cacheBackend, $this->accessManager, $this->account, $this->discovery, $this->factory);
   }
 
   /**
-   * @covers \Drupal\Core\Menu\LocalActionManager::getTitle()
+   * @covers ::getTitle
    */
   public function testGetTitle() {
     $local_action = $this->getMock('Drupal\Core\Menu\LocalActionInterface');
@@ -137,7 +142,7 @@ class LocalActionManagerTest extends UnitTestCase {
   }
 
   /**
-   * @covers \Drupal\Core\Menu\LocalActionManager::getActionsForRoute()
+   * @covers ::getActionsForRoute
    *
    * @dataProvider getActionsForRouteProvider
    */
@@ -193,6 +198,9 @@ class LocalActionManagerTest extends UnitTestCase {
         ),
       ),
       array(
+        '#cache' => array(
+          'contexts' => array('route'),
+        ),
         'plugin_id_1' => array(
           '#theme' => 'menu_local_action',
           '#link' => array(
@@ -200,8 +208,16 @@ class LocalActionManagerTest extends UnitTestCase {
             'url' => Url::fromRoute('test_route_2'),
             'localized_options' => '',
           ),
-          '#access' => FALSE,
+          '#access' => AccessResult::forbidden(),
           '#weight' => 0,
+          '#cache' => array(
+            'contexts' => array(),
+            'tags' => array(),
+            // For back-compatibility in 8.0.x the max-age is Cache::PERMANENT
+            // instead of 0 for any class that does not implement
+            // \Drupal\Core\Cache\CacheableDependencyInterface.
+            'max-age' => Cache::PERMANENT,
+          ),
         ),
       ),
     );
@@ -227,6 +243,9 @@ class LocalActionManagerTest extends UnitTestCase {
         ),
       ),
       array(
+        '#cache' => array(
+          'contexts' => array('route'),
+        ),
         'plugin_id_1' => array(
           '#theme' => 'menu_local_action',
           '#link' => array(
@@ -234,8 +253,13 @@ class LocalActionManagerTest extends UnitTestCase {
             'url' => Url::fromRoute('test_route_2'),
             'localized_options' => '',
           ),
-          '#access' => FALSE,
+          '#access' => AccessResult::forbidden(),
           '#weight' => 0,
+          '#cache' => array(
+            'contexts' => array(),
+            'tags' => array(),
+            'max-age' => Cache::PERMANENT,
+          ),
         ),
       ),
     );
@@ -262,6 +286,9 @@ class LocalActionManagerTest extends UnitTestCase {
         ),
       ),
       array(
+        '#cache' => array(
+          'contexts' => array('route'),
+        ),
         'plugin_id_1' => array(
           '#theme' => 'menu_local_action',
           '#link' => array(
@@ -269,8 +296,13 @@ class LocalActionManagerTest extends UnitTestCase {
             'url' => Url::fromRoute('test_route_2'),
             'localized_options' => '',
           ),
-          '#access' => FALSE,
+          '#access' => AccessResult::forbidden(),
           '#weight' => 1,
+          '#cache' => array(
+            'contexts' => array(),
+            'tags' => array(),
+            'max-age' => Cache::PERMANENT,
+          ),
         ),
         'plugin_id_2' => array(
           '#theme' => 'menu_local_action',
@@ -279,8 +311,13 @@ class LocalActionManagerTest extends UnitTestCase {
             'url' => Url::fromRoute('test_route_3'),
             'localized_options' => '',
           ),
-          '#access' => FALSE,
+          '#access' => AccessResult::forbidden(),
           '#weight' => 0,
+          '#cache' => array(
+            'contexts' => array(),
+            'tags' => array(),
+            'max-age' => Cache::PERMANENT,
+          ),
         ),
       ),
     );
@@ -309,6 +346,9 @@ class LocalActionManagerTest extends UnitTestCase {
         ),
       ),
       array(
+        '#cache' => array(
+          'contexts' => array('route'),
+        ),
         'plugin_id_1' => array(
           '#theme' => 'menu_local_action',
           '#link' => array(
@@ -316,8 +356,13 @@ class LocalActionManagerTest extends UnitTestCase {
             'url' => Url::fromRoute('test_route_2', ['test1']),
             'localized_options' => '',
           ),
-          '#access' => FALSE,
+          '#access' => AccessResult::forbidden(),
           '#weight' => 1,
+          '#cache' => array(
+            'contexts' => array(),
+            'tags' => array(),
+            'max-age' => Cache::PERMANENT,
+          ),
         ),
         'plugin_id_2' => array(
           '#theme' => 'menu_local_action',
@@ -326,8 +371,13 @@ class LocalActionManagerTest extends UnitTestCase {
             'url' => Url::fromRoute('test_route_2', ['test2']),
             'localized_options' => '',
           ),
-          '#access' => FALSE,
+          '#access' => AccessResult::forbidden(),
           '#weight' => 0,
+          '#cache' => array(
+            'contexts' => array(),
+            'tags' => array(),
+            'max-age' => Cache::PERMANENT,
+          ),
         ),
       ),
     );
@@ -339,7 +389,7 @@ class LocalActionManagerTest extends UnitTestCase {
 
 class TestLocalActionManager extends LocalActionManager {
 
-  public function __construct(ControllerResolverInterface $controller_resolver, Request $request, RouteProviderInterface $route_provider, ModuleHandlerInterface $module_handler, CacheBackendInterface $cache_backend, AccessManagerInterface $access_manager, AccountInterface $account, DiscoveryInterface $discovery, FactoryInterface $factory) {
+  public function __construct(ControllerResolverInterface $controller_resolver, Request $request, RouteMatchInterface $route_match, RouteProviderInterface $route_provider, ModuleHandlerInterface $module_handler, CacheBackendInterface $cache_backend, AccessManagerInterface $access_manager, AccountInterface $account, DiscoveryInterface $discovery, FactoryInterface $factory) {
     $this->discovery = $discovery;
     $this->factory = $factory;
     $this->routeProvider = $route_provider;
@@ -348,6 +398,7 @@ class TestLocalActionManager extends LocalActionManager {
     $this->controllerResolver = $controller_resolver;
     $this->requestStack = new RequestStack();
     $this->requestStack->push($request);
+    $this->routeMatch = $route_match;
     $this->moduleHandler = $module_handler;
     $this->alterInfo('menu_local_actions');
     $this->setCacheBackend($cache_backend, 'local_action_plugins', array('local_action'));

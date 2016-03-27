@@ -8,8 +8,7 @@
 namespace Drupal\aggregator\Plugin\views\argument;
 
 use Drupal\Core\Entity\EntityManagerInterface;
-use Drupal\views\Plugin\views\argument\Numeric;
-use Drupal\Component\Utility\String;
+use Drupal\views\Plugin\views\argument\NumericArgument;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -19,10 +18,10 @@ use Symfony\Component\DependencyInjection\ContainerInterface;
  *
  * @ViewsArgument("aggregator_iid")
  */
-class Iid extends Numeric {
+class Iid extends NumericArgument {
 
   /**
-   * The entity manager service
+   * The entity manager service.
    *
    * @var \Drupal\Core\Entity\EntityManagerInterface
    */
@@ -55,12 +54,12 @@ class Iid extends Numeric {
   /**
    * {@inheritdoc}
    */
-  function titleQuery() {
+  public function titleQuery() {
     $titles = array();
 
     $items = $this->entityManager->getStorage('aggregator_item')->loadMultiple($this->value);
     foreach ($items as $feed) {
-      $titles[] = String::checkPlain($feed->label());
+      $titles[] = $feed->label();
     }
     return $titles;
   }

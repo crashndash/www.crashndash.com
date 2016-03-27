@@ -7,7 +7,12 @@
 
 namespace Drupal\ajax_test\Controller;
 
+use Drupal\Core\Ajax\AjaxResponse;
+use Drupal\Core\Ajax\AlertCommand;
+use Drupal\Core\Ajax\CloseDialogCommand;
+use Drupal\Core\Ajax\HtmlCommand;
 use Drupal\Core\Url;
+use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Provides content for dialog tests.
@@ -15,36 +20,89 @@ use Drupal\Core\Url;
 class AjaxTestController {
 
   /**
-   * Returns example content for dialog testing.
+   * Example content for dialog testing.
+   *
+   * @return array
+   *   Renderable array of AJAX dialog contents.
    */
-  public function dialogContents() {
-    // Re-use the utility method that returns the example content.
-    return ajax_test_dialog_contents();
+  public static function dialogContents() {
+    // This is a regular render array; the keys do not have special meaning.
+    $content = array(
+      '#title' => 'AJAX Dialog contents',
+      'content' => array(
+        '#markup' => 'Example message',
+      ),
+      'cancel' => array(
+        '#type' => 'link',
+        '#title' => 'Cancel',
+        '#url' => Url::fromRoute('<front>'),
+        '#attributes' => array(
+          // This is a special class to which JavaScript assigns dialog closing
+          // behavior.
+          'class' => array('dialog-cancel'),
+        ),
+      ),
+    );
+
+    return $content;
   }
 
   /**
-   * @todo Remove ajax_test_render().
+   * Returns a render array that will be rendered by AjaxRenderer.
+   *
+   * Verifies that the response incorporates JavaScript settings generated
+   * during the page request by adding a dummy setting.
    */
   public function render() {
-    return ajax_test_render();
+    return [
+      '#attached' => [
+        'library' => [
+          'core/drupalSettings',
+        ],
+        'drupalSettings' => [
+          'ajax' => 'test',
+        ],
+      ],
+    ];
   }
 
   /**
-   * @todo Remove ajax_test_order().
+   * Returns an AjaxResponse; settings command set last.
+   *
+   * Helps verifying AjaxResponse reorders commands to ensure correct execution.
    */
   public function order() {
-    return ajax_test_order();
+    $response = new AjaxResponse();
+    // HTML insertion command.
+    $response->addCommand(new HtmlCommand('body', 'Hello, world!'));
+    $build['#attached']['library'][] = 'ajax_test/order';
+    $response->setAttachments($build['#attached']);
+
+    return $response;
   }
 
   /**
-   * @todo Remove ajax_test_error().
+   * Returns an AjaxResponse with alert command.
+   *
+   * @param \Symfony\Component\HttpFoundation\Request $request
+   *   The current request object.
+   *
+   * @return \Drupal\Core\Ajax\AjaxResponse
+   *   The JSON response object.
    */
-  public function renderError() {
-    return ajax_test_error();
+  public function renderError(Request $request) {
+    $message = '';
+    $query = $request->query;
+    if ($query->has('message')) {
+      $message = $query->get('message');
+    }
+    $response = new AjaxResponse();
+    $response->addCommand(new AlertCommand($message));
+    return $response;
   }
 
   /**
-   * @todo Remove ajax_test_dialog().
+   * Returns a render array of form elements and links for dialog.
    */
   public function dialog() {
     // Add two wrapper elements for testing non-modal dialogs. Modal dialogs use
@@ -61,7 +119,7 @@ class AjaxTestController {
       '#url' => Url::fromRoute('ajax_test.dialog_contents'),
       '#attributes' => array(
         'class' => array('use-ajax'),
-        'data-accepts' => 'application/vnd.drupal-modal',
+        'data-dialog-type' => 'modal',
       ),
     );
 
@@ -74,7 +132,7 @@ class AjaxTestController {
           'url' => Url::fromRoute('ajax_test.dialog_contents'),
           'attributes' => array(
             'class' => array('use-ajax'),
-            'data-accepts' => 'application/vnd.drupal-modal',
+            'data-dialog-type' => 'modal',
             'data-dialog-options' => json_encode(array(
               'width' => 400,
             ))
@@ -85,7 +143,7 @@ class AjaxTestController {
           'url' => Url::fromRoute('ajax_test.dialog_contents'),
           'attributes' => array(
             'class' => array('use-ajax'),
-            'data-accepts' => 'application/vnd.drupal-dialog',
+            'data-dialog-type' => 'dialog',
             'data-dialog-options' => json_encode(array(
               'target' => 'ajax-test-dialog-wrapper-1',
               'width' => 800,
@@ -97,6 +155,7 @@ class AjaxTestController {
           'url' => Url::fromRoute('ajax_test.dialog_close'),
           'attributes' => array(
             'class' => array('use-ajax'),
+            'data-dialog-type' => 'modal',
           ),
         ),
         'link5' => array(
@@ -104,7 +163,7 @@ class AjaxTestController {
           'url' => Url::fromRoute('ajax_test.dialog_form'),
           'attributes' => array(
             'class' => array('use-ajax'),
-            'data-accepts' => 'application/vnd.drupal-modal',
+            'data-dialog-type' => 'modal',
           ),
         ),
         'link6' => array(
@@ -112,7 +171,7 @@ class AjaxTestController {
           'url' => Url::fromRoute('contact.form_add'),
           'attributes' => array(
             'class' => array('use-ajax'),
-            'data-accepts' => 'application/vnd.drupal-modal',
+            'data-dialog-type' => 'modal',
             'data-dialog-options' => json_encode(array(
               'width' => 800,
               'height' => 500,
@@ -124,7 +183,7 @@ class AjaxTestController {
           'url' => Url::fromRoute('ajax_test.dialog_contents'),
           'attributes' => array(
             'class' => array('use-ajax'),
-            'data-accepts' => 'application/vnd.drupal-dialog',
+            'data-dialog-type' => 'dialog',
             'data-dialog-options' => json_encode(array(
               'width' => 800,
             ))
@@ -137,10 +196,15 @@ class AjaxTestController {
   }
 
   /**
-   * @todo Remove ajax_test_dialog_close().
+   * Returns an AjaxResponse with command to close dialog.
+   *
+   * @return \Drupal\Core\Ajax\AjaxResponse
+   *   The JSON response object.
    */
   public function dialogClose() {
-    return ajax_test_dialog_close();
+    $response = new AjaxResponse();
+    $response->addCommand(new CloseDialogCommand('#ajax-test-dialog-wrapper-1'));
+    return $response;
   }
 
 }

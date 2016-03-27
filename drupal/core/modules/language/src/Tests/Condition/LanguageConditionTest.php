@@ -8,8 +8,7 @@
 namespace Drupal\language\Tests\Condition;
 
 use Drupal\language\Entity\ConfigurableLanguage;
-use Drupal\simpletest\DrupalUnitTestBase;
-use Drupal\Core\Condition\ConditionManager;
+use Drupal\simpletest\KernelTestBase;
 
 /**
  * Tests that the language condition, provided by the language module, is
@@ -17,7 +16,7 @@ use Drupal\Core\Condition\ConditionManager;
  *
  * @group language
  */
-class LanguageConditionTest extends DrupalUnitTestBase {
+class LanguageConditionTest extends KernelTestBase {
 
   /**
    * The condition plugin manager.

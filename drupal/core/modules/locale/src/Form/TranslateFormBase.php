@@ -161,11 +161,11 @@ abstract class TranslateFormBase extends FormBase {
 
     // Get all languages, except English.
     $this->languageManager->reset();
-    $languages = language_list();
+    $languages = $this->languageManager->getLanguages();
     $language_options = array();
     foreach ($languages as $langcode => $language) {
-      if ($langcode != 'en' || locale_translate_english()) {
-        $language_options[$langcode] = $language->name;
+      if (locale_is_translatable($langcode)) {
+        $language_options[$langcode] = $language->getName();
       }
     }
 

@@ -8,20 +8,25 @@
 namespace Drupal\menu_link_content\Entity;
 
 use Drupal\Core\Entity\ContentEntityBase;
+use Drupal\Core\Entity\EntityChangedTrait;
 use Drupal\Core\Entity\EntityStorageInterface;
 use Drupal\Core\Entity\EntityTypeInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
-use Drupal\Core\Url;
+use Drupal\link\LinkItemInterface;
 use Drupal\menu_link_content\MenuLinkContentInterface;
 
 /**
  * Defines the menu link content entity class.
+ *
+ * @property \Drupal\link\LinkItemInterface link
+ * @property \Drupal\Core\Field\FieldItemList rediscover
  *
  * @ContentEntityType(
  *   id = "menu_link_content",
  *   label = @Translation("Custom menu link"),
  *   handlers = {
  *     "storage" = "Drupal\Core\Entity\Sql\SqlContentEntityStorage",
+ *     "storage_schema" = "Drupal\menu_link_content\MenuLinkContentStorageSchema",
  *     "access" = "Drupal\menu_link_content\MenuLinkContentAccessControlHandler",
  *     "form" = {
  *       "default" = "Drupal\menu_link_content\Form\MenuLinkContentForm",
@@ -35,17 +40,20 @@ use Drupal\menu_link_content\MenuLinkContentInterface;
  *   entity_keys = {
  *     "id" = "id",
  *     "label" = "title",
+ *     "langcode" = "langcode",
  *     "uuid" = "uuid",
  *     "bundle" = "bundle"
  *   },
  *   links = {
- *     "canonical" = "entity.menu_link_content.canonical",
- *     "edit-form" = "entity.menu_link_content.canonical",
- *     "delete-form" = "entity.menu_link_content.delete_form",
+ *     "canonical" = "/admin/structure/menu/item/{menu_link_content}/edit",
+ *     "edit-form" = "/admin/structure/menu/item/{menu_link_content}/edit",
+ *     "delete-form" = "/admin/structure/menu/item/{menu_link_content}/delete",
  *   }
  * )
  */
 class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterface {
+
+  use EntityChangedTrait;
 
   /**
    * A flag for whether this entity is wrapped in a plugin instance.
@@ -71,50 +79,8 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
   /**
    * {@inheritdoc}
    */
-  public function getRouteName() {
-    return $this->get('route_name')->value;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getRouteParameters() {
-    return $this->get('route_parameters')->first()->getValue();
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function setRouteParameters(array $route_parameters) {
-    $this->set('route_parameters', array($route_parameters));
-    return $this;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getUrl() {
-    return $this->get('url')->value ?: NULL;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
   public function getUrlObject() {
-    if ($route_name = $this->getRouteName()) {
-      $url = new Url($route_name, $this->getRouteParameters(), $this->getOptions());
-    }
-    else {
-      $path = $this->getUrl();
-      if (isset($path)) {
-        $url = Url::fromUri($path);
-      }
-      else {
-        $url = new Url('<front>');
-      }
-    }
-
-    return $url;
+    return $this->link->first()->getUrl();
   }
 
   /**
@@ -122,21 +88,6 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
    */
   public function getMenuName() {
     return $this->get('menu_name')->value;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function getOptions() {
-    return $this->get('options')->first()->getValue();
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function setOptions(array $options) {
-    $this->set('options', array($options));
-    return $this;
   }
 
   /**
@@ -184,26 +135,25 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
   /**
    * {@inheritdoc}
    */
-  public function getChangedTime() {
-    return $this->get('changed')->value;
-  }
-
-  /**
-   * Builds up the menu link plugin definition for this entity.
-   *
-   * @return array
-   *   The plugin definition corresponding to this entity.
-   *
-   * @see \Drupal\Core\Menu\MenuLinkTree::$defaults
-   */
-  protected function getPluginDefinition() {
+  public function getPluginDefinition() {
     $definition = array();
     $definition['class'] = 'Drupal\menu_link_content\Plugin\Menu\MenuLinkContent';
     $definition['menu_name'] = $this->getMenuName();
-    $definition['route_name'] = $this->getRouteName();
-    $definition['route_parameters'] = $this->getRouteParameters();
-    $definition['url'] = $this->getUrl();
-    $definition['options'] = $this->getOptions();
+
+    if ($url_object = $this->getUrlObject()) {
+      $definition['url'] = NULL;
+      $definition['route_name'] = NULL;
+      $definition['route_parameters'] = [];
+      if (!$url_object->isRouted()) {
+        $definition['url'] = $url_object->getUri();
+      }
+      else {
+        $definition['route_name'] = $url_object->getRouteName();
+        $definition['route_parameters'] = $url_object->getRouteParameters();
+      }
+      $definition['options'] = $url_object->getOptions();
+    }
+
     $definition['title'] = $this->getTitle();
     $definition['description'] = $this->getDescription();
     $definition['weight'] = $this->getWeight();
@@ -229,6 +179,19 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
   /**
    * {@inheritdoc}
    */
+  public function preSave(EntityStorageInterface $storage) {
+    parent::preSave($storage);
+
+    if (parse_url($this->link->uri, PHP_URL_SCHEME) === 'internal') {
+      $this->setRequiresRediscovery(TRUE);
+    }
+    else {
+      $this->setRequiresRediscovery(FALSE);
+    }
+  }
+  /**
+   * {@inheritdoc}
+   */
   public function postSave(EntityStorageInterface $storage, $update = TRUE) {
     parent::postSave($storage, $update);
 
@@ -237,15 +200,22 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
 
     // The menu link can just be updated if there is already an menu link entry
     // on both entity and menu link plugin level.
-    if ($update && $menu_link_manager->getDefinition($this->getPluginId())) {
+    $definition = $this->getPluginDefinition();
+    // Even when $update is FALSE, for top level links it is possible the link
+    // already is in the storage because of the getPluginDefinition() call
+    // above, see https://www.drupal.org/node/2605684#comment-10515450 for the
+    // call chain. Because of this the $update flag is ignored and only the
+    // existence of the definition (equals to being in the tree storage) is
+    // checked.
+    if ($menu_link_manager->getDefinition($this->getPluginId(), FALSE)) {
       // When the entity is saved via a plugin instance, we should not call
       // the menu tree manager to update the definition a second time.
       if (!$this->insidePlugin) {
-        $menu_link_manager->updateDefinition($this->getPluginId(), $this->getPluginDefinition(), FALSE);
+        $menu_link_manager->updateDefinition($this->getPluginId(), $definition, FALSE);
       }
     }
     else {
-      $menu_link_manager->addDefinition($this->getPluginId(), $this->getPluginDefinition());
+      $menu_link_manager->addDefinition($this->getPluginId(), $definition);
     }
   }
 
@@ -283,6 +253,7 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
       ->setLabel(t('Bundle'))
       ->setDescription(t('The content menu link bundle.'))
       ->setSetting('max_length', EntityTypeInterface::BUNDLE_MAX_LENGTH)
+      ->setSetting('is_ascii', TRUE)
       ->setReadOnly(TRUE);
 
     $fields['title'] = BaseFieldDefinition::create('string')
@@ -290,9 +261,7 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
       ->setDescription(t('The text to be used for this link in the menu.'))
       ->setRequired(TRUE)
       ->setTranslatable(TRUE)
-      ->setSettings(array(
-        'max_length' => 255,
-      ))
+      ->setSetting('max_length', 255)
       ->setDisplayOptions('view', array(
         'label' => 'hidden',
         'type' => 'string',
@@ -308,9 +277,7 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
       ->setLabel(t('Description'))
       ->setDescription(t('Shown when hovering over the menu link.'))
       ->setTranslatable(TRUE)
-      ->setSettings(array(
-        'max_length' => 255,
-      ))
+      ->setSetting('max_length', 255)
       ->setDisplayOptions('view', array(
         'label' => 'hidden',
         'type' => 'string',
@@ -324,30 +291,30 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
     $fields['menu_name'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Menu name'))
       ->setDescription(t('The menu name. All links with the same menu name (such as "tools") are part of the same menu.'))
-      ->setSetting('default_value', 'tools');
+      ->setDefaultValue('tools')
+      ->setSetting('is_ascii', TRUE);
 
-    // @todo Use a link field https://www.drupal.org/node/2302205.
-    $fields['route_name'] = BaseFieldDefinition::create('string')
-      ->setLabel(t('Route name'))
-      ->setDescription(t('The machine name of a defined Symfony Route this menu item represents.'));
-
-    $fields['route_parameters'] = BaseFieldDefinition::create('map')
-      ->setLabel(t('Route parameters'))
-      ->setDescription(t('A serialized array of route parameters of this menu link.'));
-
-    $fields['url'] = BaseFieldDefinition::create('uri')
-      ->setLabel(t('External link url'))
-      ->setDescription(t('The url of the link, in case you have an external link.'));
-
-    $fields['options'] = BaseFieldDefinition::create('map')
-      ->setLabel(t('Options'))
-      ->setDescription(t('A serialized array of options to be passed to the _url() or _l() function, such as a query string or HTML attributes.'))
-      ->setSetting('default_value', array());
+    $fields['link'] = BaseFieldDefinition::create('link')
+      ->setLabel(t('Link'))
+      ->setDescription(t('The location this menu link points to.'))
+      ->setRequired(TRUE)
+      ->setSettings(array(
+        'link_type' => LinkItemInterface::LINK_GENERIC,
+        'title' => DRUPAL_DISABLED,
+      ))
+      ->setDisplayOptions('form', array(
+        'type' => 'link_default',
+        'weight' => -2,
+      ));
 
     $fields['external'] = BaseFieldDefinition::create('boolean')
       ->setLabel(t('External'))
       ->setDescription(t('A flag to indicate if the link points to a full URL starting with a protocol, like http:// (1 = external, 0 = internal).'))
-      ->setSetting('default_value', FALSE);
+      ->setDefaultValue(FALSE);
+
+    $fields['rediscover'] = BaseFieldDefinition::create('boolean')
+      ->setLabel(t('Indicates whether the menu link should be rediscovered'))
+      ->setDefaultValue(FALSE);
 
     $fields['weight'] = BaseFieldDefinition::create('integer')
       ->setLabel(t('Weight'))
@@ -359,7 +326,7 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
         'weight' => 0,
       ))
       ->setDisplayOptions('form', array(
-        'type' => 'integer',
+        'type' => 'number',
         'weight' => 20,
       ));
 
@@ -388,12 +355,20 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
       ))
       ->setDisplayOptions('form', array(
         'settings' => array('display_label' => TRUE),
-        'weight' => 0,
+        'weight' => -1,
       ));
 
     $fields['langcode'] = BaseFieldDefinition::create('language')
-      ->setLabel(t('Language code'))
-      ->setDescription(t('The node language code.'));
+      ->setLabel(t('Language'))
+      ->setDescription(t('The menu link language code.'))
+      ->setTranslatable(TRUE)
+      ->setDisplayOptions('view', array(
+        'type' => 'hidden',
+      ))
+      ->setDisplayOptions('form', array(
+        'type' => 'language_select',
+        'weight' => 2,
+      ));
 
     $fields['parent'] = BaseFieldDefinition::create('string')
       ->setLabel(t('Parent plugin ID'))
@@ -401,9 +376,25 @@ class MenuLinkContent extends ContentEntityBase implements MenuLinkContentInterf
 
     $fields['changed'] = BaseFieldDefinition::create('changed')
       ->setLabel(t('Changed'))
-      ->setDescription(t('The time that the menu link was last edited.'));
+      ->setDescription(t('The time that the menu link was last edited.'))
+      ->setTranslatable(TRUE);
 
     return $fields;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function requiresRediscovery() {
+    return $this->get('rediscover')->value;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setRequiresRediscovery($rediscovery) {
+    $this->set('rediscover', $rediscovery);
+    return $this;
   }
 
 }

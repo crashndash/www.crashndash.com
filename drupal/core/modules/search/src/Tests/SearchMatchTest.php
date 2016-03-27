@@ -2,12 +2,13 @@
 
 /**
  * @file
- * Definition of Drupal\search\Tests\SearchMatchTest.
+ * Contains \Drupal\search\Tests\SearchMatchTest.
  */
 
 namespace Drupal\search\Tests;
 
 use Drupal\Core\Language\LanguageInterface;
+use Drupal\simpletest\KernelTestBase;
 
 // The search index can contain different types of content. Typically the type
 // is 'node'. Here we test with _test_ and _test2_ as the type.
@@ -20,7 +21,24 @@ const SEARCH_TYPE_JPN = '_test3_';
  *
  * @group search
  */
-class SearchMatchTest extends SearchTestBase {
+class SearchMatchTest extends KernelTestBase {
+
+  /**
+   * Modules to enable.
+   *
+   * @var array
+   */
+  public static $modules = ['search'];
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function setUp() {
+    parent::setUp();
+    $this->installSchema('search', ['search_index', 'search_dataset', 'search_total']);
+    $this->installConfig(['search']);
+  }
+
   /**
    * Test search indexing.
    */
@@ -33,13 +51,13 @@ class SearchMatchTest extends SearchTestBase {
    * Set up a small index of items to test against.
    */
   function _setup() {
-    \Drupal::config('search.settings')->set('index.minimum_word_size', 3)->save();
+    $this->config('search.settings')->set('index.minimum_word_size', 3)->save();
 
     for ($i = 1; $i <= 7; ++$i) {
-      search_index($i, SEARCH_TYPE, $this->getText($i), LanguageInterface::LANGCODE_NOT_SPECIFIED);
+      search_index(SEARCH_TYPE, $i, LanguageInterface::LANGCODE_NOT_SPECIFIED, $this->getText($i));
     }
     for ($i = 1; $i <= 5; ++$i) {
-      search_index($i + 7, SEARCH_TYPE_2, $this->getText2($i), LanguageInterface::LANGCODE_NOT_SPECIFIED);
+      search_index(SEARCH_TYPE_2, $i + 7, LanguageInterface::LANGCODE_NOT_SPECIFIED, $this->getText2($i));
     }
     // No getText builder function for Japanese text; just a simple array.
     foreach (array(
@@ -47,7 +65,7 @@ class SearchMatchTest extends SearchTestBase {
       14 => 'ドルーパルが大好きよ！',
       15 => 'コーヒーとケーキ',
     ) as $i => $jpn) {
-      search_index($i, SEARCH_TYPE_JPN, $jpn, LanguageInterface::LANGCODE_NOT_SPECIFIED);
+      search_index(SEARCH_TYPE_JPN, $i, LanguageInterface::LANGCODE_NOT_SPECIFIED, $jpn);
     }
     search_update_totals();
   }

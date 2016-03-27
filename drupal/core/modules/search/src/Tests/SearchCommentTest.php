@@ -2,14 +2,15 @@
 
 /**
  * @file
- * Definition of Drupal\search\Tests\SearchCommentTest.
+ * Contains \Drupal\search\Tests\SearchCommentTest.
  */
 
 namespace Drupal\search\Tests;
 
 use Drupal\comment\Plugin\Field\FieldType\CommentItemInterface;
-use Drupal\Component\Utility\String;
+use Drupal\comment\Tests\CommentTestTrait;
 use Drupal\field\Entity\FieldConfig;
+use Drupal\user\RoleInterface;
 
 /**
  * Tests integration searching comments.
@@ -18,6 +19,8 @@ use Drupal\field\Entity\FieldConfig;
  */
 class SearchCommentTest extends SearchTestBase {
 
+  use CommentTestTrait;
+
   /**
    * Modules to enable.
    *
@@ -25,7 +28,33 @@ class SearchCommentTest extends SearchTestBase {
    */
   public static $modules = array('filter', 'node', 'comment');
 
-  protected $admin_user;
+  /**
+   * Test subject for comments.
+   *
+   * @var string
+   */
+  protected $commentSubject;
+
+  /**
+   * ID for the administrator role.
+   *
+   * @var string
+   */
+  protected $adminRole;
+
+  /**
+   * A user with various administrative permissions.
+   *
+   * @var \Drupal\user\UserInterface
+   */
+  protected $adminUser;
+
+  /**
+   * Test node for searching.
+   *
+   * @var \Drupal\node\NodeInterface
+   */
+  protected $node;
 
   protected function setUp() {
     parent::setUp();
@@ -49,16 +78,17 @@ class SearchCommentTest extends SearchTestBase {
       'skip comment approval',
       'access comments',
     );
-    $this->admin_user = $this->drupalCreateUser($permissions);
-    $this->drupalLogin($this->admin_user);
+    $this->adminUser = $this->drupalCreateUser($permissions);
+    $this->drupalLogin($this->adminUser);
     // Add a comment field.
-    $this->container->get('comment.manager')->addDefaultField('node', 'article');
+    $this->addDefaultCommentField('node', 'article');
   }
 
   /**
    * Verify that comments are rendered using proper format in search results.
    */
   function testSearchResultsComment() {
+    $node_storage = $this->container->get('entity.manager')->getStorage('node');
     // Create basic_html format that escapes all HTML.
     $basic_html_format = entity_create('filter_format', array(
       'format' => 'basic_html',
@@ -67,7 +97,7 @@ class SearchCommentTest extends SearchTestBase {
       'filters' => array(
         'filter_html_escape' => array('status' => 1),
       ),
-      'roles' => array(DRUPAL_AUTHENTICATED_RID),
+      'roles' => array(RoleInterface::AUTHENTICATED_ID),
     ));
     $basic_html_format->save();
 
@@ -75,14 +105,14 @@ class SearchCommentTest extends SearchTestBase {
 
     // Make preview optional.
     $field = FieldConfig::loadByName('node', 'article', 'comment');
-    $field->settings['preview'] = DRUPAL_OPTIONAL;
+    $field->setSetting('preview', DRUPAL_OPTIONAL);
     $field->save();
 
     // Allow anonymous users to search content.
     $edit = array(
-      DRUPAL_ANONYMOUS_RID . '[search content]' => 1,
-      DRUPAL_ANONYMOUS_RID . '[access comments]' => 1,
-      DRUPAL_ANONYMOUS_RID . '[post comments]' => 1,
+      RoleInterface::ANONYMOUS_ID . '[search content]' => 1,
+      RoleInterface::ANONYMOUS_ID . '[access comments]' => 1,
+      RoleInterface::ANONYMOUS_ID . '[post comments]' => 1,
     );
     $this->drupalPostForm('admin/people/permissions', $edit, t('Save permissions'));
 
@@ -96,6 +126,23 @@ class SearchCommentTest extends SearchTestBase {
     $edit_comment['comment_body[0][format]'] = $full_html_format_id;
     $this->drupalPostForm('comment/reply/node/' . $node->id() .'/comment', $edit_comment, t('Save'));
 
+    // Post a comment with an evil script tag in the comment subject and a
+    // script tag nearby a keyword in the comment body. Use the 'FULL HTML' text
+    // format so the script tag stored.
+    $edit_comment2 = array();
+    $edit_comment2['subject[0][value]'] = "<script>alert('subjectkeyword');</script>";
+    $edit_comment2['comment_body[0][value]'] = "nearbykeyword<script>alert('somethinggeneric');</script>";
+    $edit_comment2['comment_body[0][format]'] = $full_html_format_id;
+    $this->drupalPostForm('comment/reply/node/' . $node->id() . '/comment', $edit_comment2, t('Save'));
+
+    // Post a comment with a keyword inside an evil script tag in the comment
+    // body. Use the 'FULL HTML' text format so the script tag is stored.
+    $edit_comment3 = array();
+    $edit_comment3['subject[0][value]'] = 'asubject';
+    $edit_comment3['comment_body[0][value]'] = "<script>alert('insidekeyword');</script>";
+    $edit_comment3['comment_body[0][format]'] = $full_html_format_id;
+    $this->drupalPostForm('comment/reply/node/' . $node->id() . '/comment', $edit_comment3, t('Save'));
+
     // Invoke search index update.
     $this->drupalLogout();
     $this->cronRun();
@@ -105,7 +152,8 @@ class SearchCommentTest extends SearchTestBase {
       'keys' => "'" . $edit_comment['subject[0][value]'] . "'",
     );
     $this->drupalPostForm('search/node', $edit, t('Search'));
-    $node2 = node_load($node->id(), TRUE);
+    $node_storage->resetCache(array($node->id()));
+    $node2 = $node_storage->load($node->id());
     $this->assertText($node2->label(), 'Node found in search results.');
     $this->assertText($edit_comment['subject[0][value]'], 'Comment subject found in search results.');
 
@@ -119,10 +167,43 @@ class SearchCommentTest extends SearchTestBase {
     // Verify that comment is rendered using proper format.
     $this->assertText($comment_body, 'Comment body text found in search results.');
     $this->assertNoRaw(t('n/a'), 'HTML in comment body is not hidden.');
-    $this->assertNoRaw(String::checkPlain($edit_comment['comment_body[0][value]']), 'HTML in comment body is not escaped.');
+    $this->assertNoEscaped($edit_comment['comment_body[0][value]'], 'HTML in comment body is not escaped.');
+
+    // Search for the evil script comment subject.
+    $edit = array(
+      'keys' => 'subjectkeyword',
+    );
+    $this->drupalPostForm('search/node', $edit, t('Search'));
+
+    // Verify the evil comment subject is escaped in search results.
+    $this->assertRaw('&lt;script&gt;alert(&#039;<strong>subjectkeyword</strong>&#039;);');
+    $this->assertNoRaw('<script>');
+
+    // Search for the keyword near the evil script tag in the comment body.
+    $edit = [
+      'keys' => 'nearbykeyword',
+    ];
+    $this->drupalPostForm('search/node', $edit, t('Search'));
+
+    // Verify that nearby script tag in the evil comment body is stripped from
+    // search results.
+    $this->assertRaw('<strong>nearbykeyword</strong>');
+    $this->assertNoRaw('<script>');
+
+    // Search for contents inside the evil script tag in the comment body.
+    $edit = [
+      'keys' => 'insidekeyword',
+    ];
+    $this->drupalPostForm('search/node', $edit, t('Search'));
+
+    // @todo Verify the actual search results.
+    //   https://www.drupal.org/node/2551135
+
+    // Verify there is no script tag in search results.
+    $this->assertNoRaw('<script>');
 
     // Hide comments.
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
     $node->set('comment', CommentItemInterface::HIDDEN);
     $node->save();
 
@@ -140,59 +221,59 @@ class SearchCommentTest extends SearchTestBase {
    */
   function testSearchResultsCommentAccess() {
     $comment_body = 'Test comment body';
-    $this->comment_subject = 'Test comment subject';
-    $roles = $this->admin_user->getRoles();
-    $this->admin_role = $roles[0];
+    $this->commentSubject = 'Test comment subject';
+    $roles = $this->adminUser->getRoles(TRUE);
+    $this->adminRole = $roles[0];
 
     // Create a node.
     // Make preview optional.
     $field = FieldConfig::loadByName('node', 'article', 'comment');
-    $field->settings['preview'] = DRUPAL_OPTIONAL;
+    $field->setSetting('preview', DRUPAL_OPTIONAL);
     $field->save();
     $this->node = $this->drupalCreateNode(array('type' => 'article'));
 
     // Post a comment using 'Full HTML' text format.
     $edit_comment = array();
-    $edit_comment['subject[0][value]'] = $this->comment_subject;
+    $edit_comment['subject[0][value]'] = $this->commentSubject;
     $edit_comment['comment_body[0][value]'] = '<h1>' . $comment_body . '</h1>';
     $this->drupalPostForm('comment/reply/node/' . $this->node->id() . '/comment', $edit_comment, t('Save'));
 
     $this->drupalLogout();
-    $this->setRolePermissions(DRUPAL_ANONYMOUS_RID);
+    $this->setRolePermissions(RoleInterface::ANONYMOUS_ID);
     $this->assertCommentAccess(FALSE, 'Anon user has search permission but no access comments permission, comments should not be indexed');
 
-    $this->setRolePermissions(DRUPAL_ANONYMOUS_RID, TRUE);
+    $this->setRolePermissions(RoleInterface::ANONYMOUS_ID, TRUE);
     $this->assertCommentAccess(TRUE, 'Anon user has search permission and access comments permission, comments should be indexed');
 
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
     $this->drupalGet('admin/people/permissions');
 
     // Disable search access for authenticated user to test admin user.
-    $this->setRolePermissions(DRUPAL_AUTHENTICATED_RID, FALSE, FALSE);
+    $this->setRolePermissions(RoleInterface::AUTHENTICATED_ID, FALSE, FALSE);
 
-    $this->setRolePermissions($this->admin_role);
+    $this->setRolePermissions($this->adminRole);
     $this->assertCommentAccess(FALSE, 'Admin user has search permission but no access comments permission, comments should not be indexed');
 
     $this->drupalGet('node/' . $this->node->id());
-    $this->setRolePermissions($this->admin_role, TRUE);
+    $this->setRolePermissions($this->adminRole, TRUE);
     $this->assertCommentAccess(TRUE, 'Admin user has search permission and access comments permission, comments should be indexed');
 
-    $this->setRolePermissions(DRUPAL_AUTHENTICATED_RID);
+    $this->setRolePermissions(RoleInterface::AUTHENTICATED_ID);
     $this->assertCommentAccess(FALSE, 'Authenticated user has search permission but no access comments permission, comments should not be indexed');
 
-    $this->setRolePermissions(DRUPAL_AUTHENTICATED_RID, TRUE);
+    $this->setRolePermissions(RoleInterface::AUTHENTICATED_ID, TRUE);
     $this->assertCommentAccess(TRUE, 'Authenticated user has search permission and access comments permission, comments should be indexed');
 
     // Verify that access comments permission is inherited from the
     // authenticated role.
-    $this->setRolePermissions(DRUPAL_AUTHENTICATED_RID, TRUE, FALSE);
-    $this->setRolePermissions($this->admin_role);
+    $this->setRolePermissions(RoleInterface::AUTHENTICATED_ID, TRUE, FALSE);
+    $this->setRolePermissions($this->adminRole);
     $this->assertCommentAccess(TRUE, 'Admin user has search permission and no access comments permission, but comments should be indexed because admin user inherits authenticated user\'s permission to access comments');
 
     // Verify that search content permission is inherited from the authenticated
     // role.
-    $this->setRolePermissions(DRUPAL_AUTHENTICATED_RID, TRUE, TRUE);
-    $this->setRolePermissions($this->admin_role, TRUE, FALSE);
+    $this->setRolePermissions(RoleInterface::AUTHENTICATED_ID, TRUE, TRUE);
+    $this->setRolePermissions($this->adminRole, TRUE, FALSE);
     $this->assertCommentAccess(TRUE, 'Admin user has access comments permission and no search permission, but comments should be indexed because admin user inherits authenticated user\'s permission to search');
   }
 
@@ -217,13 +298,13 @@ class SearchCommentTest extends SearchTestBase {
 
     // Search for the comment subject.
     $edit = array(
-      'keys' => "'" . $this->comment_subject . "'",
+      'keys' => "'" . $this->commentSubject . "'",
     );
     $this->drupalPostForm('search/node', $edit, t('Search'));
 
     if ($assume_access) {
       $expected_node_result = $this->assertText($this->node->label());
-      $expected_comment_result = $this->assertText($this->comment_subject);
+      $expected_comment_result = $this->assertText($this->commentSubject);
     }
     else {
       $expected_node_result = $this->assertText(t('Your search yielded no results.'));

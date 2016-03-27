@@ -40,22 +40,19 @@ class CollectRoutesTest extends UnitTestCase {
 
     $container = new ContainerBuilder();
 
-    $content_negotiation = $this->getMockBuilder('\Drupal\Core\ContentNegotiation')
-      ->disableOriginalConstructor()
-      ->getMock();
-
     $request = $this->getMockBuilder('\Symfony\Component\HttpFoundation\Request')
       ->disableOriginalConstructor()
       ->getMock();
-
-    $container->set('content_negotiation', $content_negotiation);
 
     $this->view = $this->getMock('\Drupal\views\Entity\View', array('initHandlers'), array(
       array('id' => 'test_view'),
       'view',
     ));
 
-    $view_executable = $this->getMock('\Drupal\views\ViewExecutable', array('initHandlers'), array(), '', FALSE);
+    $view_executable = $this->getMock('\Drupal\views\ViewExecutable', array('initHandlers', 'getTitle'), array(), '', FALSE);
+    $view_executable->expects($this->any())
+      ->method('getTitle')
+      ->willReturn('View title');
 
     $view_executable->storage = $this->view;
     $view_executable->argument = array();
@@ -82,6 +79,7 @@ class CollectRoutesTest extends UnitTestCase {
       ->disableOriginalConstructor()
       ->getMock();
     $container->set('plugin.manager.views.style', $style_manager);
+    $container->set('renderer', $this->getMock('Drupal\Core\Render\RendererInterface'));
 
     \Drupal::setContainer($container);
 

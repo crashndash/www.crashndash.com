@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views_test_data\Plugin\views\display\DisplayTest.
+ * Contains \Drupal\views_test_data\Plugin\views\display\DisplayTest.
  */
 
 namespace Drupal\views_test_data\Plugin\views\display;
@@ -33,14 +33,14 @@ class DisplayTest extends DisplayPluginBase {
   protected $usesAttachments = TRUE;
 
   /**
-   * Overrides \Drupal\views\Plugin\views\display\DisplayPluginBase::getType().
+   * {@inheritdoc}
    */
-  protected function getType() {
+  public function getType() {
     return 'test';
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::defineOptions().
+   * {@inheritdoc}
    */
   protected function defineOptions() {
     $options = parent::defineOptions();
@@ -50,7 +50,7 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::optionsSummaryv().
+   * {@inheritdoc}
    */
   public function optionsSummary(&$categories, &$options) {
     parent::optionsSummary($categories, $options);
@@ -73,7 +73,7 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::buildOptionsForm().
+   * {@inheritdoc}
    */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     parent::buildOptionsForm($form, $form_state);
@@ -92,7 +92,7 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::validateOptionsForm().
+   * {@inheritdoc}
    */
   public function validateOptionsForm(&$form, FormStateInterface $form_state) {
     parent::validateOptionsForm($form, $form_state);
@@ -107,7 +107,7 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::submitOptionsForm().
+   * {@inheritdoc}
    */
   public function submitOptionsForm(&$form, FormStateInterface $form_state) {
     parent::submitOptionsForm($form, $form_state);
@@ -119,7 +119,7 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::execute().
+   * {@inheritdoc}
    */
   public function execute() {
     $this->view->build();
@@ -132,12 +132,30 @@ class DisplayTest extends DisplayPluginBase {
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::preview().
-   *
-   * Override so preview and execute are the same output.
+   * {@inheritdoc}
    */
   public function preview() {
     return $this->execute();
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function calculateDependencies() {
+    return parent::calculateDependencies() + [
+      'content' => ['DisplayTest'],
+    ];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function validate() {
+    $errors = parent::validate();
+    foreach ($this->view->displayHandlers as $display_handler) {
+      $errors[] = 'error';
+    }
+    return $errors;
   }
 
 }

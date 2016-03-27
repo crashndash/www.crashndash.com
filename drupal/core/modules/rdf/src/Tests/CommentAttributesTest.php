@@ -10,6 +10,7 @@ namespace Drupal\rdf\Tests;
 use Drupal\comment\CommentInterface;
 use Drupal\comment\CommentManagerInterface;
 use Drupal\comment\Tests\CommentTestBase;
+use Drupal\user\RoleInterface;
 
 /**
  * Tests the RDFa markup of comments.
@@ -25,11 +26,25 @@ class CommentAttributesTest extends CommentTestBase {
    */
   public static $modules = array('views', 'node', 'comment', 'rdf');
 
+  /**
+   * URI of the front page of the Drupal site.
+   *
+   * @var string
+   */
+  protected $baseUri;
+
+  /**
+   * URI of the test node created by CommentTestBase::setUp().
+   *
+   * @var string
+   */
+  protected $nodeUri;
+
   protected function setUp() {
     parent::setUp();
 
     // Enables anonymous user comments.
-    user_role_change_permissions(DRUPAL_ANONYMOUS_RID, array(
+    user_role_change_permissions(RoleInterface::ANONYMOUS_ID, array(
       'access comments' => TRUE,
       'post comments' => TRUE,
       'skip comment approval' => TRUE,
@@ -42,8 +57,8 @@ class CommentAttributesTest extends CommentTestBase {
     $this->setCommentSettings('comment_default_mode', CommentManagerInterface::COMMENT_MODE_THREADED, 'Comment paging changed.');
 
     // Prepares commonly used URIs.
-    $this->base_uri = \Drupal::url('<front>', [], ['absolute' => TRUE]);
-    $this->node_uri = $this->node->url('canonical', ['absolute' => TRUE]);
+    $this->baseUri = \Drupal::url('<front>', [], ['absolute' => TRUE]);
+    $this->nodeUri = $this->node->url('canonical', ['absolute' => TRUE]);
 
     // Set relation between node and comment.
     $article_mapping = rdf_get_mapping('node', 'article');
@@ -105,14 +120,14 @@ class CommentAttributesTest extends CommentTestBase {
    */
   public function testNumberOfCommentsRdfaMarkup() {
     // Posts 2 comments on behalf of registered user.
-    $this->saveComment($this->node->id(), $this->web_user->id());
-    $this->saveComment($this->node->id(), $this->web_user->id());
+    $this->saveComment($this->node->id(), $this->webUser->id());
+    $this->saveComment($this->node->id(), $this->webUser->id());
 
     // Tests number of comments in teaser view.
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     $parser = new \EasyRdf_Parser_Rdfa();
     $graph = new \EasyRdf_Graph();
-    $parser->parse($graph, $this->drupalGet('node'), 'rdfa', $this->base_uri);
+    $parser->parse($graph, $this->drupalGet('node'), 'rdfa', $this->baseUri);
 
     // Number of comments.
     $expected_value = array(
@@ -120,13 +135,31 @@ class CommentAttributesTest extends CommentTestBase {
       'value' => 2,
       'datatype' => 'http://www.w3.org/2001/XMLSchema#integer',
     );
-    $this->assertTrue($graph->hasProperty($this->node_uri, 'http://rdfs.org/sioc/ns#num_replies', $expected_value), 'Number of comments found in RDF output of teaser view (sioc:num_replies).');
+    $this->assertTrue($graph->hasProperty($this->nodeUri, 'http://rdfs.org/sioc/ns#num_replies', $expected_value), 'Number of comments found in RDF output of teaser view (sioc:num_replies).');
 
     // Tests number of comments in full node view, expected value is the same.
     $parser = new \EasyRdf_Parser_Rdfa();
     $graph = new \EasyRdf_Graph();
-    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->base_uri);
-    $this->assertTrue($graph->hasProperty($this->node_uri, 'http://rdfs.org/sioc/ns#num_replies', $expected_value), 'Number of comments found in RDF output of full node view mode (sioc:num_replies).');
+    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->baseUri);
+    $this->assertTrue($graph->hasProperty($this->nodeUri, 'http://rdfs.org/sioc/ns#num_replies', $expected_value), 'Number of comments found in RDF output of full node view mode (sioc:num_replies).');
+  }
+
+  /**
+   * Tests comment author link markup has not been broken by RDF.
+   */
+  public function testCommentRdfAuthorMarkup() {
+    // Post a comment as a registered user.
+    $this->saveComment($this->node->id(), $this->webUser->id());
+
+    // Give the user access to view user profiles so the profile link shows up.
+    user_role_grant_permissions(RoleInterface::AUTHENTICATED_ID, ['access user profiles']);
+    $this->drupalLogin($this->webUser);
+
+    // Ensure that the author link still works properly after the author output
+    // is modified by the RDF module.
+    $this->drupalGet('node/' . $this->node->id());
+    $this->assertLink($this->webUser->getUsername());
+    $this->assertLinkByHref('user/' . $this->webUser->id());
   }
 
   /**
@@ -137,20 +170,20 @@ class CommentAttributesTest extends CommentTestBase {
    */
   public function testCommentRdfaMarkup() {
     // Posts comment #1 on behalf of registered user.
-    $comment1 = $this->saveComment($this->node->id(), $this->web_user->id());
+    $comment1 = $this->saveComment($this->node->id(), $this->webUser->id());
 
     // Tests comment #1 with access to the user profile.
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     $parser = new \EasyRdf_Parser_Rdfa();
     $graph = new \EasyRdf_Graph();
-    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->base_uri);
+    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->baseUri);
     $this->_testBasicCommentRdfaMarkup($graph, $comment1);
 
     // Tests comment #1 with no access to the user profile (as anonymous user).
     $this->drupalLogout();
     $parser = new \EasyRdf_Parser_Rdfa();
     $graph = new \EasyRdf_Graph();
-    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->base_uri);
+    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->baseUri);
     $this->_testBasicCommentRdfaMarkup($graph, $comment1);
 
     // Posts comment #2 as anonymous user.
@@ -163,14 +196,14 @@ class CommentAttributesTest extends CommentTestBase {
     // Tests comment #2 as anonymous user.
     $parser = new \EasyRdf_Parser_Rdfa();
     $graph = new \EasyRdf_Graph();
-    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->base_uri);
+    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->baseUri);
     $this->_testBasicCommentRdfaMarkup($graph, $comment2, $anonymous_user);
 
     // Tests comment #2 as logged in user.
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     $parser = new \EasyRdf_Parser_Rdfa();
     $graph = new \EasyRdf_Graph();
-    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->base_uri);
+    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->baseUri);
     $this->_testBasicCommentRdfaMarkup($graph, $comment2, $anonymous_user);
   }
 
@@ -179,30 +212,30 @@ class CommentAttributesTest extends CommentTestBase {
    */
   public function testCommentReplyOfRdfaMarkup() {
     // Posts comment #1 on behalf of registered user.
-    $this->drupalLogin($this->web_user);
-    $comment_1 = $this->saveComment($this->node->id(), $this->web_user->id());
+    $this->drupalLogin($this->webUser);
+    $comment_1 = $this->saveComment($this->node->id(), $this->webUser->id());
 
     $comment_1_uri = $comment_1->url('canonical', ['absolute' => TRUE]);
 
     // Posts a reply to the first comment.
-    $comment_2 = $this->saveComment($this->node->id(), $this->web_user->id(), NULL, $comment_1->id());
+    $comment_2 = $this->saveComment($this->node->id(), $this->webUser->id(), NULL, $comment_1->id());
     $comment_2_uri = $comment_2->url('canonical', ['absolute' => TRUE]);
 
     $parser = new \EasyRdf_Parser_Rdfa();
     $graph = new \EasyRdf_Graph();
-    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->base_uri);
+    $parser->parse($graph, $this->drupalGet('node/' . $this->node->id()), 'rdfa', $this->baseUri);
 
     // Tests the reply_of relationship of a first level comment.
     $expected_value = array(
       'type' => 'uri',
-      'value' => $this->node_uri,
+      'value' => $this->nodeUri,
     );
     $this->assertTrue($graph->hasProperty($comment_1_uri, 'http://rdfs.org/sioc/ns#reply_of', $expected_value), 'Comment relation to its node found in RDF output (sioc:reply_of).');
 
     // Tests the reply_of relationship of a second level comment.
     $expected_value = array(
       'type' => 'uri',
-      'value' => $this->node_uri,
+      'value' => $this->nodeUri,
     );
     $this->assertTrue($graph->hasProperty($comment_2_uri, 'http://rdfs.org/sioc/ns#reply_of', $expected_value), 'Comment relation to its node found in RDF output (sioc:reply_of).');
     $expected_value = array(
@@ -249,14 +282,14 @@ class CommentAttributesTest extends CommentTestBase {
     // Comment date.
     $expected_value = array(
       'type' => 'literal',
-      'value' => date('c', $comment->getCreatedTime()),
+      'value' => format_date($comment->getCreatedTime(), 'custom', 'c', 'UTC'),
       'datatype' => 'http://www.w3.org/2001/XMLSchema#dateTime',
     );
     $this->assertTrue($graph->hasProperty($comment_uri, 'http://purl.org/dc/terms/date', $expected_value), 'Comment date found in RDF output (dc:date).');
     // Comment date.
     $expected_value = array(
       'type' => 'literal',
-      'value' => date('c', $comment->getCreatedTime()),
+      'value' => format_date($comment->getCreatedTime(), 'custom', 'c', 'UTC'),
       'datatype' => 'http://www.w3.org/2001/XMLSchema#dateTime',
     );
     $this->assertTrue($graph->hasProperty($comment_uri, 'http://purl.org/dc/terms/created', $expected_value), 'Comment date found in RDF output (dc:created).');
@@ -291,7 +324,7 @@ class CommentAttributesTest extends CommentTestBase {
     }
 
     // Author name.
-    $name = empty($account["name"]) ? $this->web_user->getUsername() : $account["name"] . " (not verified)";
+    $name = empty($account["name"]) ? $this->webUser->getUsername() : $account["name"] . " (not verified)";
     $expected_value = array(
       'type' => 'literal',
       'value' => $name,

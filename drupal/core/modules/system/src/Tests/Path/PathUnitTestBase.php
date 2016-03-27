@@ -2,18 +2,18 @@
 
 /**
  * @file
- * Contains Drupal\system\Tests\Path\PathUnitTestBase.
+ * Contains \Drupal\system\Tests\Path\PathUnitTestBase.
  */
 
 namespace Drupal\system\Tests\Path;
 
-use Drupal\simpletest\DrupalUnitTestBase;
+use Drupal\simpletest\KernelTestBase;
 use Drupal\Core\Database\Database;
 
 /**
  * Base class for Path/URL alias integration tests.
  */
-abstract class PathUnitTestBase extends DrupalUnitTestBase {
+abstract class PathUnitTestBase extends KernelTestBase {
 
   /**
    * @var \Drupal\system\Tests\Path\UrlAliasFixtures

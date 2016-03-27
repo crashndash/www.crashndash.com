@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\pager\Mini.
+ * Contains \Drupal\views\Plugin\views\pager\Mini.
  */
 
 namespace Drupal\views\Plugin\views\pager;
@@ -37,17 +37,17 @@ class Mini extends SqlBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\pager\PagerPluginBase::summaryTitle().
+   * {@inheritdoc}
    */
   public function summaryTitle() {
     if (!empty($this->options['offset'])) {
-      return format_plural($this->options['items_per_page'], 'Mini pager, @count item, skip @skip', 'Mini pager, @count items, skip @skip', array('@count' => $this->options['items_per_page'], '@skip' => $this->options['offset']));
+      return $this->formatPlural($this->options['items_per_page'], 'Mini pager, @count item, skip @skip', 'Mini pager, @count items, skip @skip', array('@count' => $this->options['items_per_page'], '@skip' => $this->options['offset']));
     }
-      return format_plural($this->options['items_per_page'], 'Mini pager, @count item', 'Mini pager, @count items', array('@count' => $this->options['items_per_page']));
+      return $this->formatPlural($this->options['items_per_page'], 'Mini pager, @count item', 'Mini pager, @count items', array('@count' => $this->options['items_per_page']));
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\pager\SqlBase::query().
+   * {@inheritdoc}
    */
   public function query() {
     parent::query();
@@ -64,14 +64,14 @@ class Mini extends SqlBase {
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\pager\PagerPluginBase::useCountQuery().
+   * {@inheritdoc}
    */
   public function useCountQuery() {
     return FALSE;
   }
 
   /**
-   * Overrides \Drupal\views\Plugin\views\pager\PagerPluginBase::postExecute().
+   * {@inheritdoc}
    */
   public function postExecute(&$result) {
     // In query() one more item might have been retrieved than necessary. If so,
@@ -103,6 +103,7 @@ class Mini extends SqlBase {
       '#tags' => $tags,
       '#element' => $this->options['id'],
       '#parameters' => $input,
+      '#route_name' => !empty($this->view->live_preview) ? '<current>' : '<none>',
     );
   }
 

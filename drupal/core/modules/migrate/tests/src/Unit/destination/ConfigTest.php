@@ -37,14 +37,23 @@ class ConfigTest extends UnitTestCase {
     }
     $config->expects($this->once())
       ->method('save');
+    $config->expects($this->once())
+      ->method('getName')
+      ->willReturn('d8_config');
+    $config_factory = $this->getMock('Drupal\Core\Config\ConfigFactoryInterface');
+    $config_factory->expects($this->once())
+      ->method('getEditable')
+      ->with('d8_config')
+      ->will($this->returnValue($config));
     $row = $this->getMockBuilder('Drupal\migrate\Row')
       ->disableOriginalConstructor()
       ->getMock();
     $row->expects($this->once())
       ->method('getRawDestination')
       ->will($this->returnValue($source));
-    $destination = new Config(array(), 'd8_config', array('pluginId' => 'd8_config'), $migration, $config);
-    $destination->import($row);
+    $destination = new Config(array('config_name' => 'd8_config'), 'd8_config', array('pluginId' => 'd8_config'), $migration, $config_factory);
+    $destination_id = $destination->import($row);
+    $this->assertEquals($destination_id, ['d8_config']);
   }
 
 }

@@ -7,8 +7,8 @@
 
 namespace Drupal\serialization\Tests;
 
-use Drupal\Core\Language\LanguageInterface;
-use Drupal\Component\Utility\String;
+use Drupal\Component\Utility\SafeMarkup;
+use Drupal\entity_test\Entity\EntityTestMulRev;
 
 /**
  * Tests that entities can be serialized to supported core formats.
@@ -16,6 +16,13 @@ use Drupal\Component\Utility\String;
  * @group serialization
  */
 class EntitySerializationTest extends NormalizerTestBase {
+
+  /**
+   * Modules to install.
+   *
+   * @var array
+   */
+  public static $modules = array('serialization', 'system', 'field', 'entity_test', 'text', 'filter', 'user', 'entity_serialization_test');
 
   /**
    * The test values.
@@ -30,6 +37,13 @@ class EntitySerializationTest extends NormalizerTestBase {
    * @var \Drupal\Core\Entity\ContentEntityBase
    */
   protected $entity;
+
+  /**
+   * The test user.
+   *
+   * @var \Drupal\user\Entity\User
+   */
+  protected $user;
 
   /**
    * The serializer service.
@@ -48,16 +62,27 @@ class EntitySerializationTest extends NormalizerTestBase {
   protected function setUp() {
     parent::setUp();
 
+    // User create needs sequence table.
+    $this->installSchema('system', array('sequences'));
+
+    // Create a test user to use as the entity owner.
+    $this->user = \Drupal::entityManager()->getStorage('user')->create([
+      'name' => 'serialization_test_user',
+      'mail' => 'foo@example.com',
+      'pass' => '123456',
+    ]);
+    $this->user->save();
+
     // Create a test entity to serialize.
     $this->values = array(
       'name' => $this->randomMachineName(),
-      'user_id' => \Drupal::currentUser()->id(),
+      'user_id' => $this->user->id(),
       'field_test_text' => array(
         'value' => $this->randomMachineName(),
         'format' => 'full_html',
       ),
     );
-    $this->entity = entity_create('entity_test_mulrev', $this->values);
+    $this->entity = EntityTestMulRev::create($this->values);
     $this->entity->save();
 
     $this->serializer = $this->container->get('serializer');
@@ -85,11 +110,20 @@ class EntitySerializationTest extends NormalizerTestBase {
       'type' => array(
         array('value' => 'entity_test_mulrev'),
       ),
+      'created' => array(
+        array('value' => $this->entity->created->value),
+      ),
       'user_id' => array(
-        array('target_id' => $this->values['user_id']),
+        array(
+          'target_id' => $this->user->id(),
+          'url' => $this->user->url(),
+        ),
       ),
       'revision_id' => array(
         array('value' => 1),
+      ),
+      'default_langcode' => array(
+        array('value' => TRUE),
       ),
       'field_test_text' => array(
         array(
@@ -105,6 +139,26 @@ class EntitySerializationTest extends NormalizerTestBase {
       $this->assertEqual($expected[$fieldName], $normalized[$fieldName], "ComplexDataNormalizer produces expected array for $fieldName.");
     }
     $this->assertEqual(array_diff_key($normalized, $expected), array(), 'No unexpected data is added to the normalized array.');
+  }
+
+  /**
+   * Tests user normalization, using the entity_serialization_test module to
+   * override some default access controls.
+   */
+  public function testUserNormalize() {
+    // Test password isn't available.
+    $normalized = $this->serializer->normalize($this->user);
+
+    $this->assertFalse(array_key_exists('pass', $normalized), '"pass" key does not exist in normalized user');
+    $this->assertFalse(array_key_exists('mail', $normalized), '"mail" key does not exist in normalized user');
+
+    // Test again using our test user, so that our access control override will
+    // allow password viewing.
+    $normalized = $this->serializer->normalize($this->user, NULL, ['account' => $this->user]);
+
+    // The key 'pass' will now exist, but the password value should be
+    // normalized to NULL.
+    $this->assertIdentical($normalized['pass'], [NULL], '"pass" value is normalized to [NULL]');
   }
 
   /**
@@ -135,8 +189,10 @@ class EntitySerializationTest extends NormalizerTestBase {
       'langcode' => '<langcode><value>en</value></langcode>',
       'name' => '<name><value>' . $this->values['name'] . '</value></name>',
       'type' => '<type><value>entity_test_mulrev</value></type>',
-      'user_id' => '<user_id><target_id>' . $this->values['user_id'] . '</target_id></user_id>',
+      'created' => '<created><value>' . $this->entity->created->value . '</value></created>',
+      'user_id' => '<user_id><target_id>' . $this->user->id() . '</target_id><url>' . $this->user->url() . '</url></user_id>',
       'revision_id' => '<revision_id><value>' . $this->entity->getRevisionId() . '</value></revision_id>',
+      'default_langcode' => '<default_langcode><value>1</value></default_langcode>',
       'field_test_text' => '<field_test_text><value>' . $this->values['field_test_text']['value'] . '</value><format>' . $this->values['field_test_text']['format'] . '</format></field_test_text>',
     );
     // Sort it in the same order as normalised.
@@ -161,7 +217,7 @@ class EntitySerializationTest extends NormalizerTestBase {
 
     foreach (array('json', 'xml') as $type) {
       $denormalized = $this->serializer->denormalize($normalized, $this->entityClass, $type, array('entity_type' => 'entity_test_mulrev'));
-      $this->assertTrue($denormalized instanceof $this->entityClass, String::format('Denormalized entity is an instance of @class', array('@class' => $this->entityClass)));
+      $this->assertTrue($denormalized instanceof $this->entityClass, SafeMarkup::format('Denormalized entity is an instance of @class', array('@class' => $this->entityClass)));
       $this->assertIdentical($denormalized->getEntityTypeId(), $this->entity->getEntityTypeId(), 'Expected entity type found.');
       $this->assertIdentical($denormalized->bundle(), $this->entity->bundle(), 'Expected entity bundle found.');
       $this->assertIdentical($denormalized->uuid(), $this->entity->uuid(), 'Expected entity UUID found.');

@@ -1,6 +1,7 @@
 <?php
 /**
- * Contains \Drupal\system\Tests\Block\SystemMenuBlockTest
+ * @file
+ * Contains \Drupal\system\Tests\Block\SystemMenuBlockTest.
  */
 
 namespace Drupal\system\Tests\Block;
@@ -39,6 +40,7 @@ class SystemMenuBlockTest extends KernelTestBase {
     'menu_link_content',
     'field',
     'user',
+    'link',
   );
 
   /**
@@ -139,7 +141,7 @@ class SystemMenuBlockTest extends KernelTestBase {
       3 => MenuLinkMock::create(array('id' => 'test.example3', 'route_name' => 'example3', 'title' => 'baz', 'parent' => 'test.example2', 'weight' => 2)),
       4 => MenuLinkMock::create(array('id' => 'test.example4', 'route_name' => 'example4', 'title' => 'qux', 'parent' => 'test.example3', 'weight' => 3)),
       5 => MenuLinkMock::create(array('id' => 'test.example5', 'route_name' => 'example5', 'title' => 'foofoo', 'parent' => '', 'expanded' => TRUE, 'weight' => 4)),
-      6 => MenuLinkMock::create(array('id' => 'test.example6', 'route_name' => '', 'url' => 'https://drupal.org/', 'title' => 'barbar', 'parent' => '', 'weight' => 5)),
+      6 => MenuLinkMock::create(array('id' => 'test.example6', 'route_name' => '', 'url' => 'https://www.drupal.org/', 'title' => 'barbar', 'parent' => '', 'weight' => 5)),
       7 => MenuLinkMock::create(array('id' => 'test.example7', 'route_name' => 'example7', 'title' => 'bazbaz', 'parent' => 'test.example5', 'weight' => 6)),
       8 => MenuLinkMock::create(array('id' => 'test.example8', 'route_name' => 'example8', 'title' => 'quxqux', 'parent' => '', 'weight' => 7)),
     );
@@ -160,9 +162,9 @@ class SystemMenuBlockTest extends KernelTestBase {
       'theme' => 'stark',
     ));
 
-    $dependencies = $block->calculateDependencies();
+    $dependencies = $block->calculateDependencies()->getDependencies();
     $expected = array(
-      'entity' => array(
+      'config' => array(
         'system.menu.' . $this->menu->id()
       ),
       'module' => array(
@@ -238,6 +240,12 @@ class SystemMenuBlockTest extends KernelTestBase {
     $request->attributes->set(RouteObjectInterface::ROUTE_NAME, 'example3');
     $request->attributes->set(RouteObjectInterface::ROUTE_OBJECT, $route);
     $this->container->get('request_stack')->push($request);
+    // \Drupal\Core\Menu\MenuActiveTrail uses the cache collector pattern, which
+    // includes static caching. Since this second scenario simulates a second
+    // request, we must also simulate it for the MenuActiveTrail service, by
+    // clearing the cache collector's static cache.
+    \Drupal::service('menu.active_trail')->clear();
+
     $active_trail_expectations = [];
     $active_trail_expectations['all'] = [
       'test.example1' => [],
@@ -287,7 +295,7 @@ class SystemMenuBlockTest extends KernelTestBase {
    * Converts the result of MenuLinkTree::build() in a "menu link ID tree".
    *
    * @param array $build
-   *   The return value of of MenuLinkTree::build()
+   *   The return value of MenuLinkTree::build()
    *
    * @return array
    *   The "menu link ID tree" representation of the given render array.

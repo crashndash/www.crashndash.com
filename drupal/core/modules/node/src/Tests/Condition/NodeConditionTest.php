@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\condition\Tests\Condition\NodeConditionTest.
+ * Contains \Drupal\node\Tests\Condition\NodeConditionTest.
  */
 
 namespace Drupal\node\Tests\Condition;
@@ -20,7 +20,6 @@ class NodeConditionTest extends EntityUnitTestBase {
 
   protected function setUp() {
     parent::setUp();
-    $this->installEntitySchema('node');
 
     // Create the node bundles required for testing.
     $type = entity_create('node_type', array('type' => 'page', 'name' => 'page'));

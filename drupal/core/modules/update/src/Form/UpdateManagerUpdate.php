@@ -7,11 +7,11 @@
 
 namespace Drupal\update\Form;
 
-use Drupal\Component\Utility\String;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Form\FormBase;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\State\StateInterface;
+use Drupal\Core\Url;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -49,7 +49,7 @@ class UpdateManagerUpdate extends FormBase {
   /**
    * {@inheritdoc}
    */
-  public function getFormID() {
+  public function getFormId() {
     return 'update_manager_update_form';
   }
 
@@ -111,17 +111,17 @@ class UpdateManagerUpdate extends FormBase {
       // The project name to display can vary based on the info we have.
       if (!empty($project['title'])) {
         if (!empty($project['link'])) {
-          $project_name = _l($project['title'], $project['link']);
+          $project_name = $this->l($project['title'], Url::fromUri($project['link']));
         }
         else {
-          $project_name = String::checkPlain($project['title']);
+          $project_name = $project['title'];
         }
       }
       elseif (!empty($project['info']['name'])) {
-        $project_name = String::checkPlain($project['info']['name']);
+        $project_name = $project['info']['name'];
       }
       else {
-        $project_name = String::checkPlain($name);
+        $project_name = $name;
       }
       if ($project['project_type'] == 'theme' || $project['project_type'] == 'theme-disabled') {
         $project_name .= ' ' . $this->t('(Theme)');
@@ -134,16 +134,29 @@ class UpdateManagerUpdate extends FormBase {
       }
 
       $recommended_release = $project['releases'][$project['recommended']];
-      $recommended_version = $recommended_release['version'] . ' ' . _l($this->t('(Release notes)'), $recommended_release['release_link'], array('attributes' => array('title' => $this->t('Release notes for @project_title', array('@project_title' => $project['title'])))));
+      $recommended_version = '{{ release_version }} (<a href="{{ release_link }}" title="{{ project_title }}">{{ release_notes }}</a>)';
       if ($recommended_release['version_major'] != $project['existing_major']) {
-        $recommended_version .= '<div title="Major upgrade warning" class="update-major-version-warning">' . $this->t('This update is a major version update which means that it may not be backwards compatible with your currently running version.  It is recommended that you read the release notes and proceed at your own risk.') . '</div>';
+        $recommended_version .= '<div title="{{ major_update_warning_title }}" class="update-major-version-warning">{{ major_update_warning_text }}</div>';
       }
+
+      $recommended_version = array(
+        '#type' => 'inline_template',
+        '#template' => $recommended_version,
+        '#context' => array(
+          'release_version' => $recommended_release['version'],
+          'release_link' => $recommended_release['release_link'],
+          'project_title' => $this->t('Release notes for @project_title', array('@project_title' => $project['title'])),
+          'major_update_warning_title' => $this->t('Major upgrade warning'),
+          'major_update_warning_text' => $this->t('This update is a major version update which means that it may not be backwards compatible with your currently running version. It is recommended that you read the release notes and proceed at your own risk.'),
+          'release_notes' => $this->t('Release notes'),
+        ),
+      );
 
       // Create an entry for this project.
       $entry = array(
         'title' => $project_name,
         'installed_version' => $project['existing_version'],
-        'recommended_version' => $recommended_version,
+        'recommended_version' => array('data' => $recommended_version),
       );
 
       switch ($project['status']) {
@@ -184,9 +197,9 @@ class UpdateManagerUpdate extends FormBase {
 
       if ($needs_manual) {
         // There are no checkboxes in the 'Manual updates' table so it will be
-        // rendered by _theme('table'), not _theme('tableselect'). Since the data
-        // formats are incompatible, we convert now to the format expected by
-        // _theme('table').
+        // rendered by '#theme' => 'table', not '#theme' => 'tableselect'. Since
+        // the data formats are incompatible, we convert now to the format
+        // expected by '#theme' => 'table'.
         unset($entry['#weight']);
         $attributes = $entry['#attributes'];
         unset($entry['#attributes']);

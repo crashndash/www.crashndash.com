@@ -7,14 +7,14 @@
 
 namespace Drupal\system\Form;
 
-use Drupal\Component\Utility\String;
 use Drupal\Core\Config\ConfigFactoryInterface;
-use Drupal\Core\Datetime\DateFormatter;
+use Drupal\Core\Datetime\DateFormatterInterface;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\StreamWrapper\PrivateStream;
 use Drupal\Core\StreamWrapper\PublicStream;
 use Drupal\Core\Form\ConfigFormBase;
 use Drupal\Core\StreamWrapper\StreamWrapperInterface;
-use Drupal\Core\StreamWrapper\StreamWrapperManager;
+use Drupal\Core\StreamWrapper\StreamWrapperManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
 
 /**
@@ -25,14 +25,14 @@ class FileSystemForm extends ConfigFormBase {
   /**
    * The date formatter service.
    *
-   * @var \Drupal\Core\Datetime\DateFormatter
+   * @var \Drupal\Core\Datetime\DateFormatterInterface
    */
   protected $dateFormatter;
 
   /**
    * The stream wrapper manager.
    *
-   * @var \Drupal\Core\StreamWrapper\StreamWrapperManager
+   * @var \Drupal\Core\StreamWrapper\StreamWrapperManagerInterface
    */
   protected $streamWrapperManager;
 
@@ -41,12 +41,12 @@ class FileSystemForm extends ConfigFormBase {
    *
    * @param \Drupal\Core\Config\ConfigFactoryInterface $config_factory
    *   The factory for configuration objects.
-   * @param \Drupal\Core\Datetime\DateFormatter $date_formatter
+   * @param \Drupal\Core\Datetime\DateFormatterInterface $date_formatter
    *   The date formatter service.
-   * @param \Drupal\Core\StreamWrapper\StreamWrapperManager $stream_wrapper_manager
+   * @param \Drupal\Core\StreamWrapper\StreamWrapperManagerInterface $stream_wrapper_manager
    *   The stream wrapper manager.
    */
-  public function __construct(ConfigFactoryInterface $config_factory, DateFormatter $date_formatter, StreamWrapperManager $stream_wrapper_manager) {
+  public function __construct(ConfigFactoryInterface $config_factory, DateFormatterInterface $date_formatter, StreamWrapperManagerInterface $stream_wrapper_manager) {
     parent::__construct($config_factory);
     $this->dateFormatter = $date_formatter;
     $this->streamWrapperManager = $stream_wrapper_manager;
@@ -73,23 +73,34 @@ class FileSystemForm extends ConfigFormBase {
   /**
    * {@inheritdoc}
    */
+  protected function getEditableConfigNames() {
+    return ['system.file'];
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function buildForm(array $form, FormStateInterface $form_state) {
     $config = $this->config('system.file');
     $form['file_public_path'] = array(
       '#type' => 'item',
       '#title' => t('Public file system path'),
-      '#default_value' => PublicStream::basePath(),
       '#markup' => PublicStream::basePath(),
       '#description' => t('A local file system path where public files will be stored. This directory must exist and be writable by Drupal. This directory must be relative to the Drupal installation directory and be accessible over the web. This must be changed in settings.php'),
     );
 
+    $form['file_public_base_url'] = array(
+      '#type' => 'item',
+      '#title' => t('Public file base URL'),
+      '#markup' => PublicStream::baseUrl(),
+      '#description' => t('The base URL that will be used for public file URLs. This can be changed in settings.php'),
+    );
+
     $form['file_private_path'] = array(
-      '#type' => 'textfield',
+      '#type' => 'item',
       '#title' => t('Private file system path'),
-      '#default_value' => $config->get('path.private'),
-      '#maxlength' => 255,
-      '#description' => t('An existing local file system path for storing private files. It should be writable by Drupal and not accessible over the web. See the online handbook for <a href="@handbook">more information about securing private files</a>.', array('@handbook' => 'http://drupal.org/documentation/modules/file')),
-      '#after_build' => array('system_check_directory'),
+      '#markup' => (PrivateStream::basePath() ? PrivateStream::basePath() : t('Not set')),
+      '#description' => t('An existing local file system path for storing private files. It should be writable by Drupal and not accessible over the web. This must be changed in settings.php'),
     );
 
     $form['file_temporary_path'] = array(
@@ -133,7 +144,6 @@ class FileSystemForm extends ConfigFormBase {
    */
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $config = $this->config('system.file')
-      ->set('path.private', $form_state->getValue('file_private_path'))
       ->set('path.temporary', $form_state->getValue('file_temporary_path'))
       ->set('temporary_maximum_age', $form_state->getValue('temporary_maximum_age'));
 

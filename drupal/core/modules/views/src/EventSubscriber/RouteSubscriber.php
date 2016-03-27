@@ -7,7 +7,6 @@
 
 namespace Drupal\views\EventSubscriber;
 
-use Drupal\Core\Page\HtmlPage;
 use Drupal\Core\Entity\EntityManagerInterface;
 use Drupal\Core\State\StateInterface;
 use Drupal\Core\Routing\RouteSubscriberBase;
@@ -16,8 +15,6 @@ use Drupal\views\Plugin\views\display\DisplayRouterInterface;
 use Drupal\views\ViewExecutable;
 use Drupal\views\Views;
 use Symfony\Component\Routing\RouteCollection;
-use Symfony\Component\HttpKernel\Event\GetResponseForControllerResultEvent;
-use Symfony\Component\HttpKernel\KernelEvents;
 
 /**
  * Builds up the routes of all views.
@@ -26,7 +23,6 @@ use Symfony\Component\HttpKernel\KernelEvents;
  * routes are overridden by views. This information is used to determine which
  * views have to be added by views in the dynamic event.
  *
- * Additional to adding routes it also changes the htmlpage response code.
  *
  * @see \Drupal\views\Plugin\views\display\PathPluginBase
  */
@@ -85,7 +81,6 @@ class RouteSubscriber extends RouteSubscriberBase {
    */
   public static function getSubscribedEvents() {
     $events = parent::getSubscribedEvents();
-    $events[KernelEvents::VIEW][] = array('onHtmlPage', 75);
     $events[RoutingEvents::FINISHED] = array('routeRebuildFinished');
     // Ensure to run after the entity resolver subscriber
     // @see \Drupal\Core\EventSubscriber\EntityRouteAlterSubscriber
@@ -104,30 +99,12 @@ class RouteSubscriber extends RouteSubscriberBase {
       // @todo Convert this method to some service.
       $views = $this->getApplicableViews();
       foreach ($views as $data) {
-        list($view, $display_id) = $data;
-        $id = $view->storage->id();
-        $this->viewsDisplayPairs[] = $id . '.' . $display_id;
+        list($view_id, $display_id) = $data;
+        $this->viewsDisplayPairs[] = $view_id . '.' . $display_id;
       }
       $this->viewsDisplayPairs = array_combine($this->viewsDisplayPairs, $this->viewsDisplayPairs);
     }
     return $this->viewsDisplayPairs;
-  }
-
-  /**
-   * Sets the proper response code coming from the http status area handler.
-   *
-   * @param \Symfony\Component\HttpKernel\Event\GetResponseForControllerResultEvent $event
-   *   The Event to process.
-   *
-   * @see \Drupal\views\Plugin\views\area\HTTPStatusCode
-   */
-  public function onHtmlPage(GetResponseForControllerResultEvent $event) {
-    $page = $event->getControllerResult();
-    if ($page instanceof HtmlPage) {
-      if (($request = $event->getRequest()) && $request->attributes->has('view_id')) {
-        $page->setStatusCode($request->attributes->get('_http_statuscode', 200));
-      };
-    }
   }
 
   /**

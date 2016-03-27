@@ -2,16 +2,14 @@
 
 /**
  * @file
- * Contains \Drupal\Tests\Core\Entity\EntityAdapterUnitTest.
+ * Contains \Drupal\Tests\Core\Entity\TypedData\EntityAdapterUnitTest.
  */
 
 namespace Drupal\Tests\Core\Entity\TypedData;
 
-use Drupal\Core\Access\AccessResult;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
 use Drupal\Core\Entity\Plugin\DataType\EntityAdapter;
 use Drupal\Core\Field\BaseFieldDefinition;
-use Drupal\Core\Field\FieldItemListInterface;
 use Drupal\Core\Language\LanguageInterface;
 use Drupal\Tests\UnitTestCase;
 use Drupal\Core\Language\Language;
@@ -164,11 +162,6 @@ class EntityAdapterUnitTest extends UnitTestCase {
       ->method('getValidationConstraintManager')
       ->willReturn($validation_constraint_manager);
 
-    $this->fieldItemList = $this->getMock('\Drupal\Core\Field\FieldItemListInterface');
-    $this->typedDataManager->expects($this->any())
-      ->method('getPropertyInstance')
-      ->willReturn($this->fieldItemList);
-
     $not_specified = new Language(array('id' => LanguageInterface::LANGCODE_NOT_SPECIFIED, 'locked' => TRUE));
     $this->languageManager = $this->getMock('\Drupal\Core\Language\LanguageManagerInterface');
     $this->languageManager->expects($this->any())
@@ -189,6 +182,11 @@ class EntityAdapterUnitTest extends UnitTestCase {
     $this->fieldTypePluginManager->expects($this->any())
       ->method('getDefaultFieldSettings')
       ->will($this->returnValue(array()));
+
+    $this->fieldItemList = $this->getMock('\Drupal\Core\Field\FieldItemListInterface');
+    $this->fieldTypePluginManager->expects($this->any())
+      ->method('createFieldItemList')
+      ->willReturn($this->fieldItemList);
 
     $container = new ContainerBuilder();
     $container->set('entity.manager', $this->entityManager);

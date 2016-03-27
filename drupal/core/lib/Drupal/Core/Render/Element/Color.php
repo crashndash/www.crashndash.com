@@ -14,6 +14,18 @@ use Drupal\Component\Utility\Color as ColorUtility;
 /**
  * Provides a form element for choosing a color.
  *
+ * Properties:
+ * - #default_value: Default value, in a format like #ffffff.
+ *
+ * Example usage:
+ * @code
+ * $form['color'] = array(
+ *   '#type' => 'color',
+ *   '#title' => 'Color',
+ *   '#default_value' => '#ffffff',
+ * );
+ * @endcode
+ *
  * @FormElement("color")
  */
 class Color extends FormElement {
@@ -62,14 +74,14 @@ class Color extends FormElement {
   }
 
   /**
-   * Prepares a #type 'color' render element for theme_input().
+   * Prepares a #type 'color' render element for input.html.twig.
    *
    * @param array $element
    *   An associative array containing the properties of the element.
    *   Properties used: #title, #value, #description, #attributes.
    *
    * @return array
-   *   The $element with prepared variables ready for theme_input().
+   *   The $element with prepared variables ready for input.html.twig.
    */
   public static function preRenderColor($element) {
     $element['#attributes']['type'] = 'color';

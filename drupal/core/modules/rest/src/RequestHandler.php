@@ -2,18 +2,18 @@
 
 /**
  * @file
- * Definition of Drupal\rest\RequestHandler.
+ * Contains \Drupal\rest\RequestHandler.
  */
 
 namespace Drupal\rest;
 
+use Drupal\Core\Render\RenderContext;
 use Drupal\Core\Routing\RouteMatchInterface;
 use Symfony\Component\DependencyInjection\ContainerAwareInterface;
 use Symfony\Component\DependencyInjection\ContainerAwareTrait;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpException;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\UnsupportedMediaTypeHttpException;
 use Symfony\Component\Serializer\Exception\UnexpectedValueException;
 
@@ -44,7 +44,7 @@ class RequestHandler implements ContainerAwareInterface {
       ->get('plugin.manager.rest')
       ->getInstance(array('id' => $plugin));
 
-    // Deserialze incoming data if available.
+    // Deserialize incoming data if available.
     $serializer = $this->container->get('serializer');
     $received = $request->getContent();
     $unserialized = NULL;
@@ -76,7 +76,7 @@ class RequestHandler implements ContainerAwareInterface {
 
     // Determine the request parameters that should be passed to the resource
     // plugin.
-    $route_parameters = $request->attributes->get('_route_params');
+    $route_parameters = $route_match->getParameters();
     $parameters = array();
     // Filter out all internal parameters starting with "_".
     foreach ($route_parameters as $key => $parameter) {
@@ -102,12 +102,27 @@ class RequestHandler implements ContainerAwareInterface {
       return new Response($content, $e->getStatusCode(), $headers);
     }
 
-    // Serialize the outgoing data for the response, if available.
-    $data = $response->getResponseData();
-    if ($data != NULL) {
-      $output = $serializer->serialize($data, $format);
+    if ($response instanceof ResourceResponse) {
+      $data = $response->getResponseData();
+      // Serialization can invoke rendering (e.g., generating URLs), but the
+      // serialization API does not provide a mechanism to collect the
+      // bubbleable metadata associated with that (e.g., language and other
+      // contexts), so instead, allow those to "leak" and collect them here in
+      // a render context.
+      // @todo Add test coverage for language negotiation contexts in
+      //   https://www.drupal.org/node/2135829.
+      $context = new RenderContext();
+      $output = $this->container->get('renderer')->executeInRenderContext($context, function() use ($serializer, $data, $format) {
+        return $serializer->serialize($data, $format);
+      });
       $response->setContent($output);
+      if (!$context->isEmpty()) {
+        $response->addCacheableDependency($context->pop());
+      }
+
       $response->headers->set('Content-Type', $request->getMimeType($format));
+      // Add rest settings config's cache tags.
+      $response->addCacheableDependency($this->container->get('config.factory')->get('rest.settings'));
     }
     return $response;
   }

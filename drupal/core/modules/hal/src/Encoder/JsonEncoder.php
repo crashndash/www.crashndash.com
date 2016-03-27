@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\hal\JsonEncoder.
+ * Contains \Drupal\hal\Encoder\JsonEncoder.
  */
 
 namespace Drupal\hal\Encoder;
@@ -12,7 +12,7 @@ use Symfony\Component\Serializer\Encoder\JsonEncoder as SymfonyJsonEncoder;
 /**
  * Encodes HAL data in JSON.
  *
- * Simply respond to application/hal+json requests using the JSON encoder.
+ * Simply respond to hal_json format requests using the JSON encoder.
  */
 class JsonEncoder extends SymfonyJsonEncoder {
 
@@ -24,14 +24,14 @@ class JsonEncoder extends SymfonyJsonEncoder {
   protected $format = 'hal_json';
 
   /**
-   * Overrides \Symfony\Component\Serializer\Encoder\JsonEncoder::supportsEncoding()
+   * {@inheritdoc}
    */
   public function supportsEncoding($format) {
     return $format == $this->format;
   }
 
   /**
-   * Overrides \Symfony\Component\Serializer\Encoder\JsonEncoder::supportsDecoding()
+   * {@inheritdoc}
    */
   public function supportsDecoding($format) {
     return $format == $this->format;

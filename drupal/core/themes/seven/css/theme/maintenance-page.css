@@ -2,20 +2,18 @@
  * @file
  * Maintenance theming.
  */
-.maintenance-background {
+.maintenance-page {
   background-color: #e0e0d8;
   background-image: -webkit-radial-gradient(hsl(203, 2%, 90%), hsl(203, 2%, 95%));
   background-image: radial-gradient(hsl(203, 2%, 90%), hsl(203, 2%, 95%));
   background-repeat: repeat;
-  background-position: left top, 50% 50%;
+  background-position: left top, 50% 50%; /* LTR */
   min-height: 100%;
 }
-
-/* Maintenance theming */
-.install-page,
-.maintenance-page {
-  background: none;
+[dir="rtl"] .maintenance-page {
+  background-position: right top, 50% 50%;
 }
+
 .page-title {
   font-size: 2em;
   line-height: 1.2em;
@@ -68,12 +66,12 @@
   [dir="rtl"] .task-list li {
     padding: 0.5em 3.85em 0.5em 1em;
   }
-  .task-list .active {
+  .task-list .is-active {
     background: #ebeae4;
     position: relative;
     font-weight: normal;
   }
-  .task-list .active:after {
+  .task-list .is-active:after {
     left: 100%; /* LTR */
     border: solid transparent;
     border-color: rgba(235, 234, 228, 0);
@@ -87,7 +85,7 @@
     top: 50%;
     margin-top: -1.32em;
   }
-  [dir="rtl"] .task-list .active:after {
+  [dir="rtl"] .task-list .is-active:after {
     left: auto;
     right: 100%;
     border-left-color: transparent;
@@ -166,6 +164,9 @@
   ul {
     padding: 15px;
     margin: 0.25em 0;
+  }
+  [dir="rtl"] ul {
+    margin-right: 0; /* Overrides default [dir="rtl"] ul margin */
   }
   .layout-sidebar-first {
     float: left; /* LTR */

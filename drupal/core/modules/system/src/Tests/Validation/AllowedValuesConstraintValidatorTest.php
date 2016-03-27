@@ -2,20 +2,20 @@
 
 /**
  * @file
- * Contains Drupal\system\Tests\Validation\AllowedValuesConstraintValidatorTest.
+ * Contains \Drupal\system\Tests\Validation\AllowedValuesConstraintValidatorTest.
  */
 
 namespace Drupal\system\Tests\Validation;
 
 use Drupal\Core\TypedData\DataDefinition;
-use Drupal\simpletest\DrupalUnitTestBase;
+use Drupal\simpletest\KernelTestBase;
 
 /**
  * Tests AllowedValues validation constraint with both valid and invalid values.
  *
  * @group Validation
  */
-class AllowedValuesConstraintValidatorTest extends DrupalUnitTestBase {
+class AllowedValuesConstraintValidatorTest extends KernelTestBase {
 
   /**
    * The typed data manager to use.

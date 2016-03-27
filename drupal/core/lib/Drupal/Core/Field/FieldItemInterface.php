@@ -28,6 +28,9 @@ interface FieldItemInterface extends ComplexDataInterface {
   /**
    * Defines field item properties.
    *
+   * Properties that are required to constitute a valid, non-empty item should
+   * be denoted with \Drupal\Core\TypedData\DataDefinition::setRequired().
+   *
    * @return \Drupal\Core\TypedData\DataDefinitionInterface[]
    *   An array of property definitions of contained properties, keyed by
    *   property name.
@@ -67,18 +70,20 @@ interface FieldItemInterface extends ComplexDataInterface {
    *   following key/value pairs:
    *   - columns: An array of Schema API column specifications, keyed by column
    *     name. The columns need to be a subset of the properties defined in
-   *     propertyDefinitions(). It is recommended to avoid having the column
-   *     definitions depend on field settings when possible. No assumptions
-   *     should be made on how storage engines internally use the original
-   *     column name to structure their storage.
+   *     propertyDefinitions(). The 'not null' property is ignored if present,
+   *     as it is determined automatically by the storage controller depending
+   *     on the table layout and the property definitions. It is recommended to
+   *     avoid having the column definitions depend on field settings when
+   *     possible. No assumptions should be made on how storage engines
+   *     internally use the original column name to structure their storage.
    *   - unique keys: (optional) An array of Schema API unique key definitions.
    *     Only columns that appear in the 'columns' array are allowed.
    *   - indexes: (optional) An array of Schema API index definitions. Only
    *     columns that appear in the 'columns' array are allowed. Those indexes
-   *     will be used as default indexes. Callers of field_create_field() can
-   *     specify additional indexes or, at their own risk, modify the default
-   *     indexes specified by the field-type module. Some storage engines might
-   *     not support indexes.
+   *     will be used as default indexes. Field definitions can specify
+   *     additional indexes or, at their own risk, modify the default indexes
+   *     specified by the field-type module. Some storage engines might not
+   *     support indexes.
    *   - foreign keys: (optional) An array of Schema API foreign key
    *     definitions. Note, however, that the field data is not necessarily
    *     stored in SQL. Also, the possible usage is limited, as you cannot
@@ -117,11 +122,11 @@ interface FieldItemInterface extends ComplexDataInterface {
    * @param $property_name
    *   The name of the property to get; e.g., 'title' or 'name'.
    *
-   * @throws \InvalidArgumentException
-   *   If a not existing property is accessed.
-   *
    * @return \Drupal\Core\TypedData\TypedDataInterface
    *   The property object.
+   *
+   * @throws \InvalidArgumentException
+   *   If a not existing property is accessed.
    */
   public function __get($property_name);
 
@@ -146,7 +151,7 @@ interface FieldItemInterface extends ComplexDataInterface {
    * @param $property_name
    *   The name of the property to get; e.g., 'title' or 'name'.
    *
-   * @return boolean
+   * @return bool
    *   Returns TRUE if the property exists and is set, FALSE otherwise.
    */
   public function __isset($property_name);
@@ -178,26 +183,39 @@ interface FieldItemInterface extends ComplexDataInterface {
   /**
    * Defines custom presave behavior for field values.
    *
-   * This method is called before insert() and update() methods, and before
-   * values are written into storage.
+   * This method is called during the process of saving an entity, just before
+   * values are written into storage. When storing a new entity, its identifier
+   * will not be available yet. This should be used to massage item property
+   * values or perform any other operation that needs to happen before values
+   * are stored. For instance this is the proper phase to auto-create a new
+   * entity for an entity reference field item, because this way it will be
+   * possible to store the referenced entity identifier.
    */
   public function preSave();
 
   /**
-   * Defines custom insert behavior for field values.
+   * Defines custom post-save behavior for field values.
    *
-   * This method is called during the process of inserting an entity, just
-   * before values are written into storage.
-   */
-  public function insert();
-
-  /**
-   * Defines custom update behavior for field values.
+   * This method is called during the process of saving an entity, just after
+   * values are written into storage. This is useful mostly when the business
+   * logic to be implemented always requires the entity identifier, even when
+   * storing a new entity. For instance, when implementing circular entity
+   * references, the referenced entity will be created on pre-save with a dummy
+   * value for the referring entity identifier, which will be updated with the
+   * actual one on post-save.
    *
-   * This method is called during the process of updating an entity, just before
-   * values are written into storage.
+   * In the rare cases where item properties depend on the entity identifier,
+   * massaging logic will have to be implemented on post-save and returning TRUE
+   * will allow them to be rewritten to the storage with the updated values.
+   *
+   * @param bool $update
+   *   Specifies whether the entity is being updated or created.
+   *
+   * @return bool
+   *   Whether field items should be rewritten to the storage as a consequence
+   *   of the logic implemented by the custom behavior.
    */
-  public function update();
+  public function postSave($update);
 
   /**
    * Defines custom delete behavior for field values.
@@ -335,7 +353,7 @@ interface FieldItemInterface extends ComplexDataInterface {
   /**
    * Returns a form for the storage-level settings.
    *
-   * Invoked from \Drupal\field_ui\Form\FieldStorageEditForm to allow
+   * Invoked from \Drupal\field_ui\Form\FieldStorageConfigEditForm to allow
    * administrators to configure storage-level settings.
    *
    * Field storage might reject settings changes that affect the field
@@ -359,7 +377,7 @@ interface FieldItemInterface extends ComplexDataInterface {
   /**
    * Returns a form for the field-level settings.
    *
-   * Invoked from \Drupal\field_ui\Form\FieldEditForm to allow
+   * Invoked from \Drupal\field_ui\Form\FieldConfigEditForm to allow
    * administrators to configure field-level settings.
    *
    * @param array $form
@@ -371,5 +389,82 @@ interface FieldItemInterface extends ComplexDataInterface {
    *   The form definition for the field settings.
    */
   public function fieldSettingsForm(array $form, FormStateInterface $form_state);
+
+  /**
+   * Calculates dependencies for field items.
+   *
+   * Dependencies are saved in the field configuration entity and are used to
+   * determine configuration synchronization order. For example, if the field
+   * type's default value is a content entity, this method should return an
+   * array of dependencies listing the content entities.
+   *
+   * @param \Drupal\Core\Field\FieldDefinitionInterface $field_definition
+   *   The field definition.
+   *
+   * @return array
+   *   An array of dependencies grouped by type (config, content, module,
+   *   theme). For example:
+   *   @code
+   *   array(
+   *     'config' => array('user.role.anonymous', 'user.role.authenticated'),
+   *     'content' => array('node:article:f0a189e6-55fb-47fb-8005-5bef81c44d6d'),
+   *     'module' => array('node', 'user'),
+   *     'theme' => array('seven'),
+   *   );
+   *   @endcode
+   *
+   * @see \Drupal\Core\Config\Entity\ConfigDependencyManager
+   * @see \Drupal\Core\Config\Entity\ConfigEntityInterface::getConfigDependencyName()
+   */
+  public static function calculateDependencies(FieldDefinitionInterface $field_definition);
+
+  /**
+   * Calculates dependencies for field items on the storage level.
+   *
+   * Dependencies are saved in the field storage configuration entity and are
+   * used to determine configuration synchronization order. For example, if the
+   * field type storage depends on a particular entity type, this method should
+   * return an array of dependencies listing the module that provides the entity
+   * type.
+   *
+   * Dependencies returned from this method are stored in field storage
+   * configuration and are always considered hard dependencies. If the
+   * dependency is removed the field storage configuration must be deleted.
+   *
+   * @param \Drupal\Core\Field\FieldStorageDefinitionInterface $field_storage_definition
+   *   The field storage definition.
+   *
+   * @return array
+   *   An array of dependencies grouped by type (config, content, module,
+   *   theme). For example:
+   *   @code
+   *   [
+   *     'config' => ['user.role.anonymous', 'user.role.authenticated'],
+   *     'content' => ['node:article:f0a189e6-55fb-47fb-8005-5bef81c44d6d'],
+   *     'module' => ['node', 'user'],
+   *     'theme' => ['seven'],
+   *   ];
+   *   @endcode
+   *
+   * @see \Drupal\Core\Config\Entity\ConfigDependencyManager
+   * @see \Drupal\Core\Config\Entity\ConfigEntityInterface::getConfigDependencyName()
+   */
+  public static function calculateStorageDependencies(FieldStorageDefinitionInterface $field_storage_definition);
+
+  /**
+   * Informs the plugin that a dependency of the field will be deleted.
+   *
+   * @param \Drupal\Core\Field\FieldDefinitionInterface $field_definition
+   *   The field definition.
+   * @param array $dependencies
+   *   An array of dependencies that will be deleted keyed by dependency type.
+   *   Dependency types are, for example, entity, module and theme.
+   *
+   * @return bool
+   *   TRUE if the field definition has been changed as a result, FALSE if not.
+   *
+   * @see \Drupal\Core\Config\ConfigEntityInterface::onDependencyRemoval()
+   */
+  public static function onDependencyRemoval(FieldDefinitionInterface $field_definition, array $dependencies);
 
 }

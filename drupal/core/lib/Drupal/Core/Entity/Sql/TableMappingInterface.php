@@ -25,7 +25,7 @@ use Drupal\Core\Field\FieldStorageDefinitionInterface;
 interface TableMappingInterface {
 
   /**
-   * Returns a list of table names for this mapping.
+   * Gets a list of table names for this mapping.
    *
    * @return string[]
    *   An array of table names.
@@ -33,7 +33,7 @@ interface TableMappingInterface {
   public function getTableNames();
 
   /**
-   * Returns a list of all database columns for a given table.
+   * Gets a list of all database columns for a given table.
    *
    * @param string $table_name
    *   The name of the table to return the columns for.
@@ -45,7 +45,7 @@ interface TableMappingInterface {
   public function getAllColumns($table_name);
 
   /**
-   * Returns a list of names of fields stored in the specified table.
+   * Gets a list of names of fields stored in the specified table.
    *
    * @param string $table_name
    *   The name of the table to return the field names for.
@@ -56,7 +56,7 @@ interface TableMappingInterface {
   public function getFieldNames($table_name);
 
   /**
-   * Returns a mapping of field columns to database columns for a given field.
+   * Gets a mapping of field columns to database columns for a given field.
    *
    * @param string $field_name
    *   The name of the entity field to return the column mapping for.
@@ -69,7 +69,7 @@ interface TableMappingInterface {
   public function getColumnNames($field_name);
 
   /**
-   * Returns a list of extra database columns, which store denormalized data.
+   * Gets a list of extra database columns, which store denormalized data.
    *
    * These database columns do not belong to any entity fields. Any normalized
    * data that is stored should be associated with an entity field.
@@ -83,23 +83,37 @@ interface TableMappingInterface {
   public function getExtraColumns($table_name);
 
   /**
-   * A list of columns that can not be used as field type columns.
+   * Gets the list of columns that can not be used as field type columns.
    *
    * @return array
    */
   public function getReservedColumns();
 
   /**
-   * Generates a column name for a field.
+   * Generates a column name for a field property.
    *
    * @param \Drupal\Core\Field\FieldStorageDefinitionInterface $storage_definition
    *   The field storage definition.
-   * @param string $column
-   *   The name of the column.
+   * @param string $property_name
+   *   The name of the property.
    *
    * @return string
    *   A string containing a generated column name for a field data table that is
    *   unique among all other fields.
    */
-  public function getFieldColumnName(FieldStorageDefinitionInterface $storage_definition, $column);
+  public function getFieldColumnName(FieldStorageDefinitionInterface $storage_definition, $property_name);
+
+  /**
+   * Gets the table name for a given column.
+   *
+   * @param string $field_name
+   *   The name of the entity field to return the column mapping for.
+   *
+   * @return string
+   *   Table name for the given field.
+   *
+   * @throws \Drupal\Core\Entity\Sql\SqlContentEntityStorageException
+   */
+  public function getFieldTableName($field_name);
+
 }

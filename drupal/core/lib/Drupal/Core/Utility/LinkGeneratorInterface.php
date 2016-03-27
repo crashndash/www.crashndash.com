@@ -18,16 +18,30 @@ interface LinkGeneratorInterface {
   /**
    * Renders a link to a URL.
    *
+   * Examples:
+   * @code
+   * $link_generator = \Drupal::service('link_generator');
+   * $installer_url = \Drupal\Core\Url::fromUri('base://core/install.php');
+   * $installer_link = $link_generator->generate($text, $installer_url);
+   * $external_url = \Drupal\Core\Url::fromUri('http://example.com', ['query' => ['foo' => 'bar']]);
+   * $external_link = $link_generator->generate($text, $external_url);
+   * $internal_url = \Drupal\Core\Url::fromRoute('system.admin');
+   * $internal_link = $link_generator->generate($text, $internal_url);
+   * @endcode
    * However, for links enclosed in translatable text you should use t() and
    * embed the HTML anchor tag directly in the translated string. For example:
    * @code
-   * t('Visit the <a href="@url">content types</a> page', array('@url' => \Drupal::url('node.overview_types')));
+   * $text = t('Visit the <a href=":url">content types</a> page', array(':url' => \Drupal::url('entity.node_type.collection')));
    * @endcode
    * This keeps the context of the link title ('settings' in the example) for
    * translators.
    *
    * @param string|array $text
    *   The link text for the anchor tag as a translated string or render array.
+   *   Strings will be sanitized automatically. If you need to output HTML in
+   *   the link text, use a render array or an already sanitized string such as
+   *   the output of \Drupal\Component\Utility\Xss::filter() or
+   *   \Drupal\Component\Utility\SafeMarkup::format().
    * @param \Drupal\Core\Url $url
    *   The URL object used for the link. Amongst its options, the following may
    *   be set to affect the generated link:
@@ -36,11 +50,6 @@ interface LinkGeneratorInterface {
    *     must be a string; other elements are more flexible, as they just need
    *     to work as an argument for the constructor of the class
    *     Drupal\Core\Template\Attribute($options['attributes']).
-   *   - html: Whether $text is HTML or just plain-text. For
-   *     example, to make an image tag into a link, this must be set to TRUE, or
-   *     you will see the escaped HTML image tag. $text is not sanitized if
-   *     'html' is TRUE. The calling function must ensure that $text is already
-   *     safe. Defaults to FALSE.
    *   - language: An optional language object. If the path being linked to is
    *     internal to the site, $options['language'] is used to determine whether
    *     the link is "active", or pointing to the current page (the language as
@@ -52,8 +61,9 @@ interface LinkGeneratorInterface {
    *     sparingly since it is usually unnecessary and requires extra
    *     processing.
    *
-   * @return string
-   *   An HTML string containing a link to the given route and parameters.
+   * @return \Drupal\Core\GeneratedLink
+   *   A GeneratedLink object containing a link to the given route and
+   *   parameters and bubbleable metadata.
    *
    * @throws \Symfony\Component\Routing\Exception\RouteNotFoundException
    *   Thrown when the named route doesn't exist.
@@ -62,6 +72,9 @@ interface LinkGeneratorInterface {
    * @throws \Symfony\Component\Routing\Exception\InvalidParameterException
    *   Thrown when a parameter value for a placeholder is not correct because it
    *   does not match the requirement.
+   *
+   * @internal
+   *   Should not be used in user code. Use \Drupal\Core\Link instead.
    */
   public function generate($text, Url $url);
 
@@ -71,8 +84,13 @@ interface LinkGeneratorInterface {
    * @param \Drupal\Core\Link $link
    *   A link object to convert to a string.
    *
-   * @return string
-   *   An HTML string containing a link to the given link.
+   * @return \Drupal\Core\GeneratedLink
+   *   A GeneratedLink object containing a link to the given route and
+   *   parameters and bubbleable metadata.
+   *
+   * @internal
+   *   Should not be used in user code.
+   *   Use \Drupal\Core\Link instead.
    */
   public function generateFromLink(Link $link);
 

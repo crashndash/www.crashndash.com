@@ -9,6 +9,7 @@ namespace Drupal\Tests\Core\Entity;
 
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\DependencyInjection\ContainerBuilder;
+use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Field\BaseFieldDefinition;
 use Drupal\Core\Language\LanguageInterface;
 use Drupal\Tests\UnitTestCase;
@@ -166,6 +167,9 @@ class ContentEntityBaseUnitTest extends UnitTestCase {
     $this->fieldTypePluginManager->expects($this->any())
       ->method('getDefaultFieldSettings')
       ->will($this->returnValue(array()));
+    $this->fieldTypePluginManager->expects($this->any())
+      ->method('createFieldItemList')
+      ->will($this->returnValue($this->getMock('Drupal\Core\Field\FieldItemListInterface')));
 
     $container = new ContainerBuilder();
     $container->set('entity.manager', $this->entityManager);
@@ -229,9 +233,9 @@ class ContentEntityBaseUnitTest extends UnitTestCase {
       ->disableOriginalConstructor()
       ->getMockForAbstractClass();
 
-    $this->typedDataManager->expects($this->any())
-      ->method('getPropertyInstance')
-      ->with($this->entity->getTypedData(), 'revision_id', NULL)
+    $this->fieldTypePluginManager->expects($this->any())
+      ->method('createFieldItemList')
+      ->with($this->entity, 'revision_id', NULL)
       ->will($this->returnValue($field_item_list));
 
     $this->fieldDefinitions['revision_id']->getItemDefinition()->setClass(get_class($field_item));
@@ -240,6 +244,18 @@ class ContentEntityBaseUnitTest extends UnitTestCase {
     $this->assertTrue($this->entity->isNewRevision());
     $this->entity->setNewRevision(TRUE);
     $this->assertTRUE($this->entity->isNewRevision());
+  }
+
+  /**
+   * @covers ::setNewRevision
+   */
+  public function testSetNewRevisionException() {
+    $this->entityType->expects($this->once())
+      ->method('hasKey')
+      ->with('revision')
+      ->will($this->returnValue(FALSE));
+    $this->setExpectedException('LogicException', 'Entity type ' . $this->entityTypeId . ' does not support revisions.');
+    $this->entity->setNewRevision();
   }
 
   /**
@@ -335,6 +351,64 @@ class ContentEntityBaseUnitTest extends UnitTestCase {
   }
 
   /**
+   * Tests required validation.
+   *
+   * @covers ::validate
+   * @covers ::isValidationRequired
+   * @covers ::setValidationRequired
+   * @covers ::save
+   * @covers ::preSave
+   *
+   * @expectedException \LogicException
+   * @expectedExceptionMessage Entity validation was skipped.
+   */
+  public function testRequiredValidation() {
+    $validator = $this->getMock('\Symfony\Component\Validator\ValidatorInterface');
+    /** @var \Symfony\Component\Validator\ConstraintViolationList|\PHPUnit_Framework_MockObject_MockObject $empty_violation_list */
+    $empty_violation_list = $this->getMockBuilder('\Symfony\Component\Validator\ConstraintViolationList')
+      ->setMethods(NULL)
+      ->getMock();
+    $validator->expects($this->at(0))
+      ->method('validate')
+      ->with($this->entity->getTypedData())
+      ->will($this->returnValue($empty_violation_list));
+    $this->typedDataManager->expects($this->any())
+      ->method('getValidator')
+      ->will($this->returnValue($validator));
+
+    /** @var \Drupal\Core\Entity\EntityStorageInterface|\PHPUnit_Framework_MockObject_MockObject $storage */
+    $storage = $this->getMock('\Drupal\Core\Entity\EntityStorageInterface');
+    $storage->expects($this->any())
+      ->method('save')
+      ->willReturnCallback(function (ContentEntityInterface $entity) use ($storage) {
+        $entity->preSave($storage);
+      });
+
+    $this->entityManager->expects($this->any())
+      ->method('getStorage')
+      ->with($this->entityTypeId)
+      ->will($this->returnValue($storage));
+
+    // Check that entities can be saved normally when validation is not
+    // required.
+    $this->assertFalse($this->entity->isValidationRequired());
+    $this->entity->save();
+
+    // Make validation required and check that if the entity is validated, it
+    // can be saved normally.
+    $this->entity->setValidationRequired(TRUE);
+    $this->assertTrue($this->entity->isValidationRequired());
+    $this->entity->validate();
+    $this->entity->save();
+
+    // Check that the "validated" status is reset after saving the entity and
+    // that trying to save a non-validated entity when validation is required
+    // results in an exception.
+    $this->assertTrue($this->entity->isValidationRequired());
+    $this->entity->save();
+  }
+
+  /**
    * @covers ::bundle
    */
   public function testBundle() {
@@ -388,4 +462,151 @@ class ContentEntityBaseUnitTest extends UnitTestCase {
 
     $this->assertSame($callback_label, $this->entity->label());
   }
+
+  /**
+   * Data provider for testGet().
+   *
+   * @returns
+   *   - Expected output from get().
+   *   - Field name parameter to get().
+   *   - Language code for $activeLanguage.
+   *   - Fields array for $fields.
+   */
+  public function providerGet() {
+    return [
+      // Populated fields array.
+      ['result', 'field_name', 'langcode', ['field_name' => ['langcode' => 'result']]],
+      // Incomplete fields array.
+      ['getTranslatedField_result', 'field_name', 'langcode', ['field_name' => 'no_langcode']],
+      // Empty fields array.
+      ['getTranslatedField_result', 'field_name', 'langcode', []],
+    ];
+  }
+
+  /**
+   * @covers ::get
+   * @dataProvider providerGet
+   */
+  public function testGet($expected, $field_name, $active_langcode, $fields) {
+    // Mock ContentEntityBase.
+    $mock_base = $this->getMockBuilder('Drupal\Core\Entity\ContentEntityBase')
+      ->disableOriginalConstructor()
+      ->setMethods(array('getTranslatedField'))
+      ->getMockForAbstractClass();
+
+    // Set up expectations for getTranslatedField() method. In get(),
+    // getTranslatedField() is only called if the field name and language code
+    // are not present as keys in the fields array.
+    if (isset($fields[$field_name][$active_langcode])) {
+      $mock_base->expects($this->never())
+        ->method('getTranslatedField');
+    }
+    else {
+      $mock_base->expects($this->once())
+        ->method('getTranslatedField')
+        ->with(
+          $this->equalTo($field_name),
+          $this->equalTo($active_langcode)
+        )
+        ->willReturn($expected);
+    }
+
+    // Poke in activeLangcode.
+    $ref_langcode = new \ReflectionProperty($mock_base, 'activeLangcode');
+    $ref_langcode->setAccessible(TRUE);
+    $ref_langcode->setValue($mock_base, $active_langcode);
+
+    // Poke in fields.
+    $ref_fields = new \ReflectionProperty($mock_base, 'fields');
+    $ref_fields->setAccessible(TRUE);
+    $ref_fields->setValue($mock_base, $fields);
+
+    // Exercise get().
+    $this->assertEquals($expected, $mock_base->get($field_name));
+  }
+
+  /**
+   * Data provider for testGetFields().
+   *
+   * @returns array
+   *   - Expected output from getFields().
+   *   - $include_computed value to pass to getFields().
+   *   - Value to mock from all field definitions for isComputed().
+   *   - Array of field names to return from mocked getFieldDefinitions(). A
+   *     Drupal\Core\Field\FieldDefinitionInterface object will be mocked for
+   *     each name.
+   */
+  public function providerGetFields() {
+    return [
+      [[], FALSE, FALSE, []],
+      [['field' => 'field', 'field2' => 'field2'], TRUE, FALSE, ['field', 'field2']],
+      [['field3' => 'field3'], TRUE, TRUE, ['field3']],
+      [[], FALSE, TRUE, ['field4']],
+    ];
+  }
+
+  /**
+   * @covers ::getFields
+   * @dataProvider providerGetFields
+   */
+  public function testGetFields($expected, $include_computed, $is_computed, $field_definitions) {
+    // Mock ContentEntityBase.
+    $mock_base = $this->getMockBuilder('Drupal\Core\Entity\ContentEntityBase')
+      ->disableOriginalConstructor()
+      ->setMethods(array('getFieldDefinitions', 'get'))
+      ->getMockForAbstractClass();
+
+    // Mock field definition objects for each element of $field_definitions.
+    $mocked_field_definitions = array();
+    foreach ($field_definitions as $name) {
+      $mock_definition = $this->getMockBuilder('Drupal\Core\Field\FieldDefinitionInterface')
+        ->setMethods(array('isComputed'))
+        ->getMockForAbstractClass();
+      // Set expectations for isComputed(). isComputed() gets called whenever
+      // $include_computed is FALSE, but not otherwise. It returns the value of
+      // $is_computed.
+      $mock_definition->expects($this->exactly(
+        $include_computed ? 0 : 1
+        ))
+        ->method('isComputed')
+        ->willReturn($is_computed);
+      $mocked_field_definitions[$name] = $mock_definition;
+    }
+
+    // Set up expectations for getFieldDefinitions().
+    $mock_base->expects($this->once())
+      ->method('getFieldDefinitions')
+      ->willReturn($mocked_field_definitions);
+
+    // How many time will we call get()? Since we are rigging all defined fields
+    // to be computed based on $is_computed, then if $include_computed is FALSE,
+    // get() will never be called.
+    $get_count = 0;
+    if ($include_computed) {
+      $get_count = count($field_definitions);
+    }
+
+    // Set up expectations for get(). It simply returns the name passed in.
+    $mock_base->expects($this->exactly($get_count))
+      ->method('get')
+      ->willReturnArgument(0);
+
+    // Exercise getFields().
+    $this->assertArrayEquals(
+      $expected,
+      $mock_base->getFields($include_computed)
+    );
+  }
+
+  /**
+   * @covers ::set
+   */
+  public function testSet() {
+    // Exercise set(), check if it returns $this
+    $this->assertSame(
+      $this->entity,
+      $this->entity->set('id', 0)
+    );
+  }
+
 }

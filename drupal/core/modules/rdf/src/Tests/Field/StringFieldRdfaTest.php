@@ -1,7 +1,7 @@
 <?php
 /**
  * @file
- * Contains \Drupal\rdf\Tests\Field\TextFieldRdfaTest.
+ * Contains \Drupal\rdf\Tests\Field\StringFieldRdfaTest.
  */
 
 namespace Drupal\rdf\Tests\Field;
@@ -32,7 +32,7 @@ class StringFieldRdfaTest extends FieldRdfaTestBase {
    */
   protected $testSummary = 'test_summary_value';
 
-  public function setUp() {
+  protected function setUp() {
     parent::setUp();
 
     $this->createTestField();

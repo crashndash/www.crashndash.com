@@ -33,14 +33,14 @@ class FileStorage implements PhpStorageInterface {
   }
 
   /**
-   * Implements Drupal\Component\PhpStorage\PhpStorageInterface::exists().
+   * {@inheritdoc}
    */
   public function exists($name) {
     return file_exists($this->getFullPath($name));
   }
 
   /**
-   * Implements Drupal\Component\PhpStorage\PhpStorageInterface::load().
+   * {@inheritdoc}
    */
   public function load($name) {
     // The FALSE returned on failure is enough for the caller to handle this,
@@ -49,7 +49,7 @@ class FileStorage implements PhpStorageInterface {
   }
 
   /**
-   * Implements Drupal\Component\PhpStorage\PhpStorageInterface::save().
+   * {@inheritdoc}
    */
   public function save($name, $code) {
     $path = $this->getFullPath($name);
@@ -66,22 +66,20 @@ class FileStorage implements PhpStorageInterface {
   /**
    * Returns the standard .htaccess lines that Drupal writes to file directories.
    *
-   * This code is located here so this component can be stand-alone, but it is
-   * also called by file_htaccess_lines().
-   *
    * @param bool $private
-   *   (Optional) Set to FALSE to return the .htaccess lines for an open and
+   *   (optional) Set to FALSE to return the .htaccess lines for an open and
    *   public directory. The default is TRUE, which returns the .htaccess lines
    *   for a private and protected directory.
    *
    * @return string
    *   The desired contents of the .htaccess file.
+   *
+   * @see file_create_htaccess()
    */
   public static function htaccessLines($private = TRUE) {
     $lines = <<<EOF
 # Turn off all options we don't need.
-Options None
-Options +FollowSymLinks
+Options -Indexes -ExecCGI -Includes -MultiViews
 
 # Set the catch-all handler to prevent scripts from being executed.
 SetHandler Drupal_Security_Do_Not_Remove_See_SA_2006_006
@@ -107,8 +105,8 @@ EOF;
 <IfModule !mod_authz_core.c>
   Deny from all
 </IfModule>
-EOF
-      . $lines;
+$lines
+EOF;
     }
 
     return $lines;
@@ -184,7 +182,7 @@ EOF
   }
 
   /**
-   * Implements Drupal\Component\PhpStorage\PhpStorageInterface::delete().
+   * {@inheritdoc}
    */
   public function delete($name) {
     $path = $this->getFullPath($name);
@@ -202,14 +200,14 @@ EOF
   }
 
   /**
-   * Implements Drupal\Component\PhpStorage\PhpStorageInterface::writeable().
+   * {@inheritdoc}
    */
   public function writeable() {
     return TRUE;
   }
 
   /**
-   * Implements Drupal\Component\PhpStorage\PhpStorageInterface::deleteAll().
+   * {@inheritdoc}
    */
   public function deleteAll() {
     return $this->unlink($this->directory);
@@ -225,7 +223,7 @@ EOF
    * @param string $path
    *   A string containing either a file or directory path.
    *
-   * @return boolean
+   * @return bool
    *   TRUE for success or if path does not exist, FALSE in the event of an
    *   error.
    */
@@ -265,6 +263,12 @@ EOF
       }
     }
     return $names;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function garbageCollection() {
   }
 
 }

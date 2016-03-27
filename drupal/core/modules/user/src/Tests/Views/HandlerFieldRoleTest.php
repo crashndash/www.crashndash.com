@@ -2,12 +2,13 @@
 
 /**
  * @file
- * Contains Drupal\user\Tests\Views\HandlerFieldRoleTest.
+ * Contains \Drupal\user\Tests\Views\HandlerFieldRoleTest.
  */
 
 namespace Drupal\user\Tests\Views;
 
-use Drupal\views\Views;
+use Drupal\Component\Utility\Html;
+use Drupal\user\Entity\User;
 
 /**
  * Tests the handler of the user: role field.
@@ -27,7 +28,7 @@ class HandlerFieldRoleTest extends UserTestBase {
   public function testRole() {
     // Create a couple of roles for the view.
     $rolename_a = 'a' . $this->randomMachineName(8);
-    $this->drupalCreateRole(array('access content'), $rolename_a, $rolename_a, 9);
+    $this->drupalCreateRole(array('access content'), $rolename_a, '<em>' . $rolename_a . '</em>', 9);
 
     $rolename_b = 'b' . $this->randomMachineName(8);
     $this->drupalCreateRole(array('access content'), $rolename_b, $rolename_b, 8);
@@ -36,19 +37,15 @@ class HandlerFieldRoleTest extends UserTestBase {
     $this->drupalCreateRole(array('access content'), $rolename_not_assigned, $rolename_not_assigned);
 
     // Add roles to user 1.
-    $user = entity_load('user', 1);
+    $user = User::load(1);
     $user->addRole($rolename_a);
     $user->addRole($rolename_b);
     $user->save();
 
-    $view = Views::getView('test_views_handler_field_role');
-    $this->executeView($view);
-    // The role field is populated during preRender.
-    $view->field['rid']->preRender($view->result);
-    $render = $view->field['rid']->advancedRender($view->result[0]);
-
-    $this->assertEqual($rolename_b . $rolename_a, $render, 'View test_views_handler_field_role renders role assigned to user in the correct order.');
-    $this->assertFalse(strpos($render, $rolename_not_assigned), 'View test_views_handler_field_role does not render a role not assigned to a user.');
+    $this->drupalLogin($this->createUser(['access user profiles']));
+    $this->drupalGet('/test-views-handler-field-role');
+    $this->assertText($rolename_b . Html::escape('<em>' . $rolename_a . '</em>'), 'View test_views_handler_field_role renders role assigned to user in the correct order and markup in role names is escaped.');
+    $this->assertNoText($rolename_not_assigned, 'View test_views_handler_field_role does not render a role not assigned to a user.');
   }
 
 }

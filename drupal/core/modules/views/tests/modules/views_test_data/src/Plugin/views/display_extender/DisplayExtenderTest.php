@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\views_test_data\Plugin\views\display_extender\DisplayExtenderTest.
+ * Contains \Drupal\views_test_data\Plugin\views\display_extender\DisplayExtenderTest.
  */
 
 namespace Drupal\views_test_data\Plugin\views\display_extender;
@@ -28,16 +28,18 @@ class DisplayExtenderTest extends DisplayExtenderPluginBase {
   public $testState;
 
   /**
-   * Overrides Drupal\views\Plugin\views\display_extender\DisplayExtenderPluginBase::defineOptionsAlter().
+   * {@inheritdoc}
    */
-  public function defineOptionsAlter(&$options) {
-    $options['test_extender_test_option'] = array('default' => '');
+  protected function defineOptions() {
+    $options = parent::defineOptions();
+
+    $options['test_extender_test_option'] = ['default' => $this->t('Empty')];
 
     return $options;
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayPluginBase::optionsSummary().
+   * {@inheritdoc}
    */
   public function optionsSummary(&$categories, &$options) {
     parent::optionsSummary($categories, $options);
@@ -50,17 +52,15 @@ class DisplayExtenderTest extends DisplayExtenderPluginBase {
       ),
     );
 
-    $test_option = $this->displayHandler->getOption('test_extender_test_option') ?: $this->t('Empty');
-
     $options['test_extender_test_option'] = array(
       'category' => 'display_extender_test',
       'title' => $this->t('Test option'),
-      'value' => views_ui_truncate($test_option, 24),
+      'value' => views_ui_truncate($this->options['test_extender_test_option'], 24),
     );
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display_extender\DisplayExtenderPluginBase::buildOptionsForm().
+   * {@inheritdoc}
    */
   public function buildOptionsForm(&$form, FormStateInterface $form_state) {
     switch ($form_state->get('section')) {
@@ -70,39 +70,39 @@ class DisplayExtenderTest extends DisplayExtenderPluginBase {
           '#title' => $this->t('Test option'),
           '#type' => 'textfield',
           '#description' => $this->t('This is a textfield for test_option.'),
-          '#default_value' => $this->displayHandler->getOption('test_extender_test_option'),
+          '#default_value' => $this->options['test_extender_test_option'],
         );
     }
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayExtenderPluginBase::submitOptionsForm().
+   * {@inheritdoc}
    */
   public function submitOptionsForm(&$form, FormStateInterface $form_state) {
     parent::submitOptionsForm($form, $form_state);
     switch ($form_state->get('section')) {
       case 'test_extender_test_option':
-        $this->displayHandler->setOption('test_extender_test_option', $form_state->getValue('test_extender_test_option'));
+        $this->options['test_extender_test_option'] = $form_state->getValue('test_extender_test_option');
         break;
     }
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayExtenderPluginBase::defaultableSections().
+   * {@inheritdoc}
    */
   public function defaultableSections(&$sections, $section = NULL) {
     $sections['test_extender_test_option'] = array('test_extender_test_option');
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayExtenderPluginBase::query().
+   * {@inheritdoc}
    */
   public function query() {
     $this->testState['query'] = TRUE;
   }
 
   /**
-   * Overrides Drupal\views\Plugin\views\display\DisplayExtenderPluginBase::preExecute().
+   * {@inheritdoc}
    */
   public function preExecute() {
     $this->testState['preExecute'] = TRUE;

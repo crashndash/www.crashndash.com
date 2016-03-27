@@ -7,6 +7,7 @@
 
 namespace Drupal\user\Plugin\Validation\Constraint;
 
+use Drupal\Component\Utility\Unicode;
 use Symfony\Component\Validator\Constraint;
 use Symfony\Component\Validator\ConstraintValidator;
 
@@ -43,12 +44,12 @@ class UserNameConstraintValidator extends ConstraintValidator {
         '\x{FEFF}' .              // Byte order mark
         '\x{FF01}-\x{FF60}' .     // Full-width latin
         '\x{FFF9}-\x{FFFD}' .     // Replacement characters
-        '\x{0}-\x{1F}]/u',        // NULL byte and control characters
+        '\x{0}-\x{1F}]/u', // NULL byte and control characters
         $name)
     ) {
       $this->context->addViolation($constraint->illegalMessage);
     }
-    if (drupal_strlen($name) > USERNAME_MAX_LENGTH) {
+    if (Unicode::strlen($name) > USERNAME_MAX_LENGTH) {
       $this->context->addViolation($constraint->tooLongMessage, array('%name' => $name, '%max' => USERNAME_MAX_LENGTH));
     }
   }

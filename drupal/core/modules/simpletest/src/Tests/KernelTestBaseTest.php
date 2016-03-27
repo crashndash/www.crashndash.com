@@ -7,6 +7,7 @@
 
 namespace Drupal\simpletest\Tests;
 
+use Drupal\Core\Database\Database;
 use Drupal\simpletest\KernelTestBase;
 
 /**
@@ -27,7 +28,23 @@ class KernelTestBaseTest extends KernelTestBase {
    * {@inheritdoc}
    */
   protected function setUp() {
-    $original_container = \Drupal::getContainer();
+    $php = <<<'EOS'
+<?php
+# Make sure that the $test_class variable is defined when this file is included.
+if ($test_class) {
+}
+
+# Define a function to be able to check that this file was loaded with
+# function_exists().
+if (!function_exists('simpletest_test_stub_settings_function')) {
+  function simpletest_test_stub_settings_function() {}
+}
+EOS;
+
+    $settings_testing_file = $this->siteDirectory . '/settings.testing.php';
+    file_put_contents($settings_testing_file, $php);
+
+    $original_container = $this->originalContainer;
     parent::setUp();
     $this->assertNotIdentical(\Drupal::getContainer(), $original_container, 'KernelTestBase test creates a new container.');
   }
@@ -48,6 +65,17 @@ class KernelTestBaseTest extends KernelTestBase {
 
     // Verify that no modules have been installed.
     $this->assertFalse(db_table_exists($table), "'$table' database table not found.");
+
+    // Verify that the settings.testing.php got taken into account.
+    $this->assertTrue(function_exists('simpletest_test_stub_settings_function'));
+
+    // Ensure that the database tasks have been run during set up. Neither MySQL
+    // nor SQLite make changes that are testable.
+    $database = $this->container->get('database');
+    if ($database->driver() == 'pgsql') {
+      $this->assertEqual('on', $database->query("SHOW standard_conforming_strings")->fetchField());
+      $this->assertEqual('escape', $database->query("SHOW bytea_output")->fetchField());
+    }
   }
 
   /**
@@ -89,11 +117,9 @@ class KernelTestBaseTest extends KernelTestBase {
     $this->assertFalse(in_array($module, $list), "{$module}_hook_info() in \Drupal::moduleHandler()->getImplementations() not found.");
 
     $this->assertFalse(db_table_exists($table), "'$table' database table not found.");
-    $schema = drupal_get_schema($table, TRUE);
-    $this->assertFalse($schema, "'$table' table schema not found.");
 
     // Install the module.
-    \Drupal::moduleHandler()->install(array($module));
+    \Drupal::service('module_installer')->install(array($module));
 
     // Verify that the enabled module exists.
     $this->assertTrue(\Drupal::moduleHandler()->moduleExists($module), "$module module found.");
@@ -103,7 +129,7 @@ class KernelTestBaseTest extends KernelTestBase {
     $this->assertTrue(in_array($module, $list), "{$module}_hook_info() in \Drupal::moduleHandler()->getImplementations() found.");
 
     $this->assertTrue(db_table_exists($table), "'$table' database table found.");
-    $schema = drupal_get_schema($table);
+    $schema = drupal_get_module_schema($module, $table);
     $this->assertTrue($schema, "'$table' table schema found.");
   }
 
@@ -135,9 +161,7 @@ class KernelTestBaseTest extends KernelTestBase {
     $this->assertTrue(db_table_exists($table), "'$table' database table found.");
 
     // Verify that the schema is known to Schema API.
-    $schema = drupal_get_schema();
-    $this->assertTrue($schema[$table], "'$table' table found in schema.");
-    $schema = drupal_get_schema($table);
+    $schema = drupal_get_module_schema($module, $table);
     $this->assertTrue($schema, "'$table' table schema found.");
 
     // Verify that a unknown table from an enabled module throws an error.
@@ -150,7 +174,7 @@ class KernelTestBaseTest extends KernelTestBase {
       $this->pass('Exception for non-retrievable schema found.');
     }
     $this->assertFalse(db_table_exists($table), "'$table' database table not found.");
-    $schema = drupal_get_schema($table);
+    $schema = drupal_get_module_schema($module, $table);
     $this->assertFalse($schema, "'$table' table schema not found.");
 
     // Verify that a table from a unknown module cannot be installed.
@@ -164,14 +188,14 @@ class KernelTestBaseTest extends KernelTestBase {
       $this->pass('Exception for non-retrievable schema found.');
     }
     $this->assertFalse(db_table_exists($table), "'$table' database table not found.");
-    $schema = drupal_get_schema($table);
-    $this->assertFalse($schema, "'$table' table schema not found.");
+    $schema = drupal_get_module_schema($module, $table);
+    $this->assertTrue($schema, "'$table' table schema found.");
 
     // Verify that the same table can be installed after enabling the module.
     $this->enableModules(array($module));
     $this->installSchema($module, $table);
     $this->assertTrue(db_table_exists($table), "'$table' database table found.");
-    $schema = drupal_get_schema($table);
+    $schema = drupal_get_module_schema($module, $table);
     $this->assertTrue($schema, "'$table' table schema found.");
   }
 
@@ -191,6 +215,8 @@ class KernelTestBaseTest extends KernelTestBase {
    * Tests expected behavior of installConfig().
    */
   function testInstallConfig() {
+    // The user module has configuration that depends on system.
+    $this->enableModules(array('system'));
     $module = 'user';
 
     // Verify that default config can only be installed for enabled modules.
@@ -207,7 +233,7 @@ class KernelTestBaseTest extends KernelTestBase {
     $this->enableModules(array('user'));
     $this->installConfig(array('user'));
     $this->assertTrue($this->container->get('config.storage')->exists('user.settings'));
-    $this->assertTrue(\Drupal::config('user.settings')->get('register'));
+    $this->assertTrue($this->config('user.settings')->get('register'));
   }
 
   /**
@@ -215,7 +241,7 @@ class KernelTestBaseTest extends KernelTestBase {
    */
   function testEnableModulesFixedList() {
     // Install system module.
-    $this->container->get('module_handler')->install(array('system', 'menu_link_content'));
+    $this->container->get('module_installer')->install(array('system', 'menu_link_content'));
     $entity_manager = \Drupal::entityManager();
 
     // entity_test is loaded via $modules; its entity type should exist.
@@ -228,12 +254,12 @@ class KernelTestBaseTest extends KernelTestBase {
     $this->assertTrue(TRUE == $entity_manager->getDefinition('entity_test'));
 
     // Install some other modules; entity_test should still exist.
-    $this->container->get('module_handler')->install(array('user', 'field', 'field_test'), FALSE);
+    $this->container->get('module_installer')->install(array('user', 'field', 'field_test'), FALSE);
     $this->assertEqual($this->container->get('module_handler')->moduleExists('entity_test'), TRUE);
     $this->assertTrue(TRUE == $entity_manager->getDefinition('entity_test'));
 
     // Uninstall one of those modules; entity_test should still exist.
-    $this->container->get('module_handler')->uninstall(array('field_test'));
+    $this->container->get('module_installer')->uninstall(array('field_test'));
     $this->assertEqual($this->container->get('module_handler')->moduleExists('entity_test'), TRUE);
     $this->assertTrue(TRUE == $entity_manager->getDefinition('entity_test'));
 
@@ -264,28 +290,31 @@ class KernelTestBaseTest extends KernelTestBase {
   }
 
   /**
-   * Tests that _theme() works right after loading a module.
+   * Tests that ThemeManager works right after loading a module.
    */
   function testEnableModulesTheme() {
+    /** @var \Drupal\Core\Render\RendererInterface $renderer */
+    $renderer = $this->container->get('renderer');
     $original_element = $element = array(
       '#type' => 'container',
       '#markup' => 'Foo',
       '#attributes' => array(),
     );
     $this->enableModules(array('system'));
-    // _theme() throws an exception if modules are not loaded yet.
-    $this->assertTrue(drupal_render($element));
+    // \Drupal\Core\Theme\ThemeManager::render() throws an exception if modules
+    // are not loaded yet.
+    $this->assertTrue($renderer->renderRoot($element));
 
     $element = $original_element;
     $this->disableModules(array('entity_test'));
-    $this->assertTrue(drupal_render($element));
+    $this->assertTrue($renderer->renderRoot($element));
   }
 
   /**
    * Tests that there is no theme by default.
    */
   function testNoThemeByDefault() {
-    $themes = $this->container->get('config.factory')->get('core.extension')->get('theme');
+    $themes = $this->config('core.extension')->get('theme');
     $this->assertEqual($themes, array());
 
     $extensions = $this->container->get('config.storage')->read('core.extension');
@@ -303,6 +332,41 @@ class KernelTestBaseTest extends KernelTestBase {
    */
   public function testDrupalGetProfile() {
     $this->assertNull(drupal_get_profile());
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function run(array $methods = array()) {
+    parent::run($methods);
+
+    // Check that all tables of the test instance have been deleted. At this
+    // point the original database connection is restored so we need to prefix
+    // the tables.
+    $connection = Database::getConnection();
+    if ($connection->databaseType() != 'sqlite') {
+      $tables = $connection->schema()->findTables($this->databasePrefix . '%');
+      $this->assertTrue(empty($tables), 'All test tables have been removed.');
+    }
+    else {
+      // We don't have the test instance connection anymore so we have to
+      // re-attach its database and then use the same query as
+      // \Drupal\Core\Database\Driver\sqlite\Schema::findTables().
+      // @see \Drupal\Core\Database\Driver\sqlite\Connection::__construct()
+      $info = Database::getConnectionInfo();
+      $connection->query('ATTACH DATABASE :database AS :prefix', [
+        ':database' => $info['default']['database'] . '-' . $this->databasePrefix,
+        ':prefix' => $this->databasePrefix
+      ]);
+
+      $result = $connection->query("SELECT name FROM " . $this->databasePrefix . ".sqlite_master WHERE type = :type AND name LIKE :table_name AND name NOT LIKE :pattern", array(
+        ':type' => 'table',
+        ':table_name' => '%',
+        ':pattern' => 'sqlite_%',
+      ))->fetchAllKeyed(0, 0);
+
+      $this->assertTrue(empty($result), 'All test tables have been removed.');
+    }
   }
 
 }

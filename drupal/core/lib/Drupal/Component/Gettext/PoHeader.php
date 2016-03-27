@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\Component\Gettext\PoHeader
+ * Contains \Drupal\Component\Gettext\PoHeader.
  */
 
 namespace Drupal\Component\Gettext;
@@ -84,7 +84,7 @@ class PoHeader {
   }
 
   /**
-   * Get the plural form.
+   * Gets the plural form.
    *
    * @return string
    *   Plural form component from the header, for example:
@@ -105,7 +105,7 @@ class PoHeader {
   }
 
   /**
-   * Get the human readable language name.
+   * Gets the human readable language name.
    *
    * @return string
    *   The human readable language name.
@@ -125,7 +125,7 @@ class PoHeader {
   }
 
   /**
-   * Get the project name.
+   * Gets the project name.
    *
    * @return string
    *   The human readable project name.
@@ -471,10 +471,10 @@ class PoHeader {
    *
    * @param array $element_stack
    *   Array of plural formula values and operators create by parseArithmetic().
-   * @param integer $n
+   * @param int $n
    *   The @count number for which we are determining the right plural position.
    *
-   * @return integer
+   * @return int
    *   Number of the plural string to be used for the given plural value.
    *
    * @see parseArithmetic()

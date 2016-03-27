@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Contains \Drupal\entity\Tests\ContentTranslationEntityBundleUITest.
+ * Contains \Drupal\content_translation\Tests\ContentTranslationEntityBundleUITest.
  */
 
 namespace Drupal\content_translation\Tests;
@@ -38,6 +38,19 @@ class ContentTranslationEntityBundleUITest extends WebTestBase {
     // content type.
     $this->drupalGet('admin/structure/types/add');
     $this->assertNoFieldChecked('edit-language-configuration-content-translation');
+
+    // Create second content type and set content translation.
+    $edit = array(
+      'name' => 'Page',
+      'type' => 'page',
+      'language_configuration[content_translation]' => TRUE,
+    );
+    $this->drupalPostForm('admin/structure/types/add', $edit, 'Save and manage fields');
+
+    // Make sure the settings are saved when creating the content type.
+    $this->drupalGet('admin/structure/types/manage/page');
+    $this->assertFieldChecked('edit-language-configuration-content-translation');
+
   }
 
 }

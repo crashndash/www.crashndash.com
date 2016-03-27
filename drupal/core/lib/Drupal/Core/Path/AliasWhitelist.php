@@ -9,7 +9,6 @@ namespace Drupal\Core\Path;
 
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Cache\CacheCollector;
-use Drupal\Core\Database\Connection;
 use Drupal\Core\State\StateInterface;
 use Drupal\Core\Lock\LockBackendInterface;
 
@@ -88,7 +87,7 @@ class AliasWhitelist extends CacheCollector implements AliasWhitelistInterface {
    */
   public function get($offset) {
     $this->lazyLoadCache();
-    // _url() may be called with paths that are not represented by menu router
+    // this may be called with paths that are not represented by menu router
     // items such as paths that will be rewritten by hook_url_outbound_alter().
     // Therefore internally TRUE is used to indicate whitelisted paths. FALSE is
     // used to indicate paths that have already been checked but are not
@@ -107,7 +106,7 @@ class AliasWhitelist extends CacheCollector implements AliasWhitelistInterface {
    * {@inheritdoc}
    */
   public function resolveCacheMiss($root) {
-    $exists = $this->aliasStorage->pathHasMatchingAlias($root);
+    $exists = $this->aliasStorage->pathHasMatchingAlias('/' . $root);
     $this->storage[$root] = $exists;
     $this->persist($root);
     if ($exists) {

@@ -7,15 +7,18 @@
 
 namespace Drupal\Tests\aggregator\Unit\Menu;
 
-use Drupal\Tests\Core\Menu\LocalTaskIntegrationTest;
+use Drupal\Tests\Core\Menu\LocalTaskIntegrationTestBase;
 
 /**
  * Tests existence of aggregator local tasks.
  *
  * @group aggregator
  */
-class AggregatorLocalTasksTest extends LocalTaskIntegrationTest {
+class AggregatorLocalTasksTest extends LocalTaskIntegrationTestBase {
 
+  /**
+   * {@inheritdoc}
+   */
   protected function setUp() {
     $this->directoryList = array('aggregator' => 'core/modules/aggregator');
     parent::setUp();
@@ -49,7 +52,7 @@ class AggregatorLocalTasksTest extends LocalTaskIntegrationTest {
    */
   public function testAggregatorSourceLocalTasks($route) {
     $this->assertLocalTasks($route, array(
-      0 => array('entity.aggregator_feed.canonical', 'entity.aggregator_feed.edit_form'),
+      0 => array('entity.aggregator_feed.canonical', 'entity.aggregator_feed.edit_form', 'entity.aggregator_feed.delete_form'),
     ));
     ;
   }

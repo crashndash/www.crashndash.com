@@ -103,7 +103,7 @@ class TestToolkit extends ImageToolkitBase {
       '#description' => $this->t('A toolkit parameter for testing purposes.'),
       '#min' => 0,
       '#max' => 100,
-      '#default_value' => $this->configFactory->get('system.image.test_toolkit')->get('test_parameter'),
+      '#default_value' => $this->configFactory->getEditable('system.image.test_toolkit')->get('test_parameter', FALSE),
     );
     return $form;
   }
@@ -121,7 +121,7 @@ class TestToolkit extends ImageToolkitBase {
    * {@inheritdoc}
    */
   public function submitConfigurationForm(array &$form, FormStateInterface $form_state) {
-    $this->configFactory->get('system.image.test_toolkit')
+    $this->configFactory->getEditable('system.image.test_toolkit')
       ->set('test_parameter', $form_state->getValue(array('test', 'test_parameter')))
       ->save();
   }
@@ -138,7 +138,7 @@ class TestToolkit extends ImageToolkitBase {
    */
   public function parseFile() {
     $this->logCall('parseFile', func_get_args());
-    $data = @getimagesize($this->getImage()->getSource());
+    $data = @getimagesize($this->getSource());
     if ($data && in_array($data[2], static::supportedTypes())) {
       $this->setType($data[2]);
       $this->width = $data[0];

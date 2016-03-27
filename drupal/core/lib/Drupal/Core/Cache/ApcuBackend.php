@@ -36,29 +36,11 @@ class ApcuBackend implements CacheBackendInterface {
   protected $binPrefix;
 
   /**
-   * Prefix for keys holding invalidation cache tags.
+   * The cache tags checksum provider.
    *
-   * Includes the site-specific prefix in $sitePrefix.
-   *
-   * @var string
+   * @var \Drupal\Core\Cache\CacheTagsChecksumInterface
    */
-  protected $invalidationsTagsPrefix;
-
-  /**
-   * Prefix for keys holding invalidation cache tags.
-   *
-   * Includes the site-specific prefix in $sitePrefix.
-   *
-   * @var string
-   */
-  protected $deletionsTagsPrefix;
-
-  /**
-   * A static cache of all tags checked during the request.
-   *
-   * @var array
-   */
-  protected static $tagCache = array('deletions' => array(), 'invalidations' => array());
+  protected $checksumProvider;
 
   /**
    * Constructs a new ApcuBackend instance.
@@ -67,17 +49,18 @@ class ApcuBackend implements CacheBackendInterface {
    *   The name of the cache bin.
    * @param string $site_prefix
    *   The prefix to use for all keys in the storage that belong to this site.
+   * @param \Drupal\Core\Cache\CacheTagsChecksumInterface $checksum_provider
+   *   The cache tags checksum provider.
    */
-  public function __construct($bin, $site_prefix) {
+  public function __construct($bin, $site_prefix, CacheTagsChecksumInterface $checksum_provider) {
     $this->bin = $bin;
     $this->sitePrefix = $site_prefix;
+    $this->checksumProvider = $checksum_provider;
     $this->binPrefix = $this->sitePrefix . '::' . $this->bin . '::';
-    $this->invalidationsTagsPrefix = $this->sitePrefix . '::itags::';
-    $this->deletionsTagsPrefix = $this->sitePrefix . '::dtags::';
   }
 
   /**
-   * Prepends the APC user variable prefix for this bin to a cache item ID.
+   * Prepends the APCu user variable prefix for this bin to a cache item ID.
    *
    * @param string $cid
    *   The cache item ID to prefix.
@@ -85,7 +68,7 @@ class ApcuBackend implements CacheBackendInterface {
    * @return string
    *   The APCu key for the cache item ID.
    */
-  protected function getApcuKey($cid) {
+  public function getApcuKey($cid) {
     return $this->binPrefix . $cid;
   }
 
@@ -93,7 +76,7 @@ class ApcuBackend implements CacheBackendInterface {
    * {@inheritdoc}
    */
   public function get($cid, $allow_invalid = FALSE) {
-    $cache = apc_fetch($this->getApcuKey($cid));
+    $cache = apcu_fetch($this->getApcuKey($cid));
     return $this->prepareItem($cache, $allow_invalid);
   }
 
@@ -107,7 +90,7 @@ class ApcuBackend implements CacheBackendInterface {
       $map[$this->getApcuKey($cid)] = $cid;
     }
 
-    $result = apc_fetch(array_keys($map));
+    $result = apcu_fetch(array_keys($map));
     $cache = array();
     if ($result) {
       foreach ($result as $key => $item) {
@@ -129,18 +112,18 @@ class ApcuBackend implements CacheBackendInterface {
    * APCu is a memory cache, shared across all server processes. To prevent
    * cache item clashes with other applications/installations, every cache item
    * is prefixed with a unique string for this site. Therefore, functions like
-   * apc_clear_cache() cannot be used, and instead, a list of all cache items
+   * apcu_clear_cache() cannot be used, and instead, a list of all cache items
    * belonging to this application need to be retrieved through this method
    * instead.
    *
    * @param string $prefix
    *   (optional) A cache ID prefix to limit the result to.
    *
-   * @return \APCIterator
-   *   An APCIterator containing matched items.
+   * @return \APCUIterator
+   *   An APCUIterator containing matched items.
    */
   protected function getAll($prefix = '') {
-    return new \APCIterator('user', '/^' . preg_quote($this->getApcuKey($prefix), '/') . '/');
+    return $this->getIterator('/^' . preg_quote($this->getApcuKey($prefix), '/') . '/');
   }
 
   /**
@@ -163,18 +146,12 @@ class ApcuBackend implements CacheBackendInterface {
     }
 
     $cache->tags = $cache->tags ? explode(' ', $cache->tags) : array();
-    $checksum = $this->checksumTags($cache->tags);
-
-    // Check if deleteTags() has been called with any of the entry's tags.
-    if ($cache->checksum_deletions != $checksum['deletions']) {
-      return FALSE;
-    }
 
     // Check expire time.
     $cache->valid = $cache->expire == Cache::PERMANENT || $cache->expire >= REQUEST_TIME;
 
     // Check if invalidateTags() has been called with any of the entry's tags.
-    if ($cache->checksum_invalidations != $checksum['invalidations']) {
+    if (!$this->checksumProvider->isValid($cache->checksum, $cache->tags)) {
       $cache->valid = FALSE;
     }
 
@@ -189,28 +166,20 @@ class ApcuBackend implements CacheBackendInterface {
    * {@inheritdoc}
    */
   public function set($cid, $data, $expire = CacheBackendInterface::CACHE_PERMANENT, array $tags = array()) {
-    Cache::validateTags($tags);
+    assert('\Drupal\Component\Assertion\Inspector::assertAllStrings($tags)', 'Cache tags must be strings.');
     $tags = array_unique($tags);
     $cache = new \stdClass();
     $cache->cid = $cid;
     $cache->created = round(microtime(TRUE), 3);
     $cache->expire = $expire;
     $cache->tags = implode(' ', $tags);
-    $checksum = $this->checksumTags($tags);
-    $cache->checksum_invalidations = $checksum['invalidations'];
-    $cache->checksum_deletions = $checksum['deletions'];
-    // APC serializes/unserializes any structure itself.
+    $cache->checksum = $this->checksumProvider->getCurrentChecksum($tags);
+    // APCu serializes/unserializes any structure itself.
     $cache->serialized = 0;
     $cache->data = $data;
 
-    // apc_store()'s $ttl argument can be omitted but also set to 0 (zero),
-    // in which case the value will persist until it's removed from the cache or
-    // until the next cache clear, restart, etc. This is what we want to do
-    // when $expire equals CacheBackendInterface::CACHE_PERMANENT.
-    if ($expire === CacheBackendInterface::CACHE_PERMANENT) {
-      $expire = 0;
-    }
-    apc_store($this->getApcuKey($cid), $cache, $expire);
+    // Expiration is handled by our own prepareItem(), not APCu.
+    apcu_store($this->getApcuKey($cid), $cache);
   }
 
   /**
@@ -226,35 +195,35 @@ class ApcuBackend implements CacheBackendInterface {
    * {@inheritdoc}
    */
   public function delete($cid) {
-    apc_delete($this->getApcuKey($cid));
+    apcu_delete($this->getApcuKey($cid));
   }
 
   /**
    * {@inheritdoc}
    */
   public function deleteMultiple(array $cids) {
-    apc_delete(array_map(array($this, 'getApcuKey'), $cids));
+    apcu_delete(array_map(array($this, 'getApcuKey'), $cids));
   }
 
   /**
    * {@inheritdoc}
    */
   public function deleteAll() {
-    apc_delete(new \APCIterator('user', '/^' . preg_quote($this->binPrefix, '/') . '/'));
+    apcu_delete($this->getIterator('/^' . preg_quote($this->binPrefix, '/') . '/'));
   }
 
   /**
    * {@inheritdoc}
    */
   public function garbageCollection() {
-    // APC performs garbage collection automatically.
+    // APCu performs garbage collection automatically.
   }
 
   /**
    * {@inheritdoc}
    */
   public function removeBin() {
-    apc_delete(new \APCIterator('user', '/^' . preg_quote($this->binPrefix, '/') . '/'));
+    apcu_delete($this->getIterator('/^' . preg_quote($this->binPrefix, '/') . '/'));
   }
 
   /**
@@ -284,64 +253,24 @@ class ApcuBackend implements CacheBackendInterface {
   }
 
   /**
-   * {@inheritdoc}
-   */
-  public function deleteTags(array $tags) {
-    foreach ($tags as $tag) {
-      apc_inc($this->deletionsTagsPrefix . $tag, 1, $success);
-      if (!$success) {
-        apc_store($this->deletionsTagsPrefix . $tag, 1);
-      }
-    }
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function invalidateTags(array $tags) {
-    foreach ($tags as $tag) {
-      apc_inc($this->invalidationsTagsPrefix . $tag, 1, $success);
-      if (!$success) {
-        apc_store($this->invalidationsTagsPrefix . $tag, 1);
-      }
-    }
-  }
-
-  /**
-   * Returns the sum total of validations for a given set of tags.
+   * Instantiates and returns the APCUIterator class.
    *
-   * @param array $tags
-   *   Associative array of tags.
+   * @param mixed $search
+   *   A PCRE regular expression that matches against APC key names, either as a
+   *   string for a single regular expression, or as an array of regular
+   *   expressions. Or, optionally pass in NULL to skip the search.
+   * @param int $format
+   *   The desired format, as configured with one or more of the APC_ITER_*
+   *   constants.
+   * @param int $chunk_size
+   *   The chunk size. Must be a value greater than 0. The default value is 100.
+   * @param int $list
+   *   The type to list. Either pass in APC_LIST_ACTIVE or APC_LIST_DELETED.
    *
-   * @return int
-   *   Sum of all invalidations.
+   * @return \APCUIterator
    */
-  protected function checksumTags(array $tags) {
-    $checksum = array('invalidations' => 0, 'deletions' => 0);
-    $query_tags = array('invalidations' => array(), 'deletions' => array());
-
-    foreach ($tags as $tag) {
-      foreach (array('deletions', 'invalidations') as $type) {
-        if (isset(static::$tagCache[$type][$tag])) {
-          $checksum[$type] += static::$tagCache[$type][$tag];
-        }
-        else {
-          $query_tags[$type][] = $this->{$type . 'TagsPrefix'} . $tag;
-        }
-      }
-    }
-
-    foreach (array('deletions', 'invalidations') as $type) {
-      if ($query_tags[$type]) {
-        $result = apc_fetch($query_tags[$type]);
-        if ($result) {
-          static::$tagCache[$type] = array_merge(static::$tagCache[$type], $result);
-          $checksum[$type] += array_sum($result);
-        }
-      }
-    }
-
-    return $checksum;
+  protected function getIterator($search = NULL, $format = APC_ITER_ALL, $chunk_size = 100, $list = APC_LIST_ACTIVE) {
+    return new \APCUIterator($search, $format, $chunk_size, $list);
   }
 
 }

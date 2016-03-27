@@ -15,11 +15,39 @@ use Drupal\Core\Ajax\AjaxResponse;
 use Drupal\Core\Ajax\HtmlCommand;
 use Drupal\editor\Ajax\EditorDialogSave;
 use Drupal\Core\Ajax\CloseModalDialogCommand;
+use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\Core\Entity\EntityStorageInterface;
 
 /**
  * Provides an image dialog for text editors.
  */
 class EditorImageDialog extends FormBase {
+
+  /**
+   * The file storage service.
+   *
+   * @var \Drupal\Core\Entity\EntityStorageInterface
+   */
+  protected $fileStorage;
+
+  /**
+   * Constructs a form object for image dialog.
+   *
+   * @param \Drupal\Core\Entity\EntityStorageInterface $file_storage
+   *   The file storage service.
+   */
+  public function __construct(EntityStorageInterface $file_storage) {
+    $this->fileStorage = $file_storage;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function create(ContainerInterface $container) {
+    return new static(
+      $container->get('entity.manager')->getStorage('file')
+    );
+  }
 
   /**
    * {@inheritdoc}
@@ -35,12 +63,22 @@ class EditorImageDialog extends FormBase {
    *   The filter format for which this dialog corresponds.
    */
   public function buildForm(array $form, FormStateInterface $form_state, FilterFormat $filter_format = NULL) {
-    // The default values are set directly from \Drupal::request()->request,
-    // provided by the editor plugin opening the dialog.
-    if (!$image_element = $form_state->get('image_element')) {
-      $user_input = $form_state->getUserInput();
-      $image_element = isset($user_input['editor_object']) ? $user_input['editor_object'] : [];
+    // This form is special, in that the default values do not come from the
+    // server side, but from the client side, from a text editor. We must cache
+    // this data in form state, because when the form is rebuilt, we will be
+    // receiving values from the form, instead of the values from the text
+    // editor. If we don't cache it, this data will be lost.
+    if (isset($form_state->getUserInput()['editor_object'])) {
+      // By convention, the data that the text editor sends to any dialog is in
+      // the 'editor_object' key. And the image dialog for text editors expects
+      // that data to be the attributes for an <img> element.
+      $image_element = $form_state->getUserInput()['editor_object'];
       $form_state->set('image_element', $image_element);
+      $form_state->setCached(TRUE);
+    }
+    else {
+      // Retrieve the image element's attributes from form state.
+      $image_element = $form_state->get('image_element') ?: [];
     }
 
     $form['#tree'] = TRUE;
@@ -48,7 +86,7 @@ class EditorImageDialog extends FormBase {
     $form['#prefix'] = '<div id="editor-image-dialog-form">';
     $form['#suffix'] = '</div>';
 
-    $editor = editor_load($filter_format->format);
+    $editor = editor_load($filter_format->id());
 
     // Construct strings to use in the upload validators.
     $image_upload = $editor->getImageUploadSettings();
@@ -60,7 +98,7 @@ class EditorImageDialog extends FormBase {
     }
     $max_filesize = min(Bytes::toInt($image_upload['max_size']), file_upload_max_size());
 
-    $existing_file = isset($image_element['data-editor-file-uuid']) ? entity_load_by_uuid('file', $image_element['data-editor-file-uuid']) : NULL;
+    $existing_file = isset($image_element['data-entity-uuid']) ? \Drupal::entityManager()->loadEntityByUuid('file', $image_element['data-entity-uuid']) : NULL;
     $fid = $existing_file ? $existing_file->id() : NULL;
 
     $form['fid'] = array(
@@ -111,44 +149,9 @@ class EditorImageDialog extends FormBase {
       '#placeholder' => $this->t('Short description for the visually impaired'),
       '#type' => 'textfield',
       '#required' => TRUE,
-      '#required_error' => $this->t('Alternative text is required.<br><em>(Only in rare cases should this be left empty. To create empty alternative text, enter <code>""</code> — two double quotes without any content).'),
+      '#required_error' => $this->t('Alternative text is required.<br />(Only in rare cases should this be left empty. To create empty alternative text, enter <code>""</code> — two double quotes without any content).'),
       '#default_value' => $alt,
       '#maxlength' => 2048,
-    );
-    $form['dimensions'] = array(
-      '#type' => 'fieldset',
-      '#title' => $this->t('Image size'),
-      '#attributes' => array('class' => array(
-        'container-inline',
-        'fieldgroup',
-        'form-composite',
-      )),
-    );
-    $form['dimensions']['width'] = array(
-      '#title' => $this->t('Width'),
-      '#title_display' => 'invisible',
-      '#type' => 'number',
-      '#default_value' => isset($image_element['width']) ? $image_element['width'] : '',
-      '#size' => 8,
-      '#maxlength' => 8,
-      '#min' => 1,
-      '#max' => 99999,
-      '#placeholder' => $this->t('width'),
-      '#field_suffix' => ' × ',
-      '#parents' => array('attributes', 'width'),
-    );
-    $form['dimensions']['height'] = array(
-      '#title' => $this->t('Height'),
-      '#title_display' => 'invisible',
-      '#type' => 'number',
-      '#default_value' => isset($image_element['height']) ? $image_element['height'] : '',
-      '#size' => 8,
-      '#maxlength' => 8,
-      '#min' => 1,
-      '#max' => 99999,
-      '#placeholder' => $this->t('height'),
-      '#field_suffix' => $this->t('pixels'),
-      '#parents' => array('attributes', 'height'),
     );
 
     // When Drupal core's filter_align is being used, the text editor may
@@ -204,17 +207,18 @@ class EditorImageDialog extends FormBase {
   public function submitForm(array &$form, FormStateInterface $form_state) {
     $response = new AjaxResponse();
 
-    // Convert any uploaded files from the FID values to data-editor-file-uuid
-    // attributes.
+    // Convert any uploaded files from the FID values to data-entity-uuid
+    // attributes and set data-entity-type to 'file'.
     $fid = $form_state->getValue(array('fid', 0));
     if (!empty($fid)) {
-      $file = file_load($fid);
+      $file = $this->fileStorage->load($fid);
       $file_url = file_create_url($file->getFileUri());
       // Transform absolute image URLs to relative image URLs: prevent problems
       // on multisite set-ups and prevent mixed content errors.
       $file_url = file_url_transform_relative($file_url);
       $form_state->setValue(array('attributes', 'src'), $file_url);
-      $form_state->setValue(array('attributes', 'data-editor-file-uuid'), $file->uuid());
+      $form_state->setValue(array('attributes', 'data-entity-uuid'), $file->uuid());
+      $form_state->setValue(array('attributes', 'data-entity-type'), 'file');
     }
 
     // When the alt attribute is set to two double quotes, transform it to the
@@ -225,10 +229,11 @@ class EditorImageDialog extends FormBase {
 
     if ($form_state->getErrors()) {
       unset($form['#prefix'], $form['#suffix']);
-      $status_messages = array('#theme' => 'status_messages');
-      $output = drupal_render($form);
-      $output = '<div>' . drupal_render($status_messages) . $output . '</div>';
-      $response->addCommand(new HtmlCommand('#editor-image-dialog-form', $output));
+      $form['status_messages'] = [
+        '#type' => 'status_messages',
+        '#weight' => -10,
+      ];
+      $response->addCommand(new HtmlCommand('#editor-image-dialog-form', $form));
     }
     else {
       $response->addCommand(new EditorDialogSave($form_state->getValues()));

@@ -6,27 +6,54 @@
  * Displays translation status information per language.
  *
  * Available variables:
- * - modules: A list of names of modules that have available translation
- *   updates.
- * - details: Rendered list of the translation details.
- * - missing_updates_status: If there are any modules that are missing
- *   translation updates, this variable will contain text indicating how many
- *   modules are missing translations.
+ * - modules: A list of modules names that have available translation updates.
+ * - updates: A list of available translation updates.
+ * - not_found: A list of modules missing translation updates.
  *
  * @see template_preprocess_locale_translation_update_info()
  *
  * @ingroup themeable
  */
 #}
-<div class="inner" tabindex="0" role="button">
-  <span class="update-description-prefix visually-hidden">Show description</span>
+<div class="locale-translation-update__wrapper" tabindex="0" role="button">
+  <span class="locale-translation-update__prefix visually-hidden">Show description</span>
   {% if modules %}
     {% set module_list = modules|safe_join(', ') %}
-    <span class="text">{% trans %}Updates for: {{ module_list }}{% endtrans %}</span>
-  {% elseif missing_updates_status %}
-    <span class="text">{{ missing_updates_status }}</span>
+    <span class="locale-translation-update__message">{% trans %}Updates for: {{ module_list }}{% endtrans %}</span>
+  {% elseif not_found %}
+    <span class="locale-translation-update__message">
+      {%- trans -%}
+        Missing translations for one project
+      {%- plural not_found|length -%}
+        Missing translations for @count projects
+      {%- endtrans -%}
+    </span>
   {% endif %}
-  {% if details %}
-    <div class="details">{{ details }}</div>
+  {% if updates or not_found %}
+    <div class="locale-translation-update__details">
+      {% if updates %}
+        <ul>
+          {% for update in updates %}
+            <li>{{ update.name }} ({{ update.timestamp|format_date('html_date') }})</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if not_found %}
+        {#
+          Prefix the missing updates list if there is an available updates lists
+          before it.
+        #}
+        {% if updates %}
+          {{ 'Missing translations for:'|t }}
+        {% endif %}
+        {% if not_found %}
+          <ul>
+            {% for update in not_found %}
+              <li>{{ update.name }} ({{ update.version|default('no version'|t) }}). {{ update.info }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endif %}
+    </div>
   {% endif %}
 </div>

@@ -43,7 +43,7 @@ class Language extends TypedData {
    */
   public function getValue() {
     if (!isset($this->language) && $this->id) {
-      $this->language = language_load($this->id);
+      $this->language = \Drupal::languageManager()->getLanguage($this->id);
     }
     return $this->language;
   }
@@ -73,11 +73,11 @@ class Language extends TypedData {
   }
 
   /**
-   * Overrides TypedData::getString().
+   * {@inheritdoc}
    */
   public function getString() {
     $language = $this->getValue();
-    return $language ? $language->name : '';
+    return $language ? $language->getName() : '';
   }
 
   /**

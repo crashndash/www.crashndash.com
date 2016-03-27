@@ -18,6 +18,16 @@ namespace Drupal\Core\Session;
 interface AccountInterface {
 
   /**
+   * Role ID for anonymous users.
+   */
+  const ANONYMOUS_ROLE = 'anonymous';
+
+  /**
+   * Role ID for authenticated users.
+   */
+  const AUTHENTICATED_ROLE = 'authenticated';
+
+  /**
    * Returns the user ID or 0 for anonymous.
    *
    * @return int
@@ -46,30 +56,6 @@ interface AccountInterface {
    *   TRUE if the user has the permission, FALSE otherwise.
    */
   public function hasPermission($permission);
-
-  /**
-   * Returns the session ID.
-   *
-   * @return string|null
-   *   The session ID or NULL if this user does not have an active session.
-   */
-  public function getSessionId();
-
-  /**
-   * Returns the secure session ID.
-   *
-   * @return string|null
-   *   The session ID or NULL if this user does not have an active secure session.
-   */
-  public function getSecureSessionId();
-
-  /**
-   * Returns the session data.
-   *
-   * @return array
-   *   Array with the session data that belongs to this object.
-   */
-  public function getSessionData();
 
   /**
    * Returns TRUE if the account is authenticated.
@@ -120,22 +106,49 @@ interface AccountInterface {
   public function getPreferredAdminLangcode($fallback_to_default = TRUE);
 
   /**
-   * Returns the username of this account.
+   * Returns the unaltered login name of this account.
+   *
+   * @return string
+   *   An unsanitized plain-text string with the name of this account that is
+   *   used to log in. Only display this name to admins and to the user who owns
+   *   this account, and only in the context of the name used to login. For
+   *   any other display purposes, use
+   *   \Drupal\Core\Session\AccountInterface::getDisplayName() instead.
+   *
+   * @deprecated in Drupal 8.0.0, will be removed before Drupal 9.0.0.
+   *   Use \Drupal\Core\Session\AccountInterface::getAccountName() or
+   *   \Drupal\user\UserInterface::getDisplayName() instead.
+   */
+  public function getUsername();
+
+  /**
+   * Returns the unaltered login name of this account.
+   *
+   * @return string
+   *   An unsanitized plain-text string with the name of this account that is
+   *   used to log in. Only display this name to admins and to the user who owns
+   *   this account, and only in the context of the name used to login. For
+   *   any other display purposes, use
+   *   \Drupal\Core\Session\AccountInterface::getDisplayName() instead.
+   */
+  public function getAccountName();
+
+  /**
+   * Returns the display name of this account.
    *
    * By default, the passed-in object's 'name' property is used if it exists, or
-   * else, the site-defined value for the 'anonymous' variable. However, a module
-   * may override this by implementing
+   * else, the site-defined value for the 'anonymous' variable. However, a
+   * module may override this by implementing
    * hook_user_format_name_alter(&$name, $account).
    *
    * @see hook_user_format_name_alter()
    *
-   * @return
-   *   An unsanitized string with the username to display. The code receiving
-   *   this result must ensure that \Drupal\Component\Utility\String::checkPlain()
-   *   is called on it before it is
-   *   printed to the page.
+   * @return string|\Drupal\Component\Render\MarkupInterface
+   *   Either a string that will be auto-escaped on output or a
+   *   MarkupInterface object that is already HTML escaped. Either is safe
+   *   to be printed within HTML fragments.
    */
-  public function getUsername();
+  public function getDisplayName();
 
   /**
    * Returns the email address of this account.
@@ -162,12 +175,5 @@ interface AccountInterface {
    *   Timestamp of the last access.
    */
   public function getLastAccessedTime();
-
-  /**
-   * Returns the session hostname.
-   *
-   * @return string
-   */
-  public function getHostname();
 
 }

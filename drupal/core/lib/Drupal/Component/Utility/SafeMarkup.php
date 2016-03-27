@@ -7,25 +7,18 @@
 
 namespace Drupal\Component\Utility;
 
+use Drupal\Component\Render\HtmlEscapedText;
+use Drupal\Component\Render\FormattableMarkup;
+use Drupal\Component\Render\MarkupInterface;
+
 /**
- * Manages known safe strings for rendering at the theme layer.
+ * Contains deprecated functionality related to sanitization of markup.
  *
- * The Twig theme engine autoescapes string variables in the template, so it
- * is possible for a string of markup to become double-escaped. SafeMarkup
- * provides a store for known safe strings and methods to manage them
- * throughout the page request.
+ * @deprecated Will be removed before Drupal 9.0.0. Use the appropriate
+ *   @link sanitization sanitization functions @endlink or the @link theme_render theme and render systems @endlink
+ *   so that the output can can be themed, escaped, and altered properly.
  *
- * Strings sanitized by String::checkPlain() or Xss::filter() are automatically
- * marked safe, as are markup strings created from render arrays via
- * drupal_render().
- *
- * This class should be limited to internal use only. Module developers should
- * instead use the appropriate
- * @link sanitization sanitization functions @endlink or the
- * @link theme_render theme and render systems @endlink so that the output can
- * can be themed, escaped, and altered properly.
- *
- * @see twig_drupal_escape_filter()
+ * @see TwigExtension::escapeFilter()
  * @see twig_render_template()
  * @see sanitization
  * @see theme_render
@@ -33,120 +26,72 @@ namespace Drupal\Component\Utility;
 class SafeMarkup {
 
   /**
-   * The list of safe strings.
-   *
-   * @var array
-   */
-  protected static $safeStrings = array();
-
-  /**
-   * Adds a string to a list of strings marked as secure.
-   *
-   * This method is for internal use. Do not use it to prevent escaping of
-   * markup; instead, use the appropriate
-   * @link sanitization sanitization functions @endlink or the
-   * @link theme_render theme and render systems @endlink so that the output
-   * can be themed, escaped, and altered properly.
-   *
-   * This marks strings as secure for the entire page render, not just the code
-   * or element that set it. Therefore, only valid HTML should be
-   * marked as safe (never partial markup). For example, you should never do:
-   * @code
-   *   SafeMarkup::set("<");
-   * @endcode
-   * or:
-   * @code
-   *   SafeMarkup::set('<script>');
-   * @endcode
-   *
-   * @param string $string
-   *   The content to be marked as secure.
-   * @param string $strategy
-   *   The escaping strategy used for this string. Two values are supported
-   *   by default:
-   *   - 'html': (default) The string is safe for use in HTML code.
-   *   - 'all': The string is safe for all use cases.
-   *   See the
-   *   @link http://twig.sensiolabs.org/doc/filters/escape.html Twig escape documentation @endlink
-   *   for more information on escaping strategies in Twig.
-   *
-   * @return string
-   *   The input string that was marked as safe.
-   */
-  public static function set($string, $strategy = 'html') {
-    $string = (string) $string;
-    static::$safeStrings[$string][$strategy] = TRUE;
-    return $string;
-  }
-
-  /**
    * Checks if a string is safe to output.
    *
-   * @param string $string
+   * @param string|\Drupal\Component\Render\MarkupInterface $string
    *   The content to be checked.
    * @param string $strategy
-   *   The escaping strategy. See SafeMarkup::set(). Defaults to 'html'.
+   *   (optional) This value is ignored.
    *
    * @return bool
    *   TRUE if the string has been marked secure, FALSE otherwise.
+   *
+   * @deprecated in Drupal 8.0.x-dev, will be removed before Drupal 9.0.0.
+   *   Instead, you should just check if a variable is an instance of
+   *   \Drupal\Component\Render\MarkupInterface.
    */
   public static function isSafe($string, $strategy = 'html') {
-    return isset(static::$safeStrings[(string) $string][$strategy]) ||
-      isset(static::$safeStrings[(string) $string]['all']);
-  }
-
-  /**
-   * Adds previously retrieved known safe strings to the safe string list.
-   *
-   * This is useful for the batch and form APIs, where it is important to
-   * preserve the safe markup state across page requests. The strings will be
-   * added to any safe strings already marked for the current request.
-   *
-   * @param array $safe_strings
-   *   A list of safe strings as previously retrieved by SafeMarkup::getAll().
-   *
-   * @throws \UnexpectedValueException
-   */
-  public static function setMultiple(array $safe_strings) {
-    foreach ($safe_strings as $string => $strategies) {
-      foreach ($strategies as $strategy => $value) {
-        $string = (string) $string;
-        if ($value === TRUE) {
-          static::$safeStrings[$string][$strategy] = TRUE;
-        }
-        else {
-          // Danger - something is very wrong.
-          throw new \UnexpectedValueException('Only the value TRUE is accepted for safe strings');
-        }
-      }
-    }
+    return $string instanceof MarkupInterface;
   }
 
   /**
    * Encodes special characters in a plain-text string for display as HTML.
    *
-   * @param $string
-   *   A string.
+   * Also validates strings as UTF-8. All processed strings are also
+   * automatically flagged as safe markup strings for rendering.
    *
-   * @return string
-   *   The escaped string. If $string was already set as safe with
-   *   SafeString::set, it won't be escaped again.
+   * @param string $text
+   *   The text to be checked or processed.
+   *
+   * @return \Drupal\Component\Render\HtmlEscapedText
+   *   An HtmlEscapedText object that escapes when rendered to string.
+   *
+   * @deprecated Will be removed before Drupal 9.0.0. Rely on Twig's
+   *   auto-escaping feature, or use the @link theme_render #plain_text @endlink
+   *   key when constructing a render array that contains plain text in order to
+   *   use the renderer's auto-escaping feature. If neither of these are
+   *   possible, \Drupal\Component\Utility\Html::escape() can be used in places
+   *   where explicit escaping is needed.
+   *
+   * @see drupal_validate_utf8()
    */
-  public static function escape($string) {
-    return static::isSafe($string) ? $string : String::checkPlain($string);
+  public static function checkPlain($text) {
+    return new HtmlEscapedText($text);
   }
 
   /**
-  * Retrieves all strings currently marked as safe.
-  *
-  * This is useful for the batch and form APIs, where it is important to
-  * preserve the safe markup state across page requests.
-  *
-  * @return array
-  *   Returns all strings currently marked safe.
-  */
-  public static function getAll() {
-    return static::$safeStrings;
+   * Formats a string for HTML display by replacing variable placeholders.
+   *
+   * @param string $string
+   *   A string containing placeholders. The string itself will not be escaped,
+   *   any unsafe content must be in $args and inserted via placeholders.
+   * @param array $args
+   *   An array with placeholder replacements, keyed by placeholder. See
+   *   \Drupal\Component\Render\FormattableMarkup::placeholderFormat() for
+   *   additional information about placeholders.
+   *
+   * @return string|\Drupal\Component\Render\MarkupInterface
+   *   The formatted string, which is an instance of MarkupInterface unless
+   *   sanitization of an unsafe argument was suppressed (see above).
+   *
+   * @see \Drupal\Component\Render\FormattableMarkup::placeholderFormat()
+   * @see \Drupal\Component\Render\FormattableMarkup
+   *
+   * @deprecated in Drupal 8.0.0, will be removed before Drupal 9.0.0.
+   *   Use \Drupal\Component\Render\FormattableMarkup.
+   */
+  public static function format($string, array $args) {
+    return new FormattableMarkup($string, $args);
   }
 
 }

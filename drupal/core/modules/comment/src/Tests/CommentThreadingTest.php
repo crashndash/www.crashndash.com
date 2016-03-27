@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\comment\Tests\CommentThreadingTest.
+ * Contains \Drupal\comment\Tests\CommentThreadingTest.
  */
 
 namespace Drupal\comment\Tests;
@@ -20,7 +20,7 @@ class CommentThreadingTest extends CommentTestBase {
    */
   function testCommentThreading() {
     // Set comments to have a subject with preview disabled.
-    $this->drupalLogin($this->admin_user);
+    $this->drupalLogin($this->adminUser);
     $this->setCommentPreview(DRUPAL_DISABLED);
     $this->setCommentForm(TRUE);
     $this->setCommentSubject(TRUE);
@@ -28,11 +28,11 @@ class CommentThreadingTest extends CommentTestBase {
     $this->drupalLogout();
 
     // Create a node.
-    $this->drupalLogin($this->web_user);
-    $this->node = $this->drupalCreateNode(array('type' => 'article', 'promote' => 1, 'uid' => $this->web_user->id()));
+    $this->drupalLogin($this->webUser);
+    $this->node = $this->drupalCreateNode(array('type' => 'article', 'promote' => 1, 'uid' => $this->webUser->id()));
 
     // Post comment #1.
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     $subject_text = $this->randomMachineName();
     $comment_text = $this->randomMachineName();
 
@@ -82,7 +82,7 @@ class CommentThreadingTest extends CommentTestBase {
     $this->assertParentLink($comment1_5->id(), $comment1->id());
 
     // Post comment #3 overall comment #5.
-    $this->drupalLogin($this->web_user);
+    $this->drupalLogin($this->webUser);
     $subject_text = $this->randomMachineName();
     $comment_text = $this->randomMachineName();
 
@@ -127,7 +127,7 @@ class CommentThreadingTest extends CommentTestBase {
   /**
    * Asserts that the link to the specified parent comment is present.
    *
-   * @parm int $cid
+   * @param int $cid
    *   The comment ID to check.
    * @param int $pid
    *   The expected parent comment ID.
@@ -154,7 +154,7 @@ class CommentThreadingTest extends CommentTestBase {
   /**
    * Asserts that the specified comment does not have a link to a parent.
    *
-   * @parm int $cid
+   * @param int $cid
    *   The comment ID to check.
    */
   protected function assertNoParentLink($cid) {

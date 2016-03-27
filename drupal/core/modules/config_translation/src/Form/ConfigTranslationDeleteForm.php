@@ -12,10 +12,10 @@ use Drupal\Core\Cache\Cache;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Form\ConfirmFormBase;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Url;
 use Drupal\language\ConfigurableLanguageManagerInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
-use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -89,7 +89,7 @@ class ConfigTranslationDeleteForm extends ConfirmFormBase {
    * {@inheritdoc}
    */
   public function getQuestion() {
-    return $this->t('Are you sure you want to delete the @language translation of %label?', array('%label' => $this->mapper->getTitle(), '@language' => $this->language->name));
+    return $this->t('Are you sure you want to delete the @language translation of %label?', array('%label' => $this->mapper->getTitle(), '@language' => $this->language->getName()));
   }
 
   /**
@@ -109,19 +109,19 @@ class ConfigTranslationDeleteForm extends ConfirmFormBase {
   /**
    * {@inheritdoc}
    */
-  public function getFormID() {
+  public function getFormId() {
     return 'config_translation_delete_form';
   }
 
   /**
    * {@inheritdoc}
    */
-  public function buildForm(array $form, FormStateInterface $form_state, Request $request = NULL, $plugin_id = NULL, $langcode = NULL) {
+  public function buildForm(array $form, FormStateInterface $form_state, RouteMatchInterface $route_match = NULL, $plugin_id = NULL, $langcode = NULL) {
     /** @var \Drupal\config_translation\ConfigMapperInterface $mapper */
     $mapper = $this->configMapperManager->createInstance($plugin_id);
-    $mapper->populateFromRequest($request);
+    $mapper->populateFromRouteMatch($route_match);
 
-    $language = language_load($langcode);
+    $language = $this->languageManager->getLanguage($langcode);
     if (!$language) {
       throw new NotFoundHttpException();
     }
@@ -141,11 +141,11 @@ class ConfigTranslationDeleteForm extends ConfirmFormBase {
 
     // Flush all persistent caches.
     $this->moduleHandler->invokeAll('cache_flush');
-    foreach (Cache::getBins() as $service_id => $cache_backend) {
+    foreach (Cache::getBins() as $cache_backend) {
       $cache_backend->deleteAll();
     }
 
-    drupal_set_message($this->t('@language translation of %label was deleted', array('%label' => $this->mapper->getTitle(), '@language' => $this->language->name)));
+    drupal_set_message($this->t('@language translation of %label was deleted', array('%label' => $this->mapper->getTitle(), '@language' => $this->language->getName())));
 
     $form_state->setRedirectUrl($this->getCancelUrl());
   }

@@ -2,12 +2,13 @@
 
 /**
  * @file
- * Definition of Drupal\views\Plugin\views\field\Url.
+ * Contains \Drupal\views\Plugin\views\field\Url.
  */
 
 namespace Drupal\views\Plugin\views\field;
 
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\Core\Url as CoreUrl;
 use Drupal\views\ResultRow;
 
 /**
@@ -19,6 +20,9 @@ use Drupal\views\ResultRow;
  */
 class Url extends FieldPluginBase {
 
+  /**
+   * {@inheritdoc}
+   */
   protected function defineOptions() {
     $options = parent::defineOptions();
 
@@ -45,7 +49,9 @@ class Url extends FieldPluginBase {
   public function render(ResultRow $values) {
     $value = $this->getValue($values);
     if (!empty($this->options['display_as_link'])) {
-      return _l($this->sanitizeValue($value), $value, array('html' => TRUE));
+      // @todo Views should expect and store a leading /. See:
+      //   https://www.drupal.org/node/2423913
+      return \Drupal::l($this->sanitizeValue($value), CoreUrl::fromUserInput('/' . $value));
     }
     else {
       return $this->sanitizeValue($value, 'url');

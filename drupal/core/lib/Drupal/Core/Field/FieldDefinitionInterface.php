@@ -7,6 +7,7 @@
 
 namespace Drupal\Core\Field;
 
+use Drupal\Core\Cache\CacheableDependencyInterface;
 use Drupal\Core\Entity\FieldableEntityInterface;
 use Drupal\Core\TypedData\ListDataDefinitionInterface;
 
@@ -52,7 +53,7 @@ use Drupal\Core\TypedData\ListDataDefinitionInterface;
  * based on that abstract definition, even though that abstract definition can
  * differ from the concrete definition of any particular node's body field.
  */
-interface FieldDefinitionInterface extends ListDataDefinitionInterface {
+interface FieldDefinitionInterface extends ListDataDefinitionInterface, CacheableDependencyInterface {
 
   /**
    * Returns the machine name of the field.
@@ -159,18 +160,62 @@ interface FieldDefinitionInterface extends ListDataDefinitionInterface {
   public function getDisplayOptions($display_context);
 
   /**
-   * Returns whether at least one non-empty item is required for this field.
+   * Returns whether the field can be empty.
    *
-   * Currently, required-ness is only enforced at the Form API level in entity
-   * edit forms, not during direct API saves.
+   * If a field is required, an entity needs to have at least a valid,
+   * non-empty item in that field's FieldItemList in order to pass validation.
+   *
+   * An item is considered empty if its isEmpty() method returns TRUE.
+   * Typically, that is if at least one of its required properties is empty.
    *
    * @return bool
    *   TRUE if the field is required.
+   *
+   * @see \Drupal\Core\TypedData\Plugin\DataType\ItemList::isEmpty()
+   * @see \Drupal\Core\Field\FieldItemInterface::isEmpty()
+   * @see \Drupal\Core\TypedData\DataDefinitionInterface:isRequired()
+   * @see \Drupal\Core\TypedData\TypedDataManager::getDefaultConstraints()
    */
   public function isRequired();
 
   /**
+   * Returns the default value literal for the field.
+   *
+   * This method retrieves the raw property assigned to the field definition.
+   * When computing the runtime default value for a field in a given entity,
+   * ::getDefaultValue() should be used instead.
+   *
+   * @return array
+   *   The default value for the field, as a numerically indexed array of items,
+   *   each item being a property/value array (array() for no default value).
+   *
+   * @see FieldDefinitionInterface::getDefaultValue()
+   * @see FieldDefinitionInterface::getDefaultValueCallback()
+   */
+  public function getDefaultValueLiteral();
+
+  /**
+   * Returns the default value callback for the field.
+   *
+   * This method retrieves the raw property assigned to the field definition.
+   * When computing the runtime default value for a field in a given entity,
+   * ::getDefaultValue() should be used instead.
+   *
+   * @return string|null
+   *   The default value callback for the field.
+   *
+   * @see FieldDefinitionInterface::getDefaultValue()
+   * @see FieldDefinitionInterface::getDefaultValueLiteral()
+   */
+  public function getDefaultValueCallback();
+
+  /**
    * Returns the default value for the field in a newly created entity.
+   *
+   * This method computes the runtime default value for a field in a given
+   * entity. To access the raw properties assigned to the field definition,
+   * ::getDefaultValueLiteral() or ::getDefaultValueCallback() should be used
+   * instead.
    *
    * @param \Drupal\Core\Entity\FieldableEntityInterface $entity
    *   The entity for which the default value is generated.
@@ -178,6 +223,9 @@ interface FieldDefinitionInterface extends ListDataDefinitionInterface {
    * @return array
    *   The default value for the field, as a numerically indexed array of items,
    *   each item being a property/value array (array() for no default value).
+   *
+   * @see FieldDefinitionInterface::getDefaultValueLiteral()
+   * @see FieldDefinitionInterface::getDefaultValueCallback()
    */
   public function getDefaultValue(FieldableEntityInterface $entity);
 

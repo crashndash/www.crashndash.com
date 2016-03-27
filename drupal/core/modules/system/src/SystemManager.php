@@ -11,8 +11,6 @@ use Drupal\Core\Menu\MenuActiveTrailInterface;
 use Drupal\Core\Menu\MenuLinkTreeInterface;
 use Drupal\Core\Menu\MenuLinkInterface;
 use Drupal\Core\Menu\MenuTreeParameters;
-use Symfony\Cmf\Component\Routing\RouteObjectInterface;
-use Drupal\Core\Database\Connection;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Symfony\Component\HttpFoundation\RequestStack;
 
@@ -27,13 +25,6 @@ class SystemManager {
    * @var \Drupal\Core\Extension\ModuleHandlerInterface
    */
   protected $moduleHandler;
-
-  /**
-   * Database Service Object.
-   *
-   * @var \Drupal\Core\Database\Connection
-   */
-  protected $database;
 
   /**
    * The request stack.
@@ -83,8 +74,6 @@ class SystemManager {
    *
    * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler
    *   The module handler.
-   * @param \Drupal\Core\Database\Connection $database
-   *   The database connection.
    * @param \Drupal\Core\Entity\EntityManagerInterface $entity_manager
    *   The entity manager.
    * @param \Symfony\Component\HttpFoundation\RequestStack $request_stack
@@ -94,9 +83,8 @@ class SystemManager {
    * @param \Drupal\Core\Menu\MenuActiveTrailInterface $menu_active_trail
    *   The active menu trail service.
    */
-  public function __construct(ModuleHandlerInterface $module_handler, Connection $database, EntityManagerInterface $entity_manager, RequestStack $request_stack, MenuLinkTreeInterface $menu_tree, MenuActiveTrailInterface $menu_active_trail) {
+  public function __construct(ModuleHandlerInterface $module_handler, EntityManagerInterface $entity_manager, RequestStack $request_stack, MenuLinkTreeInterface $menu_tree, MenuActiveTrailInterface $menu_active_trail) {
     $this->moduleHandler = $module_handler;
-    $this->database = $database;
     $this->requestStack = $request_stack;
     $this->menuTree = $menu_tree;
     $this->menuActiveTrail = $menu_active_trail;
@@ -105,7 +93,7 @@ class SystemManager {
   /**
    * Checks for requirement severity.
    *
-   * @return boolean
+   * @return bool
    *   Returns the status of the system.
    */
   public function checkRequirements() {
@@ -129,7 +117,7 @@ class SystemManager {
     usort($requirements, function($a, $b) {
       if (!isset($a['weight'])) {
         if (!isset($b['weight'])) {
-          return strcmp($a['title'], $b['title']);
+          return strcasecmp($a['title'], $b['title']);
         }
         return -$b['weight'];
       }
@@ -195,7 +183,7 @@ class SystemManager {
    *   The menu item to be displayed.
    *
    * @return array
-   *   An array of menu items, as expected by theme_admin_block_content().
+   *   An array of menu items, as expected by admin-block-content.html.twig.
    */
   public function getAdminBlock(MenuLinkInterface $instance) {
     $content = array();
@@ -210,6 +198,14 @@ class SystemManager {
     );
     $tree = $this->menuTree->transform($tree, $manipulators);
     foreach ($tree as $key => $element) {
+      // Only render accessible links.
+      if (!$element->access->isAllowed()) {
+        // @todo Bubble cacheability metadata of both accessible and
+        //   inaccessible links. Currently made impossible by the way admin
+        //   blocks are rendered.
+        continue;
+      }
+
       /** @var $link \Drupal\Core\Menu\MenuLinkInterface */
       $link = $element->link;
       $content[$key]['title'] = $link->getTitle();

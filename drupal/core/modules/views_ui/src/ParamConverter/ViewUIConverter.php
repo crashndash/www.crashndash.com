@@ -7,11 +7,13 @@
 
 namespace Drupal\views_ui\ParamConverter;
 
+use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\Entity\EntityManagerInterface;
-use Drupal\Core\ParamConverter\EntityConverter;
+use Drupal\Core\ParamConverter\AdminPathConfigEntityConverter;
+use Drupal\Core\Routing\AdminContext;
 use Symfony\Component\Routing\Route;
 use Drupal\Core\ParamConverter\ParamConverterInterface;
-use Drupal\user\TempStoreFactory;
+use Drupal\user\SharedTempStoreFactory;
 use Drupal\views_ui\ViewUI;
 
 /**
@@ -30,23 +32,35 @@ use Drupal\views_ui\ViewUI;
  * Views UI and loaded from the views temp store, but it will not touch the
  * value for {bar}.
  */
-class ViewUIConverter extends EntityConverter implements ParamConverterInterface {
+class ViewUIConverter extends AdminPathConfigEntityConverter implements ParamConverterInterface {
 
   /**
    * Stores the tempstore factory.
    *
-   * @var \Drupal\user\TempStoreFactory
+   * @var \Drupal\user\SharedTempStoreFactory
    */
   protected $tempStoreFactory;
 
   /**
    * Constructs a new ViewUIConverter.
    *
-   * @param \Drupal\user\TempStoreFactory $temp_store_factory
+   * @param \Drupal\Core\Entity\EntityManagerInterface $entity_manager
+   *   The entity manager.
+   * @param \Drupal\user\SharedTempStoreFactory $temp_store_factory
    *   The factory for the temp store object.
    */
-  public function __construct(EntityManagerInterface $entity_manager, TempStoreFactory $temp_store_factory) {
-    parent::__construct($entity_manager);
+  public function __construct(EntityManagerInterface $entity_manager, SharedTempStoreFactory $temp_store_factory, ConfigFactoryInterface $config_factory = NULL, AdminContext $admin_context = NULL) {
+    // The config factory and admin context are new arguments due to changing
+    // the parent. Avoid an error on updated sites by falling back to getting
+    // them from the container.
+    // @todo Remove in 8.2.x in https://www.drupal.org/node/2674328.
+    if (!$config_factory) {
+      $config_factory = \Drupal::configFactory();
+    }
+    if (!$admin_context) {
+      $admin_context = \Drupal::service('router.admin_context');
+    }
+    parent::__construct($entity_manager, $config_factory, $admin_context);
 
     $this->tempStoreFactory = $temp_store_factory;
   }

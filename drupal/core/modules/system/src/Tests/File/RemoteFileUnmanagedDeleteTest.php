@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\system\Tests\File\RemoteFileUnmanagedDeleteTest.
+ * Contains \Drupal\system\Tests\File\RemoteFileUnmanagedDeleteTest.
  */
 
 namespace Drupal\system\Tests\File;
@@ -37,6 +37,6 @@ class RemoteFileUnmanagedDeleteTest extends UnmanagedDeleteTest {
 
   protected function setUp() {
     parent::setUp();
-    \Drupal::config('system.file')->set('default_scheme', 'dummy-remote')->save();
+    $this->config('system.file')->set('default_scheme', 'dummy-remote')->save();
   }
 }

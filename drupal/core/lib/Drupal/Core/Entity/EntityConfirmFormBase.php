@@ -10,7 +10,6 @@ namespace Drupal\Core\Entity;
 use Drupal\Core\Form\ConfirmFormHelper;
 use Drupal\Core\Form\ConfirmFormInterface;
 use Drupal\Core\Form\FormStateInterface;
-use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Provides a generic base class for an entity-based confirmation form.
@@ -22,7 +21,7 @@ abstract class EntityConfirmFormBase extends EntityForm implements ConfirmFormIn
   /**
    * {@inheritdoc}
    */
-  public function getBaseFormID() {
+  public function getBaseFormId() {
     return $this->entity->getEntityTypeId() . '_confirm_form';
   }
 
@@ -81,9 +80,6 @@ abstract class EntityConfirmFormBase extends EntityForm implements ConfirmFormIn
       'submit' => array(
         '#type' => 'submit',
         '#value' => $this->getConfirmText(),
-        '#validate' => array(
-          array($this, 'validate'),
-        ),
         '#submit' => array(
           array($this, 'submitForm'),
         ),

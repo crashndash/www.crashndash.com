@@ -11,6 +11,7 @@ use Drupal\Core\Form\FormBase;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Render\Element;
+use Drupal\Core\Routing\RouteMatchInterface;
 
 /**
  * Base class for entity forms.
@@ -37,6 +38,22 @@ class EntityForm extends FormBase implements EntityFormInterface {
   protected $moduleHandler;
 
   /**
+   * The entity manager.
+   *
+   * @var \Drupal\Core\Entity\EntityManagerInterface
+   *
+   * @deprecated in Drupal 8.0.0, will be removed before Drupal 9.0.0.
+   */
+  protected $entityManager;
+
+  /**
+   * The entity type manager.
+   *
+   * @var \Drupal\Core\Entity\EntityTypeManagerInterface
+   */
+  protected $entityTypeManager;
+
+  /**
    * The entity being used by this form.
    *
    * @var \Drupal\Core\Entity\EntityInterface
@@ -57,7 +74,7 @@ class EntityForm extends FormBase implements EntityFormInterface {
   /**
    * {@inheritdoc}
    */
-  public function getBaseFormID() {
+  public function getBaseFormId() {
     // Assign ENTITYTYPE_form as base form ID to invoke corresponding
     // hook_form_alter(), #validate, #submit, and #theme callbacks, but only if
     // it is different from the actual form ID, since callbacks would be invoked
@@ -75,7 +92,7 @@ class EntityForm extends FormBase implements EntityFormInterface {
   public function getFormId() {
     $form_id = $this->entity->getEntityTypeId();
     if ($this->entity->getEntityType()->hasKey('bundle')) {
-      $form_id = $this->entity->bundle() . '_' . $form_id;
+      $form_id .= '_' . $this->entity->bundle();
     }
     if ($this->operation != 'default') {
       $form_id = $form_id . '_' . $this->operation;
@@ -91,6 +108,12 @@ class EntityForm extends FormBase implements EntityFormInterface {
     // allow for initial preparation before form building and processing.
     if (!$form_state->has('entity_form_initialized')) {
       $this->init($form_state);
+    }
+
+    // Ensure that edit forms have the correct cacheability metadata so they can
+    // be cached.
+    if (!$this->entity->isNew()) {
+      \Drupal::service('renderer')->addCacheableDependency($form, $this->entity);
     }
 
     // Retrieve the form array using the possibly updated entity in form state.
@@ -121,15 +144,15 @@ class EntityForm extends FormBase implements EntityFormInterface {
   }
 
   /**
-   * Returns the actual form array to be built.
+   * Gets the actual form array to be built.
    *
-   * @see \Drupal\Core\Entity\EntityForm::build()
+   * @see \Drupal\Core\Entity\EntityForm::processForm()
+   * @see \Drupal\Core\Entity\EntityForm::afterBuild()
    */
   public function form(array $form, FormStateInterface $form_state) {
-    $entity = $this->entity;
-
-    // Add a process callback.
+    // Add #process and #after_build callbacks.
     $form['#process'][] = '::processForm';
+    $form['#after_build'][] = '::afterBuild';
 
     return $form;
   }
@@ -143,6 +166,23 @@ class EntityForm extends FormBase implements EntityFormInterface {
     // If the form is cached, process callbacks may not have a valid reference
     // to the entity object, hence we must restore it.
     $this->entity = $form_state->getFormObject()->getEntity();
+
+    return $element;
+  }
+
+  /**
+   * Form element #after_build callback: Updates the entity with submitted data.
+   *
+   * Updates the internal $this->entity object with submitted values when the
+   * form is being rebuilt (e.g. submitted via AJAX), so that subsequent
+   * processing (e.g. AJAX callbacks) can rely on it.
+   */
+  public function afterBuild(array $element, FormStateInterface $form_state) {
+    // Rebuild the entity if #after_build is being called as part of a form
+    // rebuild, i.e. if we are processing input.
+    if ($form_state->isProcessingInput()) {
+      $this->entity = $this->buildEntity($element, $form_state);
+    }
 
     return $element;
   }
@@ -194,7 +234,6 @@ class EntityForm extends FormBase implements EntityFormInterface {
     $actions['submit'] = array(
       '#type' => 'submit',
       '#value' => $this->t('Save'),
-      '#validate' => array('::validate'),
       '#submit' => array('::submitForm', '::save'),
     );
 
@@ -217,16 +256,6 @@ class EntityForm extends FormBase implements EntityFormInterface {
     }
 
     return $actions;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function validate(array $form, FormStateInterface $form_state) {
-    // @todo Remove this.
-    // Execute legacy global validation handlers.
-    $form_state->setValidateHandlers([]);
-    form_execute_handlers('validate', $form, $form_state);
   }
 
   /**
@@ -291,10 +320,17 @@ class EntityForm extends FormBase implements EntityFormInterface {
    *   The current state of the form.
    */
   protected function copyFormValuesToEntity(EntityInterface $entity, array $form, FormStateInterface $form_state) {
+    $values = $form_state->getValues();
+
+    if ($this->entity instanceof EntityWithPluginCollectionInterface) {
+      // Do not manually update values represented by plugin collections.
+      $values = array_diff_key($values, $this->entity->getPluginCollections());
+    }
+
     // @todo: This relies on a method that only exists for config and content
     //   entities, in a different way. Consider moving this logic to a config
     //   entity specific implementation.
-    foreach ($form_state->getValues() as $key => $value) {
+    foreach ($values as $key => $value) {
       $entity->set($key, $value);
     }
   }
@@ -312,6 +348,20 @@ class EntityForm extends FormBase implements EntityFormInterface {
   public function setEntity(EntityInterface $entity) {
     $this->entity = $entity;
     return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getEntityFromRouteMatch(RouteMatchInterface $route_match, $entity_type_id) {
+    if ($route_match->getRawParameter($entity_type_id) !== NULL) {
+      $entity = $route_match->getParameter($entity_type_id);
+    }
+    else {
+      $entity = $this->entityManager->getStorage($entity_type_id)->create([]);
+    }
+
+    return $entity;
   }
 
   /**
@@ -352,6 +402,22 @@ class EntityForm extends FormBase implements EntityFormInterface {
    */
   public function setModuleHandler(ModuleHandlerInterface $module_handler) {
     $this->moduleHandler = $module_handler;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setEntityManager(EntityManagerInterface $entity_manager) {
+    $this->entityManager = $entity_manager;
+    return $this;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setEntityTypeManager(EntityTypeManagerInterface $entity_type_manager) {
+    $this->entityTypeManager = $entity_type_manager;
     return $this;
   }
 

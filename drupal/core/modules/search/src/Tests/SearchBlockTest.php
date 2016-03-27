@@ -32,17 +32,23 @@ class SearchBlockTest extends SearchTestBase {
   /**
    * Test that the search form block can be placed and works.
    */
-  protected function testSearchFormBlock() {
+  public function testSearchFormBlock() {
 
     // Test availability of the search block in the admin "Place blocks" list.
     $this->drupalGet('admin/structure/block');
-    $this->assertLinkByHref('/admin/structure/block/add/search_form_block/stark', 0,
+    $this->clickLinkPartialName('Place block');
+    $this->assertLinkByHref('/admin/structure/block/add/search_form_block/classy', 0,
       'Did not find the search block in block candidate list.');
 
     $block = $this->drupalPlaceBlock('search_form_block');
 
     $this->drupalGet('');
     $this->assertText($block->label(), 'Block title was found.');
+
+    // Check that name attribute is not empty.
+    $pattern = "//input[@type='submit' and @name='']";
+    $elements = $this->xpath($pattern);
+    $this->assertTrue(empty($elements), 'The search input field does not have empty name attribute.');
 
     // Test a normal search via the block form, from the front page.
     $terms = array('keys' => 'test');
@@ -59,7 +65,7 @@ class SearchBlockTest extends SearchTestBase {
 
     $visibility = $block->getVisibility();
     $visibility['request_path']['pages'] = 'search';
-    $block->getPlugin()->setVisibilityConfig('request_path', $visibility['request_path']);
+    $block->setVisibilityConfig('request_path', $visibility['request_path']);
 
     $this->submitGetForm('', $terms, t('Search'));
     $this->assertResponse(200);
@@ -92,16 +98,16 @@ class SearchBlockTest extends SearchTestBase {
     // Test that after entering a too-short keyword in the form, you can then
     // search again with a longer keyword. First test using the block form.
     $this->submitGetForm('node', array('keys' => $this->randomMachineName(1)), t('Search'));
-    $this->assertText('You must include at least one positive keyword', 'Keyword message is displayed when searching for short word');
+    $this->assertText('You must include at least one keyword to match in the content', 'Keyword message is displayed when searching for short word');
     $this->assertNoText(t('Please enter some keywords'), 'With short word entered, no keywords message is not displayed');
     $this->submitGetForm(NULL, array('keys' => $this->randomMachineName()), t('Search'), 'search-block-form');
-    $this->assertNoText('You must include at least one positive keyword', 'Keyword message is not displayed when searching for long word after short word search');
+    $this->assertNoText('You must include at least one keyword to match in the content', 'Keyword message is not displayed when searching for long word after short word search');
 
     // Same test again, using the search page form for the second search this
     // time.
     $this->submitGetForm('node', array('keys' => $this->randomMachineName(1)), t('Search'));
     $this->drupalPostForm(NULL, array('keys' => $this->randomMachineName()), t('Search'), array(), array(), 'search-form');
-    $this->assertNoText('You must include at least one positive keyword', 'Keyword message is not displayed when searching for long word after short word search');
+    $this->assertNoText('You must include at least one keyword to match in the content', 'Keyword message is not displayed when searching for long word after short word search');
 
   }
 
