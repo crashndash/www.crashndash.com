@@ -17,7 +17,7 @@ sites/*/private
 
 # Ignore SimpleTest multi-site environment.
 sites/simpletest
-
+.idea
 # If you prefer to store your .gitignore file in the sites/ folder, comment
 # or delete the previous settings and uncomment the following ones, instead.
 
