@@ -1,0 +1,14 @@
+uuid: f24ccad9-2caf-47c5-97d5-5e111c8c4572
+name: 'Crash n Dash'
+mail: crashndashgame@gmail.com
+slogan: ''
+page:
+  403: ''
+  404: ''
+  front: /frontpage
+admin_compact_mode: false
+weight_select_max: 100
+langcode: en
+default_langcode: en
+_core:
+  default_config_hash: AyT9s8OUcclfALRE_imByOMgtZ19eOlqdF6zI3p7yqo

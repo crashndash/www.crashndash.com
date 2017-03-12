@@ -1,0 +1,22 @@
+uuid: 0596e337-aed9-4255-8785-86cc08afa035
+langcode: en
+status: true
+dependencies:
+  module:
+    - system
+  theme:
+    - cnd_theme
+_core:
+  default_config_hash: KHQIJ7Vfl25lTjzIc7qIvnuistt-Mw2O0kG4jCofmkI
+id: cnd_theme_messages
+theme: cnd_theme
+region: header
+weight: 0
+provider: null
+plugin: system_messages_block
+settings:
+  id: system_messages_block
+  label: 'Status messages'
+  provider: system
+  label_display: '0'
+visibility: {  }
