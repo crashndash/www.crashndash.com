@@ -10,10 +10,12 @@ module:
   color: 0
   comment: 0
   config: 0
+  contact: 0
   contextual: 0
   crashndash: 0
   datetime: 0
   dblog: 0
+  devel: 0
   dynamic_page_cache: 0
   editor: 0
   field: 0
@@ -33,6 +35,7 @@ module:
   rdf: 0
   search: 0
   shortcut: 0
+  sparkpost: 0
   system: 0
   taxonomy: 0
   text: 0
@@ -43,7 +46,7 @@ module:
   views_ui: 0
   menu_link_content: 1
   views: 10
-  minimal: 10
+  standard: 1000
 theme:
   stable: 0
   classy: 0

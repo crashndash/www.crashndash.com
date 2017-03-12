@@ -1,4 +1,4 @@
-uuid: 90e50e5b-efab-45cd-b701-1d494e50e7ff
+uuid: d352e841-b80c-438b-976d-0bcd79ca2c15
 langcode: en
 status: true
 dependencies:
@@ -7,7 +7,7 @@ dependencies:
     - node
     - user
 _core:
-  default_config_hash: jmfZ73IDUpneecqVXUK3whGzTcvwLBBll9U3ZTCzndo
+  default_config_hash: HDMjKTBWeuHvsV6i6VvULmfhiSjNzIH1hCoy5GuZD0E
 id: comments_recent
 label: 'Recent comments'
 module: views
@@ -176,7 +176,7 @@ display:
           entity_field: changed
       filters:
         status:
-          value: true
+          value: '1'
           table: comment_field_data
           field: status
           id: status
@@ -187,7 +187,7 @@ display:
           entity_type: comment
           entity_field: status
         status_node:
-          value: true
+          value: '1'
           table: node_field_data
           field: status
           relationship: node

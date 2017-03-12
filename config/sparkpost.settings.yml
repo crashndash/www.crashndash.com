@@ -1,0 +1,9 @@
+api_key: null
+debug: 1
+sender: null
+sender_name: null
+format: ''
+async: 0
+skip_cron: 0
+_core:
+  default_config_hash: z3l4ndIiWm2qFKsLF2skyKEeSvOziAueoQY0ixY0-Ws

@@ -1,11 +1,11 @@
-uuid: 4e3dff9f-36de-4b0e-b400-cbf20d64cc16
+uuid: 2800e0a5-ebed-4f75-b56f-a11d7886cc37
 langcode: en
 status: true
 dependencies:
   module:
     - user
 _core:
-  default_config_hash: queuLjhKGUQ_b-lNh_TkhCvOPrVunfJopvVGOf3cjAo
+  default_config_hash: 7kCByILhEFqBK9eFmxHNVbEq2z3-pl-cwWjDnzLn67I
 id: user_admin_people
 label: People
 module: user
@@ -708,7 +708,7 @@ display:
           group_type: group
           admin_label: ''
           operator: '='
-          value: true
+          value: '1'
           group: 1
           exposed: true
           expose:
@@ -756,7 +756,7 @@ display:
           group_type: group
           admin_label: ''
           operator: '='
-          value: true
+          value: '1'
           group: 1
           exposed: false
           expose:

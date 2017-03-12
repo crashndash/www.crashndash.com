@@ -1,8 +1,9 @@
-uuid: 892ba52b-d22e-41ff-a100-b27e8e20ed3a
+uuid: b281aa97-662c-4f6e-83c8-1aa8bc43d8e8
 langcode: en
 status: true
 dependencies:
   config:
+    - core.entity_view_display.comment.comment.default
     - field.field.node.article.body
     - field.field.node.article.comment
     - field.field.node.article.field_image
@@ -15,7 +16,7 @@ dependencies:
     - text
     - user
 _core:
-  default_config_hash: JtAg_-waIt1quMtdDtHIaXJMxvTuSmxW7bWyO6Zd68E
+  default_config_hash: 1x2VMLBhwpRPa-_Q_6J_ZN4QNazwCmP1dt01Zc-Iors
 id: node.article.default
 targetEntityType: node
 bundle: article
@@ -28,10 +29,11 @@ content:
     third_party_settings: {  }
     label: hidden
   comment:
-    label: above
     type: comment_default
-    weight: 20
+    weight: 110
+    label: above
     settings:
+      view_mode: default
       pager_id: 0
     third_party_settings: {  }
   field_image:
