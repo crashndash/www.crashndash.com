@@ -39,6 +39,11 @@ class CrashnDashController extends ControllerBase {
       '#users' => $users,
       '#room_updated' => $date,
       '#updated_raw' => $updated,
+      '#cache' => [
+        'keys' => [
+          CRASHNDASH_DATA_KEY,
+        ],
+      ],
     ];
   }
 
@@ -83,12 +88,6 @@ class CrashnDashController extends ControllerBase {
       );
       $added++;
     }
-    $variables = array(
-      'parameters' => array(
-        'rows' => $pagesize,
-      ),
-    );
-    //$output .= _theme('table', array('header' => $headers, 'rows' => $rows, 'attributes' => array('class' => array('moai-table'))));
 
     //$output .= _theme('pager', $variables);
     $lasttime = \Drupal::state()->get('crashndash.scores_updated');
@@ -114,12 +113,18 @@ class CrashnDashController extends ControllerBase {
       'updated' => [
         '#markup' => '<h6 class="subheader lastupdated" data-time="' . $lasttime . '">' . t('Last updated at %date', array('%date' => date('D j F Y H:i:s', $lasttime))) . '</div>',
       ],
+      '#cache' => [
+        'keys' => [
+          CRASHNDASH_DATA_KEY,
+        ],
+      ],
     ];
   }
 
   public function play() {
     $room = '';
     $referrer = '';
+    // @todo: Use request object.
     if (!empty($_GET['room'])) {
       // ho ho. get a room.
       $room = $_GET['room'];
@@ -135,6 +140,10 @@ class CrashnDashController extends ControllerBase {
       '#theme' => 'crashndash_play',
       '#referrer' => $referrer,
       '#room' => $room,
+      '#cache' => [
+        // @todo: Fix this properly. Vary based on GET param.
+        'max-age' => 0,
+      ],
     ];
   }
 
