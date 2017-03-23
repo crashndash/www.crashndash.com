@@ -1,5 +1,7 @@
 <?php
 
+define('CRASHNDASH_DATA_KEY', 'crashndash.data');
+
 /**
  * Implements hook_theme().
  */
