@@ -24,7 +24,7 @@
         "drupal/console": "~1.0",
         "drupal/devel": "^1.0@RC",
         "drupal/coffee": "^1.0@beta",
-        "drupal/admin_toolbar": "^1.18",
+        "drupal/admin_toolbar": "~1.19.0",
         "drupal/sparkpost": "2.x-dev"
     },
     "require-dev": {
