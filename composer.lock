@@ -1143,7 +1143,7 @@
                 },
                 "drupal": {
                     "version": "8.x-1.18",
-                    "datestamp": "1480614184"
+                    "datestamp": "1491487683"
                 }
             },
             "notification-url": "https://packages.drupal.org/8/downloads",
@@ -3834,16 +3834,16 @@
         },
         {
             "name": "symfony/expression-language",
-            "version": "v2.8.18",
+            "version": "v2.8.19",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/expression-language.git",
-                "reference": "3d63ca2b4ccf670726f10764a9db4553b97fe136"
+                "reference": "269a0a751f07a58b315f74899a253ead71747f06"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/expression-language/zipball/3d63ca2b4ccf670726f10764a9db4553b97fe136",
-                "reference": "3d63ca2b4ccf670726f10764a9db4553b97fe136",
+                "url": "https://api.github.com/repos/symfony/expression-language/zipball/269a0a751f07a58b315f74899a253ead71747f06",
+                "reference": "269a0a751f07a58b315f74899a253ead71747f06",
                 "shasum": ""
             },
             "require": {
@@ -3879,7 +3879,7 @@
             ],
             "description": "Symfony ExpressionLanguage Component",
             "homepage": "https://symfony.com",
-            "time": "2017-02-24T13:57:05+00:00"
+            "time": "2017-04-03T23:11:44+00:00"
         },
         {
             "name": "symfony/filesystem",
