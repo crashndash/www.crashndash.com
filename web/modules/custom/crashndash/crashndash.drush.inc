@@ -38,7 +38,8 @@ function _crashndash_update_high_scores() {
   $code = $response->getStatusCode();
   if ($code != 200) {
     // We have problems with receiving stuff. Log it and bail out.
-    watchdog('crashndash', 'Problems retrieving high scores data. The server says: ' . print_r($response->getBody(), TRUE));
+    \Drupal::logger('crashndash')
+      ->error('Problems retrieving high scores data. The server says: ' . print_r($response->getBody(), TRUE));
     return;
   }
   $body = json_decode($response->getBody());
@@ -60,7 +61,8 @@ function _crashndash_update_room_data() {
   $code = $response->getStatusCode();
   if ($code != 200) {
     // We have problems with receiving stuff. Log it and bail out.
-    watchdog('crashndash', 'Problems retrieving room data. The server says: ' . print_r($body, TRUE));
+    \Drupal::logger('crashndash')
+      ->error('Problems retrieving room data. The server says: ' . print_r($response->getBody(), TRUE));
     return;
   }
   $body = json_decode($response->getBody());
