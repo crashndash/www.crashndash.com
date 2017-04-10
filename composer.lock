@@ -3428,16 +3428,16 @@
         },
         {
             "name": "symfony/config",
-            "version": "v2.8.18",
+            "version": "v2.8.19",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/config.git",
-                "reference": "06ce6bb46c24963ec09323da45d0f4f85d3cecd2"
+                "reference": "35b7dfa089d7605eb1fdd46281b3070fb9f38750"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/config/zipball/06ce6bb46c24963ec09323da45d0f4f85d3cecd2",
-                "reference": "06ce6bb46c24963ec09323da45d0f4f85d3cecd2",
+                "url": "https://api.github.com/repos/symfony/config/zipball/35b7dfa089d7605eb1fdd46281b3070fb9f38750",
+                "reference": "35b7dfa089d7605eb1fdd46281b3070fb9f38750",
                 "shasum": ""
             },
             "require": {
@@ -3480,7 +3480,7 @@
             ],
             "description": "Symfony Config Component",
             "homepage": "https://symfony.com",
-            "time": "2017-03-01T18:13:50+00:00"
+            "time": "2017-04-04T15:24:26+00:00"
         },
         {
             "name": "symfony/console",
@@ -3883,16 +3883,16 @@
         },
         {
             "name": "symfony/filesystem",
-            "version": "v2.8.18",
+            "version": "v2.8.19",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/filesystem.git",
-                "reference": "e542d4765092d22552b1bf01ddccfb01d98ee325"
+                "reference": "31ab6827a696244094e6e20d77e7d404f8eb4252"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/filesystem/zipball/e542d4765092d22552b1bf01ddccfb01d98ee325",
-                "reference": "e542d4765092d22552b1bf01ddccfb01d98ee325",
+                "url": "https://api.github.com/repos/symfony/filesystem/zipball/31ab6827a696244094e6e20d77e7d404f8eb4252",
+                "reference": "31ab6827a696244094e6e20d77e7d404f8eb4252",
                 "shasum": ""
             },
             "require": {
@@ -3928,7 +3928,7 @@
             ],
             "description": "Symfony Filesystem Component",
             "homepage": "https://symfony.com",
-            "time": "2017-02-18T17:06:33+00:00"
+            "time": "2017-03-26T15:40:40+00:00"
         },
         {
             "name": "symfony/finder",
