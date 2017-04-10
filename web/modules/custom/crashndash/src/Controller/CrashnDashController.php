@@ -42,6 +42,7 @@ class CrashnDashController extends ControllerBase {
       '#cache' => [
         'keys' => [
           CRASHNDASH_DATA_KEY,
+          'frontpage',
         ],
       ],
     ];
@@ -116,6 +117,7 @@ class CrashnDashController extends ControllerBase {
       '#cache' => [
         'keys' => [
           CRASHNDASH_DATA_KEY,
+          'highscores',
         ],
       ],
     ];
@@ -125,6 +127,7 @@ class CrashnDashController extends ControllerBase {
     $room = '';
     $referrer = '';
     // @todo: Use request object.
+
     if (!empty($_GET['room'])) {
       // ho ho. get a room.
       $room = $_GET['room'];
