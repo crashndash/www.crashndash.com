@@ -1825,7 +1825,7 @@
             "source": {
                 "type": "git",
                 "url": "https://git.drupal.org/project/sparkpost",
-                "reference": "cf13788eb62ba051f43fd5a8ff67b59aaccb7acb"
+                "reference": "405cc96d12b79133937b36fbff6caa20181783ef"
             },
             "require": {
                 "drupal/core": "~8.0",
@@ -1838,8 +1838,8 @@
                     "dev-2.x": "2.x-dev"
                 },
                 "drupal": {
-                    "version": "8.x-2.0-alpha1+1-dev",
-                    "datestamp": "1490197082"
+                    "version": "8.x-2.0-beta1+0-dev",
+                    "datestamp": "1496414043"
                 }
             },
             "notification-url": "https://packages.drupal.org/8/downloads",
@@ -1865,7 +1865,7 @@
                 "source": "http://cgit.drupalcode.org/sparkpost",
                 "issues": "https://www.drupal.org/project/issues/sparkpost"
             },
-            "time": "2017-03-22 15:37:53"
+            "time": "2017-06-02 14:29:56"
         },
         {
             "name": "drush/drush",
@@ -2836,16 +2836,16 @@
         },
         {
             "name": "php-http/message",
-            "version": "1.5.0",
+            "version": "1.6.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/php-http/message.git",
-                "reference": "13df8c48f40ca7925303aa336f19be4b80984f01"
+                "reference": "2edd63bae5f52f79363c5f18904b05ce3a4b7253"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/php-http/message/zipball/13df8c48f40ca7925303aa336f19be4b80984f01",
-                "reference": "13df8c48f40ca7925303aa336f19be4b80984f01",
+                "url": "https://api.github.com/repos/php-http/message/zipball/2edd63bae5f52f79363c5f18904b05ce3a4b7253",
+                "reference": "2edd63bae5f52f79363c5f18904b05ce3a4b7253",
                 "shasum": ""
             },
             "require": {
@@ -2853,6 +2853,9 @@
                 "php": ">=5.4",
                 "php-http/message-factory": "^1.0.2",
                 "psr/http-message": "^1.0"
+            },
+            "provide": {
+                "php-http/message-factory-implementation": "1.0"
             },
             "require-dev": {
                 "akeneo/phpspec-skip-example-extension": "^1.0",
@@ -2901,7 +2904,7 @@
                 "message",
                 "psr-7"
             ],
-            "time": "2017-02-14T08:58:37+00:00"
+            "time": "2017-07-05T06:40:53+00:00"
         },
         {
             "name": "php-http/message-factory",
