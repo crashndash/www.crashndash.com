@@ -22,7 +22,7 @@
         "drupal/core": "~8.3.5",
         "drush/drush": "~8.1.12",
         "drupal/console": "~1.0",
-        "drupal/devel": "^1.0@RC",
+        "drupal/devel": "^1.0.0-rc2",
         "drupal/coffee": "^1.0@beta",
         "drupal/admin_toolbar": "~1.19.0",
         "drupal/sparkpost": "2.x-dev",
