@@ -28,10 +28,6 @@
         "zendframework/zend-diactoros": "~1.4.0"
     },
     "require-dev": {
-        "behat/mink": "~1.7",
-        "behat/mink-goutte-driver": "~1.2",
-        "jcalderonzumba/mink-phantomjs-driver": "~0.3.1",
-        "mikey179/vfsStream": "~1.2"
     },
     "conflict": {
         "drupal/drupal": "*"
