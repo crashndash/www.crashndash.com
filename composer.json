@@ -20,7 +20,7 @@
         "drupal-composer/drupal-scaffold": "~2.3.0",
         "cweagans/composer-patches": "~1.6.1",
         "drupal/core": "~8.3.5",
-        "drush/drush": "~8.1.12",
+        "drush/drush": "~8.1.13",
         "drupal/console": "~1.0.0",
         "drupal/coffee": "^1.0@beta",
         "drupal/admin_toolbar": "~1.19.0",
