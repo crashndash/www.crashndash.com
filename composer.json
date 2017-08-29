@@ -24,8 +24,7 @@
         "drupal/console": "~1.0.0",
         "drupal/coffee": "^1.0@beta",
         "drupal/admin_toolbar": "~1.19.0",
-        "drupal/sparkpost": "^2.0",
-        "zendframework/zend-diactoros": "~1.4.0"
+        "drupal/sparkpost": "^2.0"
     },
     "require-dev": {
     },
