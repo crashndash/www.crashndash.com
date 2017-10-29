@@ -20,6 +20,7 @@ before_script:
   - ./vendor/bin/drush runserver http://127.0.0.1:8888 &
   - ./vendor/bin/drush cset system.site uuid f24ccad9-2caf-47c5-97d5-5e111c8c4572 -y
   - ./vendor/bin/drush ev '\Drupal::entityManager()->getStorage("shortcut_set")->load("default")->delete();'
+  - ./vendor/bin/drush cr
   - composer import
   - ./vendor/bin/wait-for-listen 8888
   - ./vendor/bin/wait-for-listen 8643 127.0.0.1
