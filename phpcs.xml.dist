@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<ruleset name="violinist">
+    <description>The coding standard for crashndash.</description>
+    <arg name="extensions" value="inc,install,module,php,profile,test,theme"/>
+
+    <file>./web/themes/cnd_theme</file>
+    <file>./web/modules/custom</file>
+
+    <exclude-pattern>node_modules</exclude-pattern>
+
+    <rule ref="./vendor/drupal/coder/coder_sniffer/Drupal"/>
+</ruleset>
