@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * @file
+ * Crashnash module.
+ */
+
 define('CRASHNDASH_DATA_KEY', 'crashndash.data');
 
 /**

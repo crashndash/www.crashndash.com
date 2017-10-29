@@ -1,0 +1,6 @@
+services:
+  crashndash.commands:
+    class: \Drupal\crashndash\Commands\CrashndashCommands
+    arguments: ['@config.factory', '@http_client', '@state', '@logger.factory']
+    tags:
+      - { name: drush.command }

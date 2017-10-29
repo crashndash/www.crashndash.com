@@ -13,8 +13,8 @@ class CrashnDashController extends ControllerBase {
    * Frontpage.
    */
   public function frontpage() {
-    $room_data = json_decode(\Drupal::state()->get('crashndash.room_data', array()));
-    $rooms = array();
+    $room_data = json_decode(\Drupal::state()->get('crashndash.room_data', []));
+    $rooms = [];
     $users = 0;
     foreach ($room_data->users as $user) {
       if ($user->room) {
@@ -48,12 +48,15 @@ class CrashnDashController extends ControllerBase {
     ];
   }
 
+  /**
+   * High scores page.
+   */
   public function highScores() {
     $records = json_decode(\Drupal::state()->get('crashndash.highscores'));
     if (!$records) {
       return [
         '#markup' => '<p>' .
-          $this->t('We have a problem with our leaderboard provider. Please check back later.') .
+        $this->t('We have a problem with our leaderboard provider. Please check back later.') .
         '</p>',
       ];
     }
@@ -67,12 +70,12 @@ class CrashnDashController extends ControllerBase {
     // Populate global page variables.
     $pagesize = 100;
     pager_default_initialize($total_records, $pagesize);
-    $headers = array(
+    $headers = [
       t('Rank'),
       t('Name'),
       t('Score'),
-    );
-    $rows = array();
+    ];
+    $rows = [];
     $added = 0;
     global $pager_page_array;
     $offset = $pager_page_array[0] * $pagesize;
@@ -82,15 +85,15 @@ class CrashnDashController extends ControllerBase {
       }
       $row = $records[$offset + $added];
       $username = !empty($row->name) ? $row->name : t('Anonymous');
-      $rows[] = array(
+      $rows[] = [
         $added + $offset + 1,
         $username,
         $row->score,
-      );
+      ];
       $added++;
     }
 
-    //$output .= _theme('pager', $variables);
+    // $output .= _theme('pager', $variables);.
     $lasttime = \Drupal::state()->get('crashndash.scores_updated');
     if (time() - $lasttime > 3600) {
       // Updated more than an hour ago. Problems!
@@ -112,7 +115,7 @@ class CrashnDashController extends ControllerBase {
         '#type' => 'pager',
       ],
       'updated' => [
-        '#markup' => '<h6 class="subheader lastupdated" data-time="' . $lasttime . '">' . t('Last updated at %date', array('%date' => date('D j F Y H:i:s', $lasttime))) . '</div>',
+        '#markup' => '<h6 class="subheader lastupdated" data-time="' . $lasttime . '">' . t('Last updated at %date', ['%date' => date('D j F Y H:i:s', $lasttime)]) . '</div>',
       ],
       '#cache' => [
         'keys' => [
@@ -123,22 +126,25 @@ class CrashnDashController extends ControllerBase {
     ];
   }
 
+  /**
+   * Play page.
+   */
   public function play() {
     $room = '';
     $referrer = '';
     // @todo: Use request object.
 
     if (!empty($_GET['room'])) {
-      // ho ho. get a room.
+      // Ho ho. get a room.
       $room = $_GET['room'];
     }
     if (!empty($_GET['referrer'])) {
       $referrer = $_GET['referrer'];
     }
-    $vars = array(
+    $vars = [
       'referrer' => $referrer,
       'room' => $room,
-    );
+    ];
     return [
       '#theme' => 'crashndash_play',
       '#referrer' => $referrer,
