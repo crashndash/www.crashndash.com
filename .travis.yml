@@ -22,6 +22,7 @@ before_script:
   - ./vendor/bin/drush ev '\Drupal::entityManager()->getStorage("shortcut_set")->load("default")->delete();'
   - ./vendor/bin/drush cr
   - composer import
+  - composer import
   - ./vendor/bin/wait-for-listen 8888
   - ./vendor/bin/wait-for-listen 8643 127.0.0.1
 script:
