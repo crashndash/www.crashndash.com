@@ -2,6 +2,7 @@
 
 namespace Drupal\crashndash\Commands;
 
+use Drupal\Core\Cache\Cache;
 use Drupal\Core\Config\ConfigFactoryInterface;
 use Drupal\Core\State\StateInterface;
 use Drush\Commands\DrushCommands;
@@ -80,6 +81,9 @@ class CrashndashCommands extends DrushCommands {
     $body = json_decode($response->getBody());
     $this->state->set('crashndash.highscores', json_encode($body));
     $this->state->set('crashndash.scores_updated', time());
+    Cache::invalidateTags([
+      CRASHNDASH_DATA_KEY,
+    ]);
   }
 
   /**
@@ -100,6 +104,9 @@ class CrashndashCommands extends DrushCommands {
     $body = json_decode($response->getBody());
     \Drupal::state()->set('crashndash.room_data', json_encode($body));
     \Drupal::state()->set('crashndash.room_updated', time());
+    Cache::invalidateTags([
+      CRASHNDASH_DATA_KEY,
+    ]);
   }
 
 }
