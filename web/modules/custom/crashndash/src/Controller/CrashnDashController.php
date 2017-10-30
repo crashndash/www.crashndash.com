@@ -40,7 +40,7 @@ class CrashnDashController extends ControllerBase {
       '#room_updated' => $date,
       '#updated_raw' => $updated,
       '#cache' => [
-        'keys' => [
+        'tags' => [
           CRASHNDASH_DATA_KEY,
           'frontpage',
         ],
@@ -118,7 +118,7 @@ class CrashnDashController extends ControllerBase {
         '#markup' => '<h6 class="subheader lastupdated" data-time="' . $lasttime . '">' . t('Last updated at %date', ['%date' => date('D j F Y H:i:s', $lasttime)]) . '</div>',
       ],
       '#cache' => [
-        'keys' => [
+        'tags' => [
           CRASHNDASH_DATA_KEY,
           'highscores',
         ],
