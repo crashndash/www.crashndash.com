@@ -18,7 +18,7 @@ class CrashndashCommands extends DrushCommands {
    *
    * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
-  protected $config;
+  protected $configFactory;
 
   /**
    * Http client.
@@ -39,7 +39,7 @@ class CrashndashCommands extends DrushCommands {
    */
   public function __construct(ConfigFactoryInterface $config_factory, Client $client, StateInterface $state) {
     parent::__construct();
-    $this->config = $config_factory;
+    $this->configFactory = $config_factory;
     $this->client = $client;
     $this->state = $state;
   }
@@ -60,7 +60,7 @@ class CrashndashCommands extends DrushCommands {
    */
   private function updateHighScores() {
     // Find config for status page.
-    $config = $this->config->get('crashndash.settings');
+    $config = $this->configFactory->get('crashndash.settings');
 
     $url = $config->get('highscores_url');
     /** @var \GuzzleHttp\Client $client */
@@ -91,7 +91,7 @@ class CrashndashCommands extends DrushCommands {
    */
   private function updateRoomData() {
     // Find config for status page.
-    $config = $this->config->get('crashndash.settings');
+    $config = $this->configFactory->get('crashndash.settings');
     $status_url = $config->get('status_url');
     /** @var \GuzzleHttp\Psr7\Response $response */
     $response = $this->client->get($status_url);
