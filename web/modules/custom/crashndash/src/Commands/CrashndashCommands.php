@@ -18,21 +18,21 @@ class CrashndashCommands extends DrushCommands {
    *
    * @var \Drupal\Core\Config\ConfigFactoryInterface
    */
-  private $config;
+  protected $config;
 
   /**
    * Http client.
    *
    * @var \GuzzleHttp\Client
    */
-  private $client;
+  protected $client;
 
   /**
    * State.
    *
    * @var \Drupal\Core\State\StateInterface
    */
-  private $state;
+  protected $state;
 
   /**
    * Constructor.
