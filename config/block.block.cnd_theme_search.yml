@@ -11,7 +11,7 @@ _core:
 id: cnd_theme_search
 theme: cnd_theme
 region: header
-weight: -1
+weight: -7
 provider: null
 plugin: search_form_block
 settings:

@@ -11,7 +11,7 @@ _core:
 id: cnd_theme_powered
 theme: cnd_theme
 region: header
-weight: 10
+weight: 0
 provider: null
 plugin: system_powered_by_block
 settings:
