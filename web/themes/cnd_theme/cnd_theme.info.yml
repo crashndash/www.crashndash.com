@@ -7,9 +7,6 @@ libraries:
   - cnd_theme/base
 
 regions:
-  header: Header
-  navigation: Navigation
   messages: Messages
   content: Content
   footer: Footer
-  sidebar: Sidebar
