@@ -102,21 +102,13 @@
       </div>
   </div></header> <!-- /.section, /#header-->
 
-  {% if messages %}
-    <div id="messages"><div class="section clearfix">
-      {{ messages }}
-    </div></div> <!-- /.section, /#messages -->
-  {% endif %}
-
-  {% if page.featured %}
-    <aside id="featured"><div class="section clearfix">
-      {{ page.featured }}
-    </div></aside> <!-- /.section, /#featured -->
-  {% endif %}
-
   <div id="main-wrapper" class="clearfix"><div id="main" class="clearfix">
-
     <main id="content" class="column" role="main"><section class="section">
+      {% if page.messages %}
+        <div id="messages"><div class="section clearfix">
+            {{ page.messages }}
+          </div></div> <!-- /.section, /#messages -->
+      {% endif %}
       {% if page.highlighted %}<div id="highlighted">{{ page.highlighted }}</div>{% endif %}
       <a id="main-content"></a>
       {% if not is_front %}
