@@ -1,0 +1,11 @@
+{
+  "name": "crashndash/crashndash",
+  "description": "Crashndash custom module",
+  "extra": {
+    "drush": {
+      "services": {
+        "drush.services.yml": "^9"
+      }
+    }
+  }
+}
