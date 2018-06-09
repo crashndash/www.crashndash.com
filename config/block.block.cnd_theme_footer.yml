@@ -1,6 +1,6 @@
 uuid: dbd36a19-5146-458e-9682-7c856446e018
 langcode: en
-status: true
+status: false
 dependencies:
   config:
     - system.menu.footer
@@ -12,7 +12,7 @@ _core:
   default_config_hash: kkISXE1LT2FJEoYnqCrCpeFB-2pmGmMxMklVk7rQcfg
 id: cnd_theme_footer
 theme: cnd_theme
-region: header
+region: messages
 weight: -5
 provider: null
 plugin: 'system_menu_block:footer'

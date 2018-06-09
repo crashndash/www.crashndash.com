@@ -1,6 +1,6 @@
 uuid: 83053e04-4da6-4f6c-b359-b51d1e3edbee
 langcode: en
-status: true
+status: false
 dependencies:
   config:
     - system.menu.tools
@@ -12,7 +12,7 @@ _core:
   default_config_hash: NeHSoqm4XFqA7_0bDmR429ZZQt3LRbZMNRJTMsFyOfI
 id: cnd_theme_tools
 theme: cnd_theme
-region: header
+region: messages
 weight: -2
 provider: null
 plugin: 'system_menu_block:tools'
