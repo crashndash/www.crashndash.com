@@ -29,4 +29,5 @@ before_script:
   - ./vendor/bin/wait-for-listen 8643 127.0.0.1
 script:
   - composer test
-  - /bin/bash ./scripts/travic-check.sh
+  - git status
+  - /bin/bash ./scripts/travis-check.sh
