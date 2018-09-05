@@ -8,11 +8,11 @@ default:
       filters:
         tags: "~@todo"
       contexts:
-        - Drupal\DrupalExtension\Context\DrupalContext
         - Drupal\DrupalExtension\Context\MinkContext
         - Drupal\DrupalExtension\Context\MarkupContext
         - Drupal\DrupalExtension\Context\MessageContext
         - Drupal\DrupalExtension\Context\DrushContext
+        - Crashndash\Context\FeatureContext
   extensions:
     Behat\MinkExtension:
       files_path: %paths.base%/tests/files

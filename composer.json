@@ -37,6 +37,7 @@
     "minimum-stability": "dev",
     "prefer-stable": true,
     "autoload": {
+        "psr-4": { "Crashndash\\": "tests/src" },
         "classmap": [
             "scripts/composer/ScriptHandler.php"
         ]
