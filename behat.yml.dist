@@ -34,3 +34,4 @@ default:
       region_map:
         title: ".region-title"
         content: "#content"
+        header: "#header"
