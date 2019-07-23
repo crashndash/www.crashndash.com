@@ -36,6 +36,7 @@ before_script:
   - php -d sendmail_path=`which true` ./vendor/bin/drush si minimal --db-url="mysql://$DB_USERNAME@127.0.0.1/$DATABASE" -y
   - ./vendor/bin/drush cset system.site uuid f24ccad9-2caf-47c5-97d5-5e111c8c4572 -y
   - composer import
+  - composer import
   - ./vendor/bin/drush cr
   - ./vendor/bin/drush runserver 127.0.0.1:8888 &
   - ./vendor/bin/wait-for-listen 8888
