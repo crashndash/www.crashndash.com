@@ -12,21 +12,36 @@ before_install:
   - composer --verbose self-update --$COMPOSER_CHANNEL
   - composer --version
 
+matrix:
+  fast_finish: true
+
+env:
+  global:
+    - DATABASE='drupal'
+    - DB_USERNAME='root'
+    - DB_ENCODE='utf8'
+
+mysql:
+  database: $DATABASE
+  username: $DB_USERNAME
+  encoding: $DB_ENCODE
+
+
 install:
   - composer --verbose install
 
 before_script:
   - npm i chromedriver
   - ./node_modules/.bin/chromedriver --port=8643 --url-base=wd/hub &
-  - ./vendor/bin/drush site-install standard --verbose --yes --db-url=sqlite:///tmp/site.sqlite
-  - ./vendor/bin/drush runserver http://127.0.0.1:8888 &
+  - php -d sendmail_path=`which true` ./vendor/bin/drush si minimal --db-url="mysql://$DB_USERNAME@127.0.0.1/$DATABASE" -y
   - ./vendor/bin/drush cset system.site uuid f24ccad9-2caf-47c5-97d5-5e111c8c4572 -y
-  - ./vendor/bin/drush ev '\Drupal::entityManager()->getStorage("shortcut_set")->load("default")->delete();'
+  - composer import
+  - composer import
   - ./vendor/bin/drush cr
-  - composer import
-  - composer import
+  - ./vendor/bin/drush runserver 127.0.0.1:8888 &
   - ./vendor/bin/wait-for-listen 8888
   - ./vendor/bin/wait-for-listen 8643 127.0.0.1
+
 script:
   - composer test
   - ./vendor/bin/drush cex -y
