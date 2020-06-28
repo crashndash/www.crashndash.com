@@ -24,7 +24,8 @@
         "drupal/console": "^1.0.2",
         "drupal/coffee": "^1.0@beta",
         "drupal/admin_toolbar": "~1.27.0",
-        "drupal/sparkpost": "^2.0"
+        "drupal/sparkpost": "^2.0",
+        "drupal/tome": "^1.4"
     },
     "require-dev": {
         "eiriksm/wait-for-listen": "^1.0",
