@@ -31,6 +31,7 @@ install:
   - composer --verbose install
 
 before_script:
+  - node --version
   - npm i chromedriver
   - ./node_modules/.bin/chromedriver --port=8643 --url-base=wd/hub &
   - php -d sendmail_path=`which true` ./vendor/bin/drush si minimal --db-url="mysql://$DB_USERNAME@127.0.0.1/$DATABASE" -y
