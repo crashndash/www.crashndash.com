@@ -111,9 +111,7 @@
       {% endif %}
       {% if page.highlighted %}<div id="highlighted">{{ page.highlighted }}</div>{% endif %}
       <a id="main-content"></a>
-      {% if not is_front %}
         <div class="row">
-      {% endif %}
       {{ title_prefix }}
       {{ title_suffix }}
         {% if tabs %}
@@ -129,9 +127,7 @@
         {% endif %}
       {{ page.content }}
       {{ feed_icons }}
-      {% if not is_front %}
-        </div>
-      {% endif %}
+      </div>
     </section></main> <!-- /.section, /#content -->
 
     {% if page.sidebar_first %}
